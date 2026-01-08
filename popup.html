@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ReMixr</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎨 ReMixr</h1>
+      <p class="tagline">Remix sites with AI-generated scripts</p>
+    </header>
+    
+    <div class="current-site">
+      <h2>Current Site</h2>
+      <div id="siteInfo" class="site-info">
+        <span id="siteName">Loading...</span>
+      </div>
+    </div>
+
+    <div class="remix-section">
+      <h2>AI Remix</h2>
+      <textarea 
+        id="remixPrompt" 
+        placeholder="Describe how you want to remix this page... (e.g., 'Hide all ads', 'Make LinkedIn profile photos round', 'Change color scheme to dark mode')"
+        rows="4"
+      ></textarea>
+      <button id="generateRemix" class="btn btn-primary">Generate & Apply Remix</button>
+    </div>
+
+    <div class="presets-section">
+      <h2>LinkedIn Presets</h2>
+      <div class="preset-buttons">
+        <button class="btn btn-preset" data-preset="linkedin-minimal">Minimal UI</button>
+        <button class="btn btn-preset" data-preset="linkedin-focus">Focus Mode</button>
+        <button class="btn btn-preset" data-preset="linkedin-dark">Dark Theme</button>
+      </div>
+    </div>
+
+    <div class="active-remixes">
+      <h2>Active Remixes</h2>
+      <div id="activeRemixesList" class="remixes-list">
+        <p class="empty-state">No active remixes</p>
+      </div>
+      <button id="clearAllRemixes" class="btn btn-secondary">Clear All Remixes</button>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

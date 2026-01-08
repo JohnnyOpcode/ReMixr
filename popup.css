@@ -1,0 +1,190 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  width: 400px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #333;
+}
+
+.container {
+  background: white;
+  margin: 0;
+  padding: 0;
+}
+
+header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  text-align: center;
+}
+
+header h1 {
+  font-size: 24px;
+  margin-bottom: 5px;
+}
+
+.tagline {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.current-site,
+.remix-section,
+.presets-section,
+.active-remixes {
+  padding: 15px 20px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #667eea;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.site-info {
+  background: #f5f5f5;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #555;
+}
+
+#remixPrompt {
+  width: 100%;
+  padding: 10px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 10px;
+  transition: border-color 0.3s;
+}
+
+#remixPrompt:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.btn {
+  width: 100%;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.btn-secondary {
+  background: #f5f5f5;
+  color: #666;
+  margin-top: 10px;
+}
+
+.btn-secondary:hover {
+  background: #e0e0e0;
+}
+
+.preset-buttons {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.btn-preset {
+  background: white;
+  border: 2px solid #667eea;
+  color: #667eea;
+  padding: 8px 12px;
+}
+
+.btn-preset:hover {
+  background: #667eea;
+  color: white;
+}
+
+.remixes-list {
+  min-height: 60px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.empty-state {
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+  padding: 20px;
+}
+
+.remix-item {
+  background: #f9f9f9;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.remix-item-name {
+  flex: 1;
+  color: #333;
+}
+
+.remix-item-remove {
+  background: #ff4444;
+  color: white;
+  border: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.remix-item-remove:hover {
+  background: #cc0000;
+}
+
+.status {
+  padding: 10px 20px;
+  font-size: 12px;
+  min-height: 20px;
+}
+
+.status.success {
+  color: #4caf50;
+  background: #e8f5e9;
+}
+
+.status.error {
+  color: #f44336;
+  background: #ffebee;
+}
+
+.status.info {
+  color: #2196f3;
+  background: #e3f2fd;
+}
