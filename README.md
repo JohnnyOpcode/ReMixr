@@ -1,14 +1,17 @@
 # 🎨 ReMixr
 
-A Chrome Browser Extension to Remix Sites (like LinkedIn) using AI-generated browser extension scripts.
+**Build Browser Extensions with AI - Right in Your Browser**
+
+ReMixr is a meta-extension that helps you create browser extensions using natural language. Like Lovable.dev for browser extensions, ReMixr provides an AI-powered development environment directly in your browser.
 
 ## Features
 
-- 🤖 **AI-Powered Remixing**: Describe how you want to change any website, and ReMixr generates the code to make it happen
-- 💾 **Persistent Remixes**: Your customizations are saved and automatically applied when you visit the site again
-- 🎯 **LinkedIn Presets**: Quick-apply popular LinkedIn modifications (Minimal UI, Focus Mode, Dark Theme)
-- 🔧 **Custom Modifications**: Create any visual modification you can imagine with natural language prompts
-- 🌐 **Universal Support**: Works on any website
+- 🤖 **AI-Powered Generation**: Describe your extension idea, and ReMixr generates the complete code structure
+- 📦 **Template Library**: Start from proven templates (content modifiers, page scrapers, productivity tools, etc.)
+- 💻 **Built-in Code Editor**: Edit manifest, JavaScript, HTML, and CSS files in a live preview environment
+- 🔄 **Instant Testing**: Test your extension in real-time without leaving the builder
+- 📤 **Export & Package**: Download your completed extension ready to load or publish
+- 🎓 **Learning Mode**: Understand browser extension concepts as you build
 
 ## Installation
 
@@ -22,81 +25,95 @@ A Chrome Browser Extension to Remix Sites (like LinkedIn) using AI-generated bro
 
 ## Usage
 
-### Using AI Prompts
+### Quick Start: Build Your First Extension
 
 1. Click the ReMixr icon in your browser toolbar
-2. Enter a description of how you want to modify the page:
-   - "Hide all ads"
-   - "Make all profile photos round"
-   - "Apply dark mode"
-   - "Make the interface minimal and clean"
-3. Click "Generate & Apply Remix"
-4. The remix is applied instantly and saved for future visits
+2. Choose "New Extension" or select a template:
+   - **Content Modifier**: Change how websites look or behave
+   - **Productivity Tool**: Add features to boost productivity
+   - **Data Extractor**: Scrape and export webpage data
+   - **Page Monitor**: Track changes on websites
+3. Describe your extension idea in natural language:
+   - "Create an extension that highlights all links on a page"
+   - "Build a timer that tracks time spent on each website"
+   - "Make a tool that saves all images from a page"
+4. Click "Generate Extension"
+5. Review and edit the generated code in the built-in editor
+6. Test instantly with "Load & Test"
+7. Export when ready with "Download Extension"
 
-### LinkedIn Presets
+### Advanced Features
 
-For LinkedIn users, we provide quick-apply presets:
-
-- **Minimal UI**: Reduces visual clutter by dimming sidebar elements
-- **Focus Mode**: Hides ads and distractions
-- **Dark Theme**: Inverts colors for a dark mode experience
-
-### Managing Remixes
-
-- View all active remixes for the current site in the "Active Remixes" section
-- Remove individual remixes with the "Remove" button
-- Clear all remixes for a site with "Clear All Remixes"
+- **Code Editor**: Full-featured editor with syntax highlighting
+- **File Manager**: Organize manifest, scripts, styles, and assets
+- **Live Preview**: See your extension in action as you build
+- **AI Assistant**: Get help debugging or adding features
 
 ## How It Works
 
-ReMixr uses a combination of:
+ReMixr provides a complete browser-based IDE for extension development:
 
-1. **Natural Language Processing**: Your prompts are analyzed to understand the desired changes
-2. **CSS Generation**: Dynamic CSS is generated to implement your modifications
-3. **Content Scripts**: The generated styles are injected into the target webpage
-4. **Persistent Storage**: Remixes are saved locally and automatically reapplied on future visits
+1. **AI Generation Engine**: Converts natural language into complete extension structures
+2. **Template System**: Pre-built extension patterns for common use cases
+3. **Code Editor**: Monaco-based editor with IntelliSense and validation
+4. **Project Manager**: Handles manifest.json, scripts, styles, and assets
+5. **Testing Environment**: Dynamically loads your extension for instant testing
+6. **Export System**: Packages everything into a downloadable .zip
 
 ### Architecture
 
 ```
-┌─────────────┐
-│   Popup UI  │ ← User interacts here
-└──────┬──────┘
+┌─────────────────────┐
+│   Builder UI        │ ← AI prompts & templates
+└──────┬──────────────┘
        │
        ▼
-┌─────────────┐
-│  popup.js   │ ← Generates CSS based on prompts
-└──────┬──────┘
+┌─────────────────────┐
+│  Generator Engine   │ ← Creates extension structure
+└──────┬──────────────┘
        │
        ▼
-┌─────────────┐
-│  Storage    │ ← Saves remixes
-└──────┬──────┘
+┌─────────────────────┐
+│  Project Storage    │ ← IndexedDB for projects
+└──────┬──────────────┘
        │
        ▼
-┌─────────────┐
-│ content.js  │ ← Injects styles into pages
-└─────────────┘
+┌─────────────────────┐
+│  Code Editor        │ ← Edit & preview files
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│  Test & Export      │ ← Load dynamically & download
+└─────────────────────┘
 ```
 
 ## Examples
 
-### Hide Advertisements
-Prompt: "Hide all ads"
-```css
-[class*="ad-"], [id*="ad-"], .sponsored {
-  display: none !important;
-}
-```
+### Example 1: Link Highlighter
+Prompt: "Create an extension that highlights all external links in yellow"
 
-### Dark Mode
-Prompt: "Apply dark mode"
-```css
-body, html {
-  filter: invert(1) hue-rotate(180deg);
-  background: #1a1a1a !important;
-}
-```
+Generates:
+- manifest.json with permissions
+- content.js to find and highlight links
+- Optional: popup for toggle controls
+
+### Example 2: Page Timer
+Prompt: "Build a productivity tracker that shows time spent on each website"
+
+Generates:
+- manifest.json with storage permissions
+- background.js for time tracking
+- popup.html/js for statistics display
+- Timer logic and data persistence
+
+### Example 3: Image Downloader
+Prompt: "Make a tool that finds and downloads all images from the current page"
+
+Generates:
+- manifest.json with download permissions
+- content.js to extract images
+- popup.html/js for UI and download controls
 
 ### Round Profile Photos
 Prompt: "Make profile photos round"

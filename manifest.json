@@ -1,12 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "ReMixr",
-  "version": "1.0.0",
-  "description": "A Chrome Browser Extension to Remix Sites using AI-generated scripts",
+  "name": "ReMixr - Extension Builder",
+  "version": "2.0.0",
+  "description": "Build browser extensions with AI - A meta-extension development environment",
   "permissions": [
     "activeTab",
     "storage",
-    "scripting"
+    "scripting",
+    "downloads",
+    "management"
   ],
   "host_permissions": [
     "https://*/*",

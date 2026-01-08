@@ -3,52 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ReMixr</title>
+  <title>ReMixr Extension Builder</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <div class="container">
+    <!-- Header -->
     <header>
       <h1>🎨 ReMixr</h1>
-      <p class="tagline">Remix sites with AI-generated scripts</p>
+      <p class="tagline">Build Browser Extensions with AI</p>
     </header>
-    
-    <div class="current-site">
-      <h2>Current Site</h2>
-      <div id="siteInfo" class="site-info">
-        <span id="siteName">Loading...</span>
+
+    <!-- Main Navigation Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="projects">Projects</button>
+      <button class="tab-btn" data-tab="builder">Builder</button>
+      <button class="tab-btn" data-tab="templates">Templates</button>
+    </div>
+
+    <!-- Projects Tab -->
+    <div id="projects-tab" class="tab-content active">
+      <div class="section">
+        <h2>Your Projects</h2>
+        <button id="new-project-btn" class="btn btn-primary">
+          + New Extension Project
+        </button>
+        <div id="projects-list" class="projects-list">
+          <p class="empty-state">No projects yet. Create your first extension!</p>
+        </div>
       </div>
     </div>
 
-    <div class="remix-section">
-      <h2>AI Remix</h2>
-      <textarea 
-        id="remixPrompt" 
-        placeholder="Describe how you want to remix this page... (e.g., 'Hide all ads', 'Make LinkedIn profile photos round', 'Change color scheme to dark mode')"
-        rows="4"
-      ></textarea>
-      <button id="generateRemix" class="btn btn-primary">Generate & Apply Remix</button>
-    </div>
+    <!-- Builder Tab -->
+    <div id="builder-tab" class="tab-content">
+      <div class="section">
+        <div class="builder-header">
+          <input type="text" id="project-name" placeholder="My Extension" class="project-name-input">
+          <div class="builder-actions">
+            <button id="save-project-btn" class="btn btn-small">Save</button>
+            <button id="test-extension-btn" class="btn btn-small btn-success">Test</button>
+            <button id="export-extension-btn" class="btn btn-small btn-primary">Export</button>
+          </div>
+        </div>
 
-    <div class="presets-section">
-      <h2>LinkedIn Presets</h2>
-      <div class="preset-buttons">
-        <button class="btn btn-preset" data-preset="linkedin-minimal">Minimal UI</button>
-        <button class="btn btn-preset" data-preset="linkedin-focus">Focus Mode</button>
-        <button class="btn btn-preset" data-preset="linkedin-dark">Dark Theme</button>
+        <!-- AI Generation -->
+        <div class="ai-section">
+          <h3>🤖 AI Assistant</h3>
+          <textarea 
+            id="ai-prompt" 
+            placeholder="Describe your extension... 
+
+Examples:
+• Create an extension that highlights all external links
+• Build a timer to track time spent on each site
+• Make a tool that extracts all images from a page"
+            rows="4"
+          ></textarea>
+          <button id="generate-btn" class="btn btn-primary">Generate Extension Code</button>
+        </div>
+
+        <!-- File Manager -->
+        <div class="files-section">
+          <h3>📁 Project Files</h3>
+          <div class="file-tree" id="file-tree">
+            <div class="file-item active" data-file="manifest.json">📄 manifest.json</div>
+            <div class="file-item" data-file="popup.html">📄 popup.html</div>
+            <div class="file-item" data-file="popup.js">📄 popup.js</div>
+            <div class="file-item" data-file="content.js">📄 content.js</div>
+            <div class="file-item" data-file="background.js">📄 background.js</div>
+            <div class="file-item" data-file="styles.css">📄 styles.css</div>
+          </div>
+        </div>
+
+        <!-- Code Editor -->
+        <div class="editor-section">
+          <div class="editor-header">
+            <span id="current-file">manifest.json</span>
+          </div>
+          <textarea id="code-editor" class="code-editor" rows="15"></textarea>
+        </div>
       </div>
     </div>
 
-    <div class="active-remixes">
-      <h2>Active Remixes</h2>
-      <div id="activeRemixesList" class="remixes-list">
-        <p class="empty-state">No active remixes</p>
+    <!-- Templates Tab -->
+    <div id="templates-tab" class="tab-content">
+      <div class="section">
+        <h2>Extension Templates</h2>
+        <div class="templates-grid">
+          <div class="template-card" data-template="content-modifier">
+            <div class="template-icon">🎨</div>
+            <h3>Content Modifier</h3>
+            <p>Change how websites look and behave</p>
+            <button class="btn btn-small">Use Template</button>
+          </div>
+          <div class="template-card" data-template="productivity">
+            <div class="template-icon">⏱️</div>
+            <h3>Productivity Tool</h3>
+            <p>Time tracking, blockers, and focus tools</p>
+            <button class="btn btn-small">Use Template</button>
+          </div>
+          <div class="template-card" data-template="data-extractor">
+            <div class="template-icon">📊</div>
+            <h3>Data Extractor</h3>
+            <p>Scrape and export webpage data</p>
+            <button class="btn btn-small">Use Template</button>
+          </div>
+          <div class="template-card" data-template="page-monitor">
+            <div class="template-icon">👁️</div>
+            <h3>Page Monitor</h3>
+            <p>Track changes on websites</p>
+            <button class="btn btn-small">Use Template</button>
+          </div>
+          <div class="template-card" data-template="popup-tool">
+            <div class="template-icon">🔧</div>
+            <h3>Popup Tool</h3>
+            <p>Simple utility with popup interface</p>
+            <button class="btn btn-small">Use Template</button>
+          </div>
+          <div class="template-card" data-template="blank">
+            <div class="template-icon">📝</div>
+            <h3>Blank Project</h3>
+            <p>Start from scratch</p>
+            <button class="btn btn-small">Use Template</button>
+          </div>
+        </div>
       </div>
-      <button id="clearAllRemixes" class="btn btn-secondary">Clear All Remixes</button>
     </div>
 
-    <div class="status" id="status"></div>
+    <!-- Status Messages -->
+    <div id="status" class="status"></div>
   </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="export.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

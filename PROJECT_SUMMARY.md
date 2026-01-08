@@ -1,7 +1,16 @@
-# 🎉 ReMixr Extension - Project Summary
+# 🎉 ReMixr - Extension Builder Project Summary
 
 ## Overview
-ReMixr is a fully functional Chrome browser extension that allows users to modify websites using AI-generated CSS scripts. Users describe desired changes in natural language, and the extension generates and applies the corresponding CSS modifications.
+ReMixr is a browser extension that helps users **build browser extensions** using AI assistance. Think of it as "Lovable.dev for browser extensions" - a complete development environment right in your browser that generates extension code from natural language descriptions.
+
+## 🎯 Vision & Purpose
+
+### What ReMixr Does
+- **AI-Powered Generation**: Converts natural language into complete browser extension projects
+- **Template Library**: Provides starting points for common extension patterns
+- **Code Editor**: Full-featured IDE with syntax highlighting and validation
+- **Live Testing**: Instantly load and test extensions without leaving the builder
+- **Export System**: Package and download completed extensions
 
 ## ✅ Implementation Complete
 

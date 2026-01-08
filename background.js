@@ -1,50 +1,42 @@
-// Background service worker for ReMixr extension
+// ReMixr Extension Builder - Background Service Worker
+// Manages extension builder state and operations
 
-console.log('ReMixr background service worker started');
-
-// Listen for extension installation or update
-chrome.runtime.onInstalled.addListener((details) => {
-  if (details.reason === 'install') {
-    console.log('ReMixr installed successfully');
-    
-    // Initialize storage
-    chrome.storage.local.set({
-      remixes: {},
-      settings: {
-        autoApply: true,
-        showNotifications: true
-      }
-    });
-    
-    // Open welcome page (optional)
-    // chrome.tabs.create({ url: 'welcome.html' });
-  } else if (details.reason === 'update') {
-    console.log('ReMixr updated');
-  }
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('ReMixr Extension Builder installed!');
+  
+  // Initialize storage if needed
+  chrome.storage.local.get(['extensionProjects'], (result) => {
+    if (!result.extensionProjects) {
+      chrome.storage.local.set({ extensionProjects: [] });
+    }
+  });
 });
 
-// Listen for tab updates to reapply remixes
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  // When page finishes loading, send message to content script
-  if (changeInfo.status === 'complete' && tab.url) {
-    chrome.tabs.sendMessage(tabId, { action: 'applyRemix' }).catch((error) => {
-      // Content script might not be ready yet, log for debugging
-      console.log('Content script not ready:', error.message);
-    });
-  }
-});
-
-// Listen for messages from popup or content scripts
+// Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request.action === 'generateAIRemix') {
-    // In the future, this could call an actual AI API
-    // For now, we'll delegate to the popup's logic
-    sendResponse({ success: true, message: 'AI generation delegated to popup' });
+  if (request.action === 'generateExtension') {
+    // Handle extension generation requests
+    sendResponse({ success: true });
   }
+  
+  if (request.action === 'testExtension') {
+    // Open extensions page for testing
+    chrome.tabs.create({ url: 'chrome://extensions/' });
+    sendResponse({ success: true });
+  }
+  
   return true;
 });
 
-// Handle extension icon click (already handled by popup.html)
-chrome.action.onClicked.addListener((tab) => {
-  console.log('Extension icon clicked for tab:', tab.id);
-});
+// Helper to manage project storage
+async function saveProject(project) {
+  const { extensionProjects } = await chrome.storage.local.get(['extensionProjects']);
+  const projects = extensionProjects || [];
+  projects.push(project);
+  await chrome.storage.local.set({ extensionProjects: projects });
+}
+
+async function loadProjects() {
+  const { extensionProjects } = await chrome.storage.local.get(['extensionProjects']);
+  return extensionProjects || [];
+}
