@@ -22,14 +22,19 @@ async function applySavedRemixes() {
           existingStyle.remove();
         }
         
-        // Combine all remix CSS
-        const combinedCSS = pageRemixes.map(remix => remix.script.css).join('\n');
+        // Combine all remix CSS with basic validation
+        const combinedCSS = pageRemixes
+          .map(remix => remix.script.css)
+          .filter(css => typeof css === 'string' && css.trim().length > 0)
+          .join('\n');
         
         // Create and inject style element
-        const style = document.createElement('style');
-        style.id = 'remixr-style';
-        style.textContent = combinedCSS;
-        document.head.appendChild(style);
+        if (combinedCSS.length > 0) {
+          const style = document.createElement('style');
+          style.id = 'remixr-style';
+          style.textContent = combinedCSS;
+          document.head.appendChild(style);
+        }
       }
     });
   } catch (error) {
@@ -49,6 +54,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'applyRemix') {
     applySavedRemixes();
     sendResponse({ success: true });
+    return true; // Keep message channel open for async response
   }
-  return true;
 });

@@ -107,17 +107,23 @@ function generateRemixScript(prompt) {
       `
     };
   } else {
+    // Sanitize prompt for CSS comment - remove */ to prevent injection
+    const sanitizedPrompt = prompt.replace(/\*\//g, '* /');
     return {
       type: 'custom',
       css: `
-        /* Custom remix based on: ${prompt} */
+        /* Custom remix based on: ${sanitizedPrompt} */
         body { border: 3px solid #667eea !important; }
       `
     };
   }
 }
 
-// Function to be injected into the page
+/**
+ * Function to be injected into the target page to apply CSS remixes
+ * @param {Object} remixScript - Contains the CSS to be applied
+ * @param {string} remixScript.css - The CSS rules to inject
+ */
 function applyRemixScript(remixScript) {
   // Remove previous remix styles
   const previousStyle = document.getElementById('remixr-style');
@@ -162,12 +168,27 @@ async function displayActiveRemixes() {
     return;
   }
   
-  listElement.innerHTML = activeRemixes.map((remix, index) => `
-    <div class="remix-item">
-      <span class="remix-item-name">${remix.prompt.substring(0, 40)}${remix.prompt.length > 40 ? '...' : ''}</span>
-      <button class="remix-item-remove" data-index="${index}">Remove</button>
-    </div>
-  `).join('');
+  // Clear existing content
+  listElement.innerHTML = '';
+  
+  // Create elements safely without innerHTML to prevent XSS
+  activeRemixes.forEach((remix, index) => {
+    const remixItem = document.createElement('div');
+    remixItem.className = 'remix-item';
+    
+    const remixName = document.createElement('span');
+    remixName.className = 'remix-item-name';
+    remixName.textContent = remix.prompt.substring(0, 40) + (remix.prompt.length > 40 ? '...' : '');
+    
+    const removeButton = document.createElement('button');
+    removeButton.className = 'remix-item-remove';
+    removeButton.textContent = 'Remove';
+    removeButton.dataset.index = index;
+    
+    remixItem.appendChild(remixName);
+    remixItem.appendChild(removeButton);
+    listElement.appendChild(remixItem);
+  });
   
   // Add event listeners to remove buttons
   listElement.querySelectorAll('.remix-item-remove').forEach(button => {

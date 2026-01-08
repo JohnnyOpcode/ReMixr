@@ -27,8 +27,9 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // When page finishes loading, send message to content script
   if (changeInfo.status === 'complete' && tab.url) {
-    chrome.tabs.sendMessage(tabId, { action: 'applyRemix' }).catch(() => {
-      // Ignore errors (content script might not be ready)
+    chrome.tabs.sendMessage(tabId, { action: 'applyRemix' }).catch((error) => {
+      // Content script might not be ready yet, log for debugging
+      console.log('Content script not ready:', error.message);
     });
   }
 });
