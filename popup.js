@@ -714,9 +714,32 @@ function setupEventListeners() {
   document.getElementById('scan-seo')?.addEventListener('click', () => runAnalysis('seo'));
   document.getElementById('scan-code')?.addEventListener('click', () => runAnalysis('code'));
   document.getElementById('scan-net')?.addEventListener('click', () => runAnalysis('net'));
+  document.getElementById('scan-psyche')?.addEventListener('click', () => runAnalysis('psyche'));
+  document.getElementById('scan-archetype')?.addEventListener('click', () => runAnalysis('archetype'));
+  document.getElementById('scan-soul')?.addEventListener('click', () => runAnalysis('soul'));
+  document.getElementById('scan-shadow')?.addEventListener('click', () => runAnalysis('shadow'));
+  document.getElementById('scan-rhetoric')?.addEventListener('click', () => runAnalysis('rhetoric'));
+  document.getElementById('scan-emotion')?.addEventListener('click', () => runAnalysis('emotion'));
 
   document.getElementById('clear-results')?.addEventListener('click', () => {
     document.getElementById('analysis-results').style.display = 'none';
+  });
+
+  // Fullscreen toggle for visualizations
+  document.getElementById('fullscreen-toggle')?.addEventListener('click', () => {
+    const d3Container = document.getElementById('d3-container');
+    const resultsArea = document.getElementById('analysis-results');
+    const fullscreenBtn = document.getElementById('fullscreen-toggle');
+    
+    if (d3Container.classList.contains('fullscreen')) {
+      d3Container.classList.remove('fullscreen');
+      fullscreenBtn.textContent = '⛶';
+      fullscreenBtn.title = 'Toggle Fullscreen';
+    } else {
+      d3Container.classList.add('fullscreen');
+      fullscreenBtn.textContent = '✕';
+      fullscreenBtn.title = 'Exit Fullscreen';
+    }
   });
 
   // MacGyver Tools
@@ -724,6 +747,20 @@ function setupEventListeners() {
   document.getElementById('tool-zap')?.addEventListener('click', () => runMacGyver('zapElement'));
   document.getElementById('tool-wireframe')?.addEventListener('click', () => runMacGyver('toggleWireframe'));
   document.getElementById('tool-images')?.addEventListener('click', () => runMacGyver('toggleImages'));
+
+  // Extension Wizard
+  document.querySelectorAll('input[name="host-perms"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const customInput = document.getElementById('wizard-custom-hosts');
+      if (e.target.value === 'custom') {
+        customInput.style.display = 'block';
+      } else {
+        customInput.style.display = 'none';
+      }
+    });
+  });
+
+  document.getElementById('generate-extension-btn')?.addEventListener('click', generateExtensionFromWizard);
 
   document.getElementById('tool-unmask')?.addEventListener('click', () => runMacGyver('showPasswords'));
   document.getElementById('tool-enable')?.addEventListener('click', () => runMacGyver('enableInputs'));
@@ -1149,6 +1186,48 @@ async function runAnalysis(type) {
   showStatus(`Running ${type} scan...`, 'info');
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
+  // New psychological analyses use message-based communication with content.js
+  const messageBasedAnalyses = ['psyche', 'archetype', 'soul', 'shadow', 'rhetoric', 'emotion'];
+  
+  if (messageBasedAnalyses.includes(type)) {
+    const actionMap = {
+      'psyche': 'analyzePsyche',
+      'archetype': 'analyzeArchetype',
+      'soul': 'analyzeSoul',
+      'shadow': 'analyzeShadow',
+      'rhetoric': 'analyzeRhetoric',
+      'emotion': 'analyzeEmotion'
+    };
+    
+    try {
+      // First, ensure content script is injected
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        });
+      } catch (e) {
+        // Content script may already be injected, continue
+      }
+      
+      // Small delay to ensure content script is ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      const response = await chrome.tabs.sendMessage(tab.id, { action: actionMap[type] });
+      if (response) {
+        showStatus(`${type} scan complete`, 'success');
+        displayAnalysisResults(type, response);
+      } else {
+        showStatus(`${type} scan returned no data`, 'error');
+      }
+    } catch (error) {
+      console.error('Analysis error:', error);
+      showStatus('Error: ' + error.message, 'error');
+    }
+    return;
+  }
+
+  // Original analyses use script injection
   let func;
   switch (type) {
     case 'structure': func = analyzeStructure; break;
@@ -1294,7 +1373,8 @@ function analyzeStorage() {
     ssCount: sessionStorage.length,
     ssSize: getStorageSize(sessionStorage),
     cookies: document.cookie.split(';').filter(c => c.trim()).length,
-    lsKeys: Object.keys(localStorage).slice(0, 5) // Sample
+    lsItems: Object.entries(localStorage).map(([k, v]) => ({ k, v: v.slice(0, 50) })),
+    ssItems: Object.entries(sessionStorage).map(([k, v]) => ({ k, v: v.slice(0, 50) }))
   };
 }
 
@@ -1372,13 +1452,13 @@ function analyzeDomTree() {
 
 function analyzeA11y() {
   const images = Array.from(document.querySelectorAll('img'));
-  const missingAlt = images.filter(img => !img.alt).length;
+  const missingAlt = images.filter(img => !img.alt).map(img => ({ src: img.src.split('/').pop() || 'Inline', full: img.src }));
 
   const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
   const smallButtons = buttons.filter(btn => {
     const r = btn.getBoundingClientRect();
     return r.width < 24 || r.height < 24;
-  }).length;
+  }).map(btn => ({ text: btn.innerText.trim().slice(0, 20) || 'Icon Button', tag: btn.tagName }));
 
   const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
   const unlabelled = inputs.filter(input => {
@@ -1386,7 +1466,7 @@ function analyzeA11y() {
     if (input.closest('label')) return false;
     if (input.getAttribute('aria-label') || input.getAttribute('aria-labelledby')) return false;
     return true;
-  }).length;
+  }).map(input => ({ placeholder: input.placeholder || 'No Placeholder', name: input.name || input.id || 'Unnamed' }));
 
   return {
     images: { total: images.length, missingAlt },
@@ -1398,7 +1478,6 @@ function analyzeA11y() {
 
 function analyzeSEO() {
   const meta = (name) => document.querySelector(`meta[name="${name}"], meta[property="og:${name}"]`)?.content;
-
   const headings = {};
   ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].forEach(h => {
     headings[h] = document.querySelectorAll(h).length;
@@ -1413,8 +1492,17 @@ function analyzeSEO() {
     description: meta('description') || 'Missing',
     ogTitle: meta('title') || 'Missing',
     headings,
-    links: { total: links.length, internal, external },
-    lang: document.documentElement.lang || 'Not set'
+    links: {
+      total: links.length,
+      internal,
+      external,
+      list: links.slice(0, 20).map(a => ({ text: a.innerText.trim().slice(0, 30) || 'Unnamed', href: a.href }))
+    },
+    lang: document.documentElement.lang || 'Not set',
+    meta: Array.from(document.querySelectorAll('meta')).map(m => ({
+      name: m.name || m.getAttribute('property') || 'Unknown',
+      content: m.content
+    })).filter(m => m.content).slice(0, 10)
   };
 }
 
@@ -1496,224 +1584,448 @@ function displayAnalysisResults(type, data) {
   const d3Container = document.getElementById('d3-container');
   const title = document.getElementById('result-title');
 
-  container.style.display = 'block';
-  d3Container.style.display = type === 'visualize' ? 'block' : 'none';
+  container.style.display = 'flex';
+  d3Container.style.display = type === 'visualize' ? 'flex' : 'none';
   content.style.display = type === 'visualize' ? 'none' : 'block';
-  title.textContent = type.charAt(0).toUpperCase() + type.slice(1) + ' Analysis';
+  title.textContent = `${type.charAt(0).toUpperCase() + type.slice(1)} Audit`;
 
-  // Store for AI Context
   window.SITE_CONTEXT = window.SITE_CONTEXT || {};
   window.SITE_CONTEXT[type] = data;
 
-  if (type === 'sequence') {
-    renderSequenceDiagram(data);
-    return;
-  }
-
-  if (type === 'visualize') {
-    // Small delay to ensure flexbox has settled and dimensions are correct
-    setTimeout(() => {
-      renderD3Graph(data);
-    }, 50);
-    return;
-  }
+  if (type === 'sequence') { renderSequenceDiagram(data); return; }
+  if (type === 'visualize') { setTimeout(() => renderD3Graph(data), 100); return; }
 
   let html = '';
 
-  if (type === 'structure') {
-    html = `
-      <div class="stat-row"><strong>Elements:</strong> ${data.totalElements}</div>
-      <div class="stat-row"><strong>Max Depth:</strong> ${data.maxDepth}</div>
-      <div class="stat-row"><strong>Title:</strong> ${data.title}</div>
-      <div class="stat-group">
-        <strong>Top Tags:</strong>
-        ${data.topTags.map(([tag, count]) => `<span class="tag-badge">${tag} (${count})</span>`).join('')}
-      </div>
-    `;
-  } else if (type === 'palette') {
-    html = `<div class="palette-group">
-       <strong>Text Colors</strong>
-       <div class="swatches">
-         ${data.text.map(c => `<div class="swatch" style="background:${c}" title="${c}"></div>`).join('')}
-       </div>
-       <strong>Backgrounds</strong>
-       <div class="swatches">
-         ${data.backgrounds.map(c => `<div class="swatch" style="background:${c}" title="${c}"></div>`).join('')}
-       </div>
-     </div>`;
-  } else if (type === 'assets') {
-    html = `
-      <div class="analysis-item">
-        <h4>Resource Summary</h4>
-        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; margin-top:10px;">
-          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius); text-align:center;">
-            <div style="font-size:10px; color:var(--text-secondary);">Images</div>
-            <div style="font-size:16px; font-weight:bold;">${data.imageCount}</div>
-          </div>
-          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius); text-align:center;">
-            <div style="font-size:10px; color:var(--text-secondary);">SVGs</div>
-            <div style="font-size:16px; font-weight:bold;">${data.svgs}</div>
-          </div>
-          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius); text-align:center;">
-            <div style="font-size:10px; color:var(--text-secondary);">Styles</div>
-            <div style="font-size:16px; font-weight:bold;">${data.cssCount}</div>
-          </div>
-        </div>
-        ${data.brokenCount > 0 ? `
-          <div style="background:rgba(241, 76, 76, 0.1); border:1px solid var(--danger-color); padding:8px; border-radius:var(--radius); color:var(--danger-color); margin-top:10px; font-size:11px; display:flex; align-items:center; gap:8px;">
-            <span>⚠️</span> <strong>${data.brokenCount} Broken Assets Detected</strong>
+  const createDeepDive = (id, statsHtml, detailHtml, options = {}) => {
+    const hasSearch = options.search !== false;
+    const hasExport = options.export !== false;
+    
+    return `
+    <div class="analysis-item">
+      <div class="analysis-header">
+        <div class="header-metrics">${statsHtml}</div>
+        ${hasSearch || hasExport ? `
+          <div class="dive-actions">
+            ${hasSearch ? '<input type="text" class="search-box-inline" placeholder="Search..." data-search="' + id + '">' : ''}
+            ${hasExport ? '<button class="dive-btn" data-action="export" data-dive="' + id + '">Export</button>' : ''}
+            <button class="dive-btn" data-action="copy" data-dive="${id}">Copy</button>
           </div>
         ` : ''}
       </div>
+      ${options.title ? '<div class="section-title">' + options.title + '</div>' : ''}
+      <div class="dive-content" data-content="${id}">
+        ${detailHtml}
+      </div>
+    </div>
+  `;
+  };
 
-      <div class="analysis-item" style="flex:1; display:flex; flex-direction:column; min-height:0; margin-bottom:0;">
-        <h4>Image Gallery</h4>
-        <div style="flex:1; overflow-y:auto; margin-top:10px; display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; padding-right:4px;">
-          ${data.images.map(img => `
-            <div style="background:rgba(255,255,255,0.03); border:1px solid #333; border-radius:var(--radius); overflow:hidden; display:flex; flex-direction:column;">
-              <div style="height:80px; display:flex; align-items:center; justify-content:center; background:#000; position:relative;">
-                <img src="${img.src}" style="max-width:100%; max-height:100%; object-fit:contain;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23444%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><rect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/><circle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/><polyline points=%2221 15 16 10 5 21%22/></svg>'">
-                <div style="position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:8px; padding:2px 4px; border-radius:2px;">
-                  ${img.type}
+  if (type === 'structure') {
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value">${data.totalElements}</span>
+          <span class="stat-label">Total Nodes</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.maxDepth}</span>
+          <span class="stat-label">Max Depth</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.topTags.length}</span>
+          <span class="stat-label">Tag Types</span>
+        </div>
+      </div>
+      <div class="chart-container">
+        <div class="bar-chart">
+          ${data.topTags.slice(0, 10).map(([tag, count]) => {
+            const pct = (count / data.totalElements * 100).toFixed(1);
+            return `
+              <div class="bar-chart-item">
+                <div class="bar-chart-label">&lt;${tag}&gt;</div>
+                <div class="bar-chart-bar">
+                  <div class="bar-chart-fill" style="width: ${pct}%">${count}</div>
                 </div>
               </div>
-              <div style="padding:6px;">
-                <div style="font-size:9px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${img.src}">${img.src.split('/').pop()}</div>
-                <div style="font-size:10px; margin-top:2px;">${img.width} × ${img.height} px</div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+      <div class="data-table-wrapper">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Element</th>
+              <th>Count</th>
+              <th>Percentage</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.topTags.map(([tag, count]) => `
+              <tr>
+                <td>&lt;${tag}&gt;</td>
+                <td>${count}</td>
+                <td>${(count / data.totalElements * 100).toFixed(2)}%</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    
+    html = createDeepDive('struct',
+      `<strong>${data.totalElements}</strong> Nodes · <strong>${data.maxDepth}</strong> Depth · <strong>${data.topTags.length}</strong> Types`,
+      detailHtml,
+      { title: 'DOM Structure Analysis', search: true, export: true }
+    );
+  } else if (type === 'palette') {
+    const detailHtml = `
+      <div class="dive-section">
+        <div class="palette-group">
+          <strong>Text Colors (${data.text.length})</strong>
+          <div class="swatches">
+            ${data.text.map(c => `<div class="swatch" style="background:${c}" title="${c}" data-color="${c}"></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="palette-group">
+          <strong>Background Colors (${data.backgrounds.length})</strong>
+          <div class="swatches">
+            ${data.backgrounds.map(c => `<div class="swatch" style="background:${c}" title="${c}" data-color="${c}"></div>`).join('')}
+          </div>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Color Distribution</h5>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value">${data.text.length + data.backgrounds.length}</span>
+            <span class="stat-label">Total Colors</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${data.text.length}</span>
+            <span class="stat-label">Text</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${data.backgrounds.length}</span>
+            <span class="stat-label">Backgrounds</span>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    html = createDeepDive('palette-dive',
+      `<strong>${data.text.length}</strong> Text · <strong>${data.backgrounds.length}</strong> Background · <strong>${data.text.length + data.backgrounds.length}</strong> Total`,
+      detailHtml,
+      { title: 'Color Palette', search: false, export: true }
+    );
+  } else if (type === 'assets') {
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value">${data.imageCount}</span>
+          <span class="stat-label">Images</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.svgs}</span>
+          <span class="stat-label">SVG</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.cssCount}</span>
+          <span class="stat-label">Stylesheets</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.jsCount || 0}</span>
+          <span class="stat-label">Scripts</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Resource Inventory</h5>
+        </div>
+        <div class="data-table-wrapper" style="max-height: 350px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Resource</th>
+                <th>Dimensions</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.images.slice(0, 50).map(img => `
+                <tr>
+                  <td><span class="metric-badge"><span class="icon">🖼️</span> IMG</span></td>
+                  <td style="font-size:10px; font-family: var(--mono-font);">${img.src.split('/').pop().slice(0, 40)}</td>
+                  <td><span class="metric-badge">${img.width}×${img.height}</span></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    
+    html = createDeepDive('assets-overview',
+      `<strong>${data.imageCount + data.svgs}</strong> Images · <strong>${data.cssCount}</strong> CSS · <strong>${data.jsCount || 0}</strong> JS`,
+      detailHtml,
+      { title: 'Asset Analysis', search: true, export: true }
+    );
+  } else if (type === 'storage') {
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value">${data.lsSize} KB</span>
+          <span class="stat-label">LocalStorage</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.cookies}</span>
+          <span class="stat-label">Cookies</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.lsItems.length}</span>
+          <span class="stat-label">LS Items</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.ssItems.length}</span>
+          <span class="stat-label">SS Items</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>LocalStorage</h5>
+        </div>
+        <div class="data-table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.lsItems.length > 0 ? data.lsItems.map(i => `
+                <tr>
+                  <td>${i.k}</td>
+                  <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${i.v}</td>
+                </tr>
+              `).join('') : '<tr><td colspan="2" style="text-align: center; opacity: 0.5;">Empty</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>SessionStorage</h5>
+        </div>
+        <div class="data-table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.ssItems.length > 0 ? data.ssItems.map(i => `
+                <tr>
+                  <td>${i.k}</td>
+                  <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${i.v}</td>
+                </tr>
+              `).join('') : '<tr><td colspan="2" style="text-align: center; opacity: 0.5;">Empty</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    
+    html = createDeepDive('storage-dive',
+      `<span>LS: <strong>${data.lsSize} KB</strong></span> · <span>Cookies: <strong>${data.cookies}</strong></span> · <span>Items: <strong>${data.lsItems.length + data.ssItems.length}</strong></span>`,
+      detailHtml,
+      { title: 'Storage Analysis', search: true, export: true }
+    );
+  } else if (type === 'perf') {
+    const getLoadTimeColor = (ms) => {
+      if (ms < 1000) return 'severity-low';
+      if (ms < 3000) return 'severity-med';
+      return 'severity-high';
+    };
+    
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value ${getLoadTimeColor(data.loadTime)}">${data.loadTime}ms</span>
+          <span class="stat-label">Load Time</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.domReady}ms</span>
+          <span class="stat-label">DOM Ready</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.resources.js}</span>
+          <span class="stat-label">JS Files</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.resources.img}</span>
+          <span class="stat-label">Images</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.resources.xhr}</span>
+          <span class="stat-label">XHR</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.resources.css || 0}</span>
+          <span class="stat-label">CSS</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Performance Timeline</h5>
+        </div>
+        <div class="chart-container">
+          <div class="bar-chart">
+            <div class="bar-chart-item">
+              <div class="bar-chart-label">DNS</div>
+              <div class="bar-chart-bar">
+                <div class="bar-chart-fill" style="width: ${Math.min((data.dns || 100) / 10, 100)}%">${data.dns || 'N/A'}</div>
               </div>
             </div>
-          `).join('')}
-        </div>
-      </div>
-    `;
-  } else if (type === 'fonts') {
-    html = `<div class="font-list">
-      ${data.map(f => `<div class="font-item" style="font-family:${f.font}">
-        ${f.font} <span class="count">${f.count}</span>
-      </div>`).join('')}
-    </div>`;
-  } else if (type === 'storage') {
-    html = `
-      <div class="stat-row"><strong>Local Storage:</strong> ${data.lsCount} items (${data.lsSize} KB)</div>
-      <div class="stat-row"><strong>Session Storage:</strong> ${data.ssCount} items (${data.ssSize} KB)</div>
-      <div class="stat-row"><strong>Cookies:</strong> ${data.cookies} accessible</div>
-      <div class="stat-group">
-        <strong>LS Sample Keys:</strong>
-        <div style="font-size:11px; margin-top:5px; color:#94a3b8; word-break:break-all;">
-          ${data.lsKeys.join(', ') || 'None'}
-        </div>
-      </div>
-    `;
-  } else if (type === 'workers') {
-    if (data.notSupported) {
-      html = '<div class="stat-row">Service Workers not supported</div>';
-    } else if (data.count === 0) {
-      html = '<div class="stat-row">No Active Service Workers Found</div>';
-    } else {
-      html = `
-        <div class="stat-row"><strong>Registered Workers:</strong> ${data.count}</div>
-        <div class="stat-group">
-          ${data.active.map(w => `
-            <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:6px; margin-top:5px;">
-              <div style="font-size:11px; color:#94a3b8;">Scope</div>
-              <div style="word-break:break-all; margin-bottom:4px;">${w.scope}</div>
-              <span class="tag-badge" style="background:#10b98120; color:#34d399;">${w.state}</span>
+            <div class="bar-chart-item">
+              <div class="bar-chart-label">Connect</div>
+              <div class="bar-chart-bar">
+                <div class="bar-chart-fill" style="width: ${Math.min((data.connect || 200) / 10, 100)}%">${data.connect || 'N/A'}</div>
+              </div>
             </div>
-          `).join('')}
-        </div>
-      `;
-    }
-  } else if (type === 'perf') {
-    html = `
-      <div class="stat-row"><strong>Load Time:</strong> ${data.loadTime}ms</div>
-      <div class="stat-row"><strong>DOM Ready:</strong> ${data.domReady}ms</div>
-      <div class="stat-group">
-        <strong>Resource Requests:</strong>
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:8px; text-align:center;">
-          <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:6px;">
-            <div style="font-size:18px;">${data.resources.js}</div>
-            <div style="font-size:10px; color:#94a3b8;">Scripts</div>
-          </div>
-          <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:6px;">
-            <div style="font-size:18px;">${data.resources.img}</div>
-            <div style="font-size:10px; color:#94a3b8;">Images</div>
-          </div>
-          <div style="background:rgba(255,255,255,0.05); padding:8px; border-radius:6px;">
-            <div style="font-size:18px;">${data.resources.xhr}</div>
-            <div style="font-size:10px; color:#94a3b8;">XHR/Fetch</div>
+            <div class="bar-chart-item">
+              <div class="bar-chart-label">DOM Ready</div>
+              <div class="bar-chart-bar">
+                <div class="bar-chart-fill" style="width: ${Math.min(data.domReady / 50, 100)}%">${data.domReady}ms</div>
+              </div>
+            </div>
+            <div class="bar-chart-item">
+              <div class="bar-chart-label">Load</div>
+              <div class="bar-chart-bar">
+                <div class="bar-chart-fill" style="width: ${Math.min(data.loadTime / 50, 100)}%; background: ${data.loadTime < 1000 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'}">${data.loadTime}ms</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
     `;
+    
+    html = createDeepDive('perf-metrics',
+      `<span>Load: <span class="${getLoadTimeColor(data.loadTime)}">${data.loadTime}ms</span></span> · <span>DOM: <strong>${data.domReady}ms</strong></span> · <span>Resources: <strong>${data.resources.js + data.resources.img + data.resources.xhr}</strong></span>`,
+      detailHtml,
+      { title: 'Performance Metrics', search: false, export: true }
+    );
   } else if (type === 'a11y') {
-    html = `
-      <div class="analysis-item">
-        <h4>Images & Alt Text</h4>
-        <div class="stat-row"><span>Total Images</span> <span>${data.images.total}</span></div>
-        <div class="stat-row" style="color:${data.images.missingAlt > 0 ? 'var(--danger-color)' : 'var(--success-color)'}">
-          <span>Missing Alt Attribute</span> <span>${data.images.missingAlt}</span>
+    const totalFlaws = data.images.missingAlt.length + data.buttons.tooSmall.length + data.inputs.unlabelled.length;
+    const score = Math.max(0, 100 - (totalFlaws * 5));
+    const getScoreColor = (score) => {
+      if (score >= 80) return 'severity-low';
+      if (score >= 50) return 'severity-med';
+      return 'severity-high';
+    };
+    
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value ${getScoreColor(score)}">${score}</span>
+          <span class="stat-label">A11y Score</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value ${totalFlaws > 0 ? 'severity-high' : 'severity-low'}">${totalFlaws}</span>
+          <span class="stat-label">Issues</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.images.missingAlt.length}</span>
+          <span class="stat-label">Missing Alt</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.buttons.tooSmall.length}</span>
+          <span class="stat-label">Small Buttons</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.inputs.unlabelled.length}</span>
+          <span class="stat-label">Unlabelled</span>
         </div>
       </div>
-      <div class="analysis-item">
-        <h4>Interactive Elements</h4>
-        <div class="stat-row"><span>Buttons/Roles</span> <span>${data.buttons.total}</span></div>
-        <div class="stat-row"><span>Too Small (<24px)</span> <span>${data.buttons.tooSmall}</span></div>
-        <div class="stat-row"><span>Unlabelled Inputs</span> <span>${data.inputs.unlabelled}</span></div>
-      </div>
-      <div class="analysis-item">
-        <h4>Semantic Markup</h4>
-        <div class="stat-row"><span>ARIA-enhanced Elements</span> <span>${data.ariaElements}</span></div>
-      </div>
+      ${totalFlaws > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>Accessibility Issues</h5>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Severity</th>
+                  <th>Issue</th>
+                  <th>Element</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.images.missingAlt.map(img => `
+                  <tr>
+                    <td><span class="severity-high">HIGH</span></td>
+                    <td>Missing Alt Text</td>
+                    <td style="font-size:10px; font-family: var(--mono-font);">${img.src.split('/').pop().slice(0, 30)}</td>
+                  </tr>
+                `).join('')}
+                ${data.buttons.tooSmall.map(btn => `
+                  <tr>
+                    <td><span class="severity-med">MEDIUM</span></td>
+                    <td>Button Too Small</td>
+                    <td style="font-size:10px;">${btn.text || '(no text)'}</td>
+                  </tr>
+                `).join('')}
+                ${data.inputs.unlabelled.map(inp => `
+                  <tr>
+                    <td><span class="severity-med">MEDIUM</span></td>
+                    <td>Input Not Labelled</td>
+                    <td style="font-size:10px;">${inp.name || inp.type || 'input'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : `
+        <div class="dive-section" style="text-align: center; padding: 40px;">
+          <div style="font-size: 48px; margin-bottom: 16px;">✓</div>
+          <div style="color: var(--success-color); font-size: 16px; font-weight: 700;">Accessibility Compliant</div>
+          <div style="color: var(--text-dim); margin-top: 8px;">No major issues detected</div>
+        </div>
+      `}
     `;
+    
+    html = createDeepDive('a11y-audit',
+      `<span>Score: <span class="${getScoreColor(score)}">${score}/100</span></span> · <span>Issues: <span class="${totalFlaws > 0 ? 'severity-high' : 'severity-low'}">${totalFlaws}</span></span>`,
+      detailHtml,
+      { title: 'Accessibility Audit', search: true, export: true }
+    );
   } else if (type === 'seo') {
-    html = `
-      <div class="analysis-item">
-        <h4>Meta Information</h4>
-        <div class="stat-row"><span>Title</span> <span style="font-size:10px">${data.title}</span></div>
-        <div class="stat-row"><span>Description</span> <span style="font-size:10px">${data.description}</span></div>
-        <div class="stat-row"><span>Language</span> <span>${data.lang}</span></div>
-      </div>
-      <div class="analysis-item">
-        <h4>Heading Hierarchy</h4>
-        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:4px;">
-          ${Object.entries(data.headings).map(([h, c]) => `
-            <div style="background:var(--bg-tertiary); padding:4px; text-align:center; border-radius:1px;">
-              <div style="font-size:10px; color:var(--text-secondary)">${h}</div>
-              <div style="font-weight:bold">${c}</div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-      <div class="analysis-item">
-        <h4>Link Profile</h4>
-        <div class="stat-row"><span>Total Links</span> <span>${data.links.total}</span></div>
-        <div class="stat-row"><span>Internal</span> <span>${data.links.internal}</span></div>
-        <div class="stat-row"><span>External</span> <span>${data.links.external}</span></div>
-      </div>
-    `;
+    html = createDeepDive('seo-meta',
+      `<span>Title: <span style="font-size:9px; color:var(--accent-color)">${data.title}</span></span>`,
+      `<div class="stat-row"><span>Description</span> <span style="font-size:9px; color:var(--text-dim)">${data.description}</span></div>
+        <h5 style="margin-top:12px; font-size:10px; color:var(--accent-color)">Meta & Link Profile</h5>
+        <table class="data-table">
+          ${data.meta.map(m => `<tr><td>${m.name}</td><td>${m.content}</td></tr>`).join('')}
+          ${data.links.list.map(l => `<tr><td>LINK</td><td>${l.text}</td></tr>`).join('')}
+        </table>`
+    );
   } else if (type === 'code') {
     const extPct = Math.round((data.external / data.total) * 100) || 0;
-    const inlinePct = 100 - extPct;
-    html = `
-      <div class="analysis-item">
-        <h4>Script Distribution</h4>
-        <div style="height:8px; display:flex; border-radius:var(--radius); overflow:hidden; margin:10px 0; background:#333;">
-          <div style="width:${extPct}%; background:var(--accent-color);" title="External: ${data.external}"></div>
-          <div style="width:${inlinePct}%; background:#f59e0b;" title="Inline: ${data.inline}"></div>
+    html = createDeepDive('code-trace',
+      `<span>Total Scripts: <strong>${data.total}</strong></span> · <span>External: <strong>${extPct}%</strong></span>`,
+      `<div style="height:6px; display:flex; border-radius:2px; overflow:hidden; margin:8px 0; background:#333;">
+          <div style="width:${extPct}%; background:var(--accent-color);"></div>
+          <div style="width:${100 - extPct}%; background:orange;"></div>
         </div>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
-          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius);">
-            <div style="font-size:10px; color:var(--text-secondary);">External</div>
-            <div style="font-size:16px; font-weight:bold;">${data.external}</div>
-          </div>
-          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius);">
-            <div style="font-size:10px; color:var(--text-secondary);">Inline</div>
-            <div style="font-size:16px; font-weight:bold;">${data.inline}</div>
-          </div>
-        </div>
-      </div>
-      <div class="analysis-item" style="flex:1; display:flex; flex-direction:column; min-height:0;">
-        <h4>All Detected Endpoints</h4>
         <div style="flex:1; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:var(--radius); padding:10px;">
           ${data.sources.map(s => `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:6px;">
@@ -1724,17 +2036,15 @@ function displayAnalysisResults(type, data) {
               <span class="tag-badge" style="background:#222; margin:0;">JS</span>
             </div>
           `).join('')}
-        </div>
-      </div>
-    `;
-  } else if (type === 'net') {
+        </div>`
+    );
+  } else if (type === 'net' || type === 'network') {
     if (data.length === 0) {
       html = '<div class="empty-state">No API traffic detected since page load.</div>';
     } else {
-      html = `
-        <div class="analysis-item" style="flex:1; display:flex; flex-direction:column; min-height:0; margin-bottom:0;">
-          <h4 style="margin-bottom:10px;">API & XHR Traffic</h4>
-          <div style="flex:1; overflow-y:auto; padding-right:4px;">
+      html = createDeepDive('net-log',
+        `<span>Active Traffic: <strong>${data.length} Requests</strong></span>`,
+        `<div style="flex:1; overflow-y:auto; padding-right:4px;">
             ${data.map(req => `
               <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:var(--radius); margin-bottom:8px; border-left:3px solid ${req.type === 'FETCH' ? '#10b981' : '#6366f1'};">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
@@ -1749,161 +2059,622 @@ function displayAnalysisResults(type, data) {
                 </div>
               </div>
             `).join('')}
-          </div>
-        </div>
-       `;
+          </div>`
+      );
     }
   } else if (type === 'stack') {
-    html = `
-      <div class="stat-group">
-        <strong>Detected Technologies:</strong>
-        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+    html = createDeepDive('stack-tech',
+      `<strong>Detected Technologies:</strong>`,
+      `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
           ${data.map(tech => `
             <div class="tag-badge" style="background:var(--accent-color); color: white; padding: 4px 10px; font-size: 11px;">
               ${tech}
             </div>
           `).join('')}
+        </div>`,
+      { title: 'Technology Stack', search: false, export: true }
+    );
+  } else if (type === 'psyche') {
+    const totalPatterns = data.darkPatterns.length + data.persuasionTechniques.length;
+    const loadScore = Math.max(0, 100 - Math.floor(data.cognitiveLoad / 10));
+    
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value severity-${data.darkPatterns.length > 5 ? 'high' : data.darkPatterns.length > 2 ? 'med' : 'low'}">${data.darkPatterns.length}</span>
+          <span class="stat-label">Dark Patterns</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.persuasionTechniques.length}</span>
+          <span class="stat-label">Persuasion Tech.</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value severity-${loadScore < 50 ? 'high' : loadScore < 75 ? 'med' : 'low'}">${data.cognitiveLoad}</span>
+          <span class="stat-label">Cognitive Load</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.urgencySignals}</span>
+          <span class="stat-label">Urgency Signals</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.scarcity}</span>
+          <span class="stat-label">Scarcity</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.socialProof}</span>
+          <span class="stat-label">Social Proof</span>
+        </div>
+      </div>
+      ${data.darkPatterns.length > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>⚠️ Dark Patterns Detected</h5>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Pattern Type</th>
+                  <th>Trigger</th>
+                  <th>Severity</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.darkPatterns.map(p => `
+                  <tr>
+                    <td style="font-weight: 600; text-transform: capitalize;">${p.type.replace(/-/g, ' ')}</td>
+                    <td style="font-size: 11px;">"${p.trigger}"</td>
+                    <td><span class="severity-${p.severity}">${p.severity.toUpperCase()}</span></td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : ''}
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Persuasion Techniques</h5>
+        </div>
+        ${data.persuasionTechniques.map(tech => `
+          <div class="data-row">
+            <span class="label">${tech.type.replace(/-/g, ' ')}</span>
+            <span class="value">${tech.instances} instances</span>
+          </div>
+        `).join('')}
+      </div>
+      ${data.attentionEngineering.length > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>Attention Engineering</h5>
+          </div>
+          ${data.attentionEngineering.map(item => `
+            <div class="metric-badge">
+              <span class="icon">⚡</span>
+              ${item.type.replace(/-/g, ' ')}: ${item.count}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+    
+    html = createDeepDive('psyche-analysis',
+      `<span>Patterns: <strong class="severity-${totalPatterns > 10 ? 'high' : totalPatterns > 5 ? 'med' : 'low'}">${totalPatterns}</strong></span> · <span>Load: <strong>${data.cognitiveLoad}</strong></span> · <span>Dark: <strong class="severity-${data.darkPatterns.length > 5 ? 'high' : data.darkPatterns.length > 2 ? 'med' : 'low'}">${data.darkPatterns.length}</strong></span>`,
+      detailHtml,
+      { title: 'Psychological Pattern Analysis', search: true, export: true }
+    );
+  } else if (type === 'archetype') {
+    const detailHtml = `
+      <div class="stats-grid">
+        ${data.primary ? `
+          <div class="stat-card">
+            <span class="stat-value">${data.primary.type.toUpperCase()}</span>
+            <span class="stat-label">Primary Archetype</span>
+          </div>
+        ` : ''}
+        ${data.secondary ? `
+          <div class="stat-card">
+            <span class="stat-value" style="font-size: 24px;">${data.secondary.type.toUpperCase()}</span>
+            <span class="stat-label">Secondary</span>
+          </div>
+        ` : ''}
+        ${data.tertiary ? `
+          <div class="stat-card">
+            <span class="stat-value" style="font-size: 20px;">${data.tertiary.type.toUpperCase()}</span>
+            <span class="stat-label">Tertiary</span>
+          </div>
+        ` : ''}
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Brand Personality</h5>
+        </div>
+        <div style="padding: 20px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3); margin-bottom: 20px;">
+          <div style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
+            ${data.personality}
+          </div>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Archetype Scores</h5>
+        </div>
+        <div class="bar-chart">
+          ${Object.entries(data.allScores)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 8)
+            .map(([archetype, score]) => {
+              const maxScore = Math.max(...Object.values(data.allScores));
+              const pct = (score / maxScore * 100).toFixed(1);
+              return `
+                <div class="bar-chart-item">
+                  <div class="bar-chart-label">${archetype.charAt(0).toUpperCase() + archetype.slice(1)}</div>
+                  <div class="bar-chart-bar">
+                    <div class="bar-chart-fill" style="width: ${pct}%">${score}</div>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Dominant Colors</h5>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <div>
+            <strong style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Backgrounds</strong>
+            <div class="swatches">
+              ${data.dominantColors.backgrounds.map(([color]) => `
+                <div class="swatch" style="background: ${color}" title="${color}" data-color="${color}"></div>
+              `).join('')}
+            </div>
+          </div>
+          <div>
+            <strong style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Text</strong>
+            <div class="swatches">
+              ${data.dominantColors.text.map(([color]) => `
+                <div class="swatch" style="background: ${color}" title="${color}" data-color="${color}"></div>
+              `).join('')}
+            </div>
+          </div>
         </div>
       </div>
     `;
+    
+    html = createDeepDive('archetype-analysis',
+      `<span>Primary: <strong>${data.primary ? data.primary.type.toUpperCase() : 'N/A'}</strong></span> · <span>Score: <strong>${data.primary ? data.primary.score : 0}</strong></span>`,
+      detailHtml,
+      { title: 'Brand Archetype Analysis', search: false, export: true }
+    );
+  } else if (type === 'soul') {
+    const authenticityScore = Math.max(0, Math.min(100, data.authenticity));
+    const humanScore = Math.round((data.humanCentered / Math.max(data.corporateness, 1)) * 100);
+    
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value severity-${authenticityScore > 70 ? 'low' : authenticityScore > 40 ? 'med' : 'high'}">${authenticityScore}</span>
+          <span class="stat-label">Authenticity</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.transparencyScore}</span>
+          <span class="stat-label">Transparency</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.coherence}</span>
+          <span class="stat-label">Coherence</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.trustSignals}</span>
+          <span class="stat-label">Trust Signals</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Core Identity</h5>
+        </div>
+        <div class="data-row">
+          <span class="label">Primary Intention</span>
+          <span class="value">${data.intention}</span>
+        </div>
+        <div class="data-row">
+          <span class="label">Purpose</span>
+          <span class="value">${data.purpose}</span>
+        </div>
+        <div class="data-row">
+          <span class="label">Orientation</span>
+          <span class="value">${data.humanCentered > data.corporateness ? 'Human-Centered' : 'Corporate-Centered'}</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Human vs Corporate Balance</h5>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width: ${humanScore}%; background: ${humanScore > 60 ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)' : 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)'}"></div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-dim);">
+          <span>Corporate: ${data.corporateness}</span>
+          <span>Human: ${data.humanCentered}</span>
+        </div>
+      </div>
+    `;
+    
+    html = createDeepDive('soul-analysis',
+      `<span>Authenticity: <strong class="severity-${authenticityScore > 70 ? 'low' : authenticityScore > 40 ? 'med' : 'high'}">${authenticityScore}</strong></span> · <span>Intent: <strong>${data.intention}</strong></span> · <span>Trust: <strong>${data.trustSignals}</strong></span>`,
+      detailHtml,
+      { title: 'Soul Analysis', search: false, export: true }
+    );
+  } else if (type === 'shadow') {
+    const shadowScore = data.deceptivePatterns.length + data.manipulativeDesign.length + (data.hiddenCosts ? 5 : 0);
+    
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value severity-${shadowScore > 10 ? 'high' : shadowScore > 5 ? 'med' : 'low'}">${shadowScore}</span>
+          <span class="stat-label">Shadow Score</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.invisibleTrackers}</span>
+          <span class="stat-label">Trackers</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.deceptivePatterns.length}</span>
+          <span class="stat-label">Deceptive Patterns</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.hiddenElements.length}</span>
+          <span class="stat-label">Hidden Elements</span>
+        </div>
+      </div>
+      ${data.manipulativeDesign.length > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>🎭 Manipulative Design</h5>
+          </div>
+          ${data.manipulativeDesign.map(design => `
+            <div class="metric-badge">
+              <span class="icon">⚠️</span>
+              ${design}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+      ${data.deceptivePatterns.length > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>Deceptive Patterns</h5>
+          </div>
+          <div class="data-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Pattern</th>
+                  <th>Element</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${data.deceptivePatterns.map(pattern => `
+                  <tr>
+                    <td>${pattern.type}</td>
+                    <td>${pattern.element}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ` : ''}
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Data Collection</h5>
+        </div>
+        ${data.dataCollection.length > 0 ? 
+          data.dataCollection.map(type => `
+            <div class="metric-badge">
+              ${type}
+            </div>
+          `).join('') : 
+          '<div style="color: var(--text-dim); text-align: center; padding: 20px;">No explicit data collection detected</div>'
+        }
+      </div>
+      ${data.hiddenCosts ? `
+        <div style="padding: 16px; background: rgba(239, 68, 68, 0.1); border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3); margin-top: 16px;">
+          <div style="font-weight: 600; color: var(--danger-color); margin-bottom: 4px;">⚠️ Hidden Costs Detected</div>
+          <div style="font-size: 12px; color: var(--text-secondary);">This site may contain hidden pricing or fees</div>
+        </div>
+      ` : ''}
+    `;
+    
+    html = createDeepDive('shadow-analysis',
+      `<span>Shadow: <strong class="severity-${shadowScore > 10 ? 'high' : shadowScore > 5 ? 'med' : 'low'}">${shadowScore}</strong></span> · <span>Trackers: <strong>${data.invisibleTrackers}</strong></span> · <span>Deceptive: <strong>${data.deceptivePatterns.length}</strong></span>`,
+      detailHtml,
+      { title: 'Shadow Analysis', search: true, export: true }
+    );
+  } else if (type === 'rhetoric') {
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value">${data.readingLevel}</span>
+          <span class="stat-label">Reading Ease</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.wordCount}</span>
+          <span class="stat-label">Words</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${Math.round(data.avgSentenceLength)}</span>
+          <span class="stat-label">Avg Sentence</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.imperatives}</span>
+          <span class="stat-label">Commands</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.questions}</span>
+          <span class="stat-label">Questions</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.emotionalWords}</span>
+          <span class="stat-label">Emotional Words</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Linguistic Profile</h5>
+        </div>
+        <div class="data-row">
+          <span class="label">Tone</span>
+          <span class="value">${data.tone}</span>
+        </div>
+        <div class="data-row">
+          <span class="label">Command Density</span>
+          <span class="value">${((data.imperatives / data.wordCount) * 100).toFixed(2)}%</span>
+        </div>
+        <div class="data-row">
+          <span class="label">Question Density</span>
+          <span class="value">${((data.questions / data.wordCount) * 100).toFixed(2)}%</span>
+        </div>
+      </div>
+      ${data.rhetoricalDevices.length > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>Rhetorical Devices</h5>
+          </div>
+          ${data.rhetoricalDevices.map(device => `
+            <div class="metric-badge">
+              ${device}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+    
+    html = createDeepDive('rhetoric-analysis',
+      `<span>Tone: <strong>${data.tone}</strong></span> · <span>Reading: <strong>${data.readingLevel}</strong></span> · <span>Commands: <strong>${data.imperatives}</strong></span>`,
+      detailHtml,
+      { title: 'Rhetorical Analysis', search: false, export: true }
+    );
+  } else if (type === 'emotion') {
+    const detailHtml = `
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Emotional Design Profile</h5>
+        </div>
+        <div class="data-row">
+          <span class="label">Typography Mood</span>
+          <span class="value">${data.typographyMood}</span>
+        </div>
+        <div class="data-row">
+          <span class="label">Visual Weight</span>
+          <span class="value">${data.visualWeight}</span>
+        </div>
+        <div class="data-row">
+          <span class="label">Emotional Intent</span>
+          <span class="value">${data.emotionalIntent}</span>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Spacing Psychology</h5>
+        </div>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <span class="stat-value">${data.spacingAnalysis.avgPadding}px</span>
+            <span class="stat-label">Avg Padding</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${data.spacingAnalysis.avgMargin}px</span>
+            <span class="stat-label">Avg Margin</span>
+          </div>
+        </div>
+        <div style="padding: 16px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3); margin-top: 12px;">
+          <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Feeling</div>
+          <div style="font-size: 13px; color: var(--text-secondary);">${data.spacingAnalysis.feeling}</div>
+        </div>
+      </div>
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Color Psychology</h5>
+        </div>
+        ${Object.entries(data.colorPsychology).map(([color, emotion]) => `
+          <div class="data-row">
+            <span class="label" style="text-transform: capitalize;">${color}</span>
+            <span class="value">${emotion}</span>
+          </div>
+        `).join('')}
+      </div>
+      ${data.designPersonality.length > 0 ? `
+        <div class="dive-section">
+          <div class="dive-section-header">
+            <h5>Design Personality</h5>
+          </div>
+          ${data.designPersonality.map(trait => `
+            <div class="metric-badge">
+              ${trait}
+            </div>
+          `).join('')}
+        </div>
+      ` : ''}
+    `;
+    
+    html = createDeepDive('emotion-analysis',
+      `<span>Mood: <strong>${data.typographyMood}</strong></span> · <span>Intent: <strong>${data.emotionalIntent}</strong></span> · <span>Space: <strong>${data.spacingAnalysis.feeling}</strong></span>`,
+      detailHtml,
+      { title: 'Emotional Design Analysis', search: false, export: true }
+    );
   }
 
   content.innerHTML = html;
+
+  // Add search functionality
+  content.querySelectorAll('.search-box-inline').forEach(input => {
+    input.addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const diveId = e.target.dataset.search;
+      const diveContent = document.querySelector(`[data-content="${diveId}"]`);
+      
+      if (diveContent) {
+        const items = diveContent.querySelectorAll('tr, .data-row, .bar-chart-item');
+        items.forEach(item => {
+          const text = item.textContent.toLowerCase();
+          item.style.display = text.includes(searchTerm) ? '' : 'none';
+        });
+      }
+    });
+  });
+
+  // Add copy functionality
+  content.querySelectorAll('[data-action="copy"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const diveId = btn.dataset.dive;
+      const diveContent = document.querySelector(`[data-content="${diveId}"]`);
+      if (diveContent) {
+        const text = diveContent.innerText;
+        navigator.clipboard.writeText(text).then(() => {
+          showStatus('Copied to clipboard!', 'success');
+          btn.innerHTML = '✓ Copied';
+          setTimeout(() => {
+            btn.innerHTML = '📋 Copy';
+          }, 2000);
+        });
+      }
+    });
+  });
+
+  // Add export functionality
+  content.querySelectorAll('[data-action="export"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const diveId = btn.dataset.dive;
+      const diveContent = document.querySelector(`[data-content="${diveId}"]`);
+      if (diveContent) {
+        const text = diveContent.innerText;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${diveId}-data-${Date.now()}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showStatus('Exported successfully!', 'success');
+      }
+    });
+  });
+
+  // Add color swatch click to copy
+  content.querySelectorAll('.swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      const color = swatch.dataset.color || swatch.style.background;
+      navigator.clipboard.writeText(color).then(() => {
+        showStatus(`Copied ${color}`, 'success');
+      });
+    });
+  });
+
+  // Add table sorting
+  content.querySelectorAll('.data-table th').forEach((th, index) => {
+    th.addEventListener('click', () => {
+      const table = th.closest('table');
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const isNumeric = rows[0]?.cells[index]?.textContent.match(/^\\d+/);
+      
+      rows.sort((a, b) => {
+        const aVal = a.cells[index]?.textContent || '';
+        const bVal = b.cells[index]?.textContent || '';
+        
+        if (isNumeric) {
+          return parseFloat(bVal) - parseFloat(aVal);
+        }
+        return aVal.localeCompare(bVal);
+      });
+      
+      rows.forEach(row => tbody.appendChild(row));
+      showStatus('Table sorted', 'info');
+    });
+  });
 }
 
 function renderD3Graph(rootData) {
   const container = document.getElementById('d3-container');
-  container.innerHTML = ''; // Clear prev
 
-  // Use Precise bounding rect to avoid cropping in flex containers
-  const rect = container.getBoundingClientRect();
-  const width = rect.width || 600;
-  const height = rect.height || 500;
+  const draw = () => {
+    container.innerHTML = '';
+    const rect = container.getBoundingClientRect();
+    if (rect.width < 10 || rect.height < 10) { setTimeout(draw, 50); return; }
 
-  // Flatten logic for Force Graph (simplified)
-  const nodes = [];
-  const links = [];
+    const width = rect.width;
+    const height = rect.height;
+    const nodes = [];
+    const links = [];
 
-  function flatten(node, parentIndex = null) {
-    const i = nodes.length;
-    nodes.push({ id: i, name: node.name, class: node.class, r: Math.min(node.value * 2 + 5, 25) });
-    if (parentIndex !== null) links.push({ source: parentIndex, target: i });
-    if (node.children) {
-      node.children.forEach(c => flatten(c, i));
+    function flatten(node, parentIndex = null) {
+      const i = nodes.length;
+      nodes.push({ id: i, name: node.name, class: node.class, r: Math.min(node.value * 2 + 5, 25) });
+      if (parentIndex !== null) links.push({ source: parentIndex, target: i });
+      if (node.children) node.children.forEach(c => flatten(c, i));
     }
-  }
-  flatten(rootData);
+    flatten(rootData);
 
-  // Limit nodes for perf
-  const maxNodes = 500;
-  if (nodes.length > maxNodes) {
-    nodes.length = maxNodes;
-    links.length = maxNodes;
-  }
+    const maxNodes = 600;
+    if (nodes.length > maxNodes) { nodes.length = maxNodes; links.length = maxNodes; }
 
-  const svg = d3.select("#d3-container")
-    .append("svg")
-    .attr("width", width)
-    .attr("height", height)
-    .attr("viewBox", [0, 0, width, height])
-    .style("cursor", "move")
-    .style("display", "block");
+    const svg = d3.select("#d3-container").append("svg")
+      .attr("width", "100%").attr("height", "100%")
+      .attr("viewBox", `0 0 ${width} ${height}`).style("cursor", "move");
 
-  // Add zoom support
-  const g = svg.append("g");
+    const g = svg.append("g");
+    svg.call(d3.zoom().on("zoom", ({ transform }) => g.attr("transform", transform)));
 
-  const zoom = d3.zoom()
-    .extent([[0, 0], [width, height]])
-    .scaleExtent([0.1, 10])
-    .on("zoom", ({ transform }) => {
-      g.attr("transform", transform);
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(50))
+      .force("charge", d3.forceManyBody().strength(-80))
+      .force("center", d3.forceCenter(width / 2, height / 2))
+      .force("collide", d3.forceCollide().radius(d => d.r + 5));
+
+    const link = g.append("g").attr("stroke", "#475569").attr("stroke-opacity", 0.6)
+      .selectAll("line").data(links).join("line");
+
+    const node = g.append("g").selectAll("circle").data(nodes).join("circle")
+      .attr("r", d => d.r)
+      .attr("fill", d => d.name === 'div' ? '#667eea' : d.name === 'a' ? '#10b981' : d.name === 'img' ? '#f43f5e' : '#cbd5e1')
+      .call(d3.drag()
+        .on("start", (event, d) => { if (!event.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on("drag", (event, d) => { d.fx = event.x; d.fy = event.y; })
+        .on("end", (event, d) => { if (!event.active) simulation.alphaTarget(0); d.fx = null; d.fy = null; }));
+
+    const label = g.append("g").selectAll("text").data(nodes).join("text")
+      .text(d => d.name).attr("font-size", "8px").attr("fill", "#fff")
+      .attr("text-anchor", "middle").style("pointer-events", "none");
+
+    simulation.on("tick", () => {
+      link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+      node.attr("cx", d => d.x).attr("cy", d => d.y);
+      label.attr("x", d => d.x).attr("y", d => d.y + 3);
     });
-
-  svg.call(zoom);
-
-  // Simulation centrered on exact measured dimensions
-  const simulation = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id(d => d.id).distance(50))
-    .force("charge", d3.forceManyBody().strength(-80))
-    .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("collide", d3.forceCollide().radius(d => d.r + 5));
-
-  // Render Links
-  const link = g.append("g")
-    .attr("stroke", "#475569")
-    .attr("stroke-opacity", 0.6)
-    .selectAll("line")
-    .data(links)
-    .join("line");
-
-  // Render Nodes
-  const node = g.append("g")
-    .selectAll("circle")
-    .data(nodes)
-    .join("circle")
-    .attr("r", d => d.r)
-    .attr("fill", d => {
-      if (d.name === 'div') return '#667eea';
-      if (d.name === 'a') return '#10b981';
-      if (d.name === 'img') return '#f43f5e';
-      if (d.name === 'p' || d.name === 'span') return '#f59e0b';
-      return '#cbd5e1';
-    })
-    .call(drag(simulation));
-
-  // Render Labels
-  const label = g.append("g")
-    .selectAll("text")
-    .data(nodes)
-    .join("text")
-    .text(d => d.name)
-    .attr("font-size", "8px")
-    .attr("fill", "#ffffff")
-    .attr("text-anchor", "middle")
-    .attr("pointer-events", "none")
-    .attr("style", "text-shadow: 1px 1px 2px rgba(0,0,0,0.8)");
-
-  node.append("title")
-    .text(d => `${d.name.toUpperCase()} ${d.class ? '.' + d.class : ''}`);
-
-  // Tick
-  simulation.on("tick", () => {
-    link
-      .attr("x1", d => d.source.x)
-      .attr("y1", d => d.source.y)
-      .attr("x2", d => d.target.x)
-      .attr("y2", d => d.target.y);
-
-    node
-      .attr("cx", d => d.x)
-      .attr("cy", d => d.y);
-
-    label
-      .attr("x", d => d.x)
-      .attr("y", d => d.y + 3);
-  });
-
-  // Helper: Drag
-  function drag(simulation) {
-    function dragstarted(event) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
-      event.subject.fx = event.subject.x;
-      event.subject.fy = event.subject.y;
-    }
-    function dragged(event) {
-      event.subject.fx = event.x;
-      event.subject.fy = event.y;
-    }
-    function dragended(event) {
-      if (!event.active) simulation.alphaTarget(0);
-      event.subject.fx = null;
-      event.subject.fy = null;
-    }
-    return d3.drag()
-      .on("start", dragstarted)
-      .on("drag", dragged)
-      .on("end", dragended);
-  }
+  };
+  draw();
 }
 
 // MACGYVER TOOLS (OPERATIONS)
@@ -1984,7 +2755,7 @@ const MacGyverTools = {
     } else {
       const style = document.createElement('style');
       style.id = 'remixr-wireframe';
-      style.textContent = `* { outline: 1px solid rgba(100, 100, 255, 0.5) !important; background: rgba(0,0,0,0.02) !important; color: black !important; }`;
+      style.textContent = `* { outline: 1px solid rgba(100, 100, 255, 0.5) !important; background: rgba(0, 0, 0, 0.02)!important; color: black!important; }`;
       document.head.appendChild(style);
       window.wireframeActive = true;
     }
@@ -2036,7 +2807,7 @@ const MacGyverTools = {
     const regex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}/g;
     const emails = [...new Set(document.body.innerText.match(regex) || [])];
     if (emails.length > 0) {
-      return `COPY_ME:${emails.join('\n')}`;
+      return `COPY_ME:${emails.join('\n')} `;
     }
     return 'COPIED:No emails found';
   },
@@ -2048,7 +2819,7 @@ const MacGyverTools = {
       .filter(h => h && h.startsWith('http'));
     const unique = [...new Set(links)];
     if (unique.length > 0) {
-      return `COPY_ME:${unique.join('\n')}`;
+      return `COPY_ME:${unique.join('\n')} `;
     }
     return 'COPIED:No links found';
   },
@@ -2062,7 +2833,7 @@ const MacGyverTools = {
     });
     const list = [...colors].filter(c => c !== 'rgba(0, 0, 0, 0)' && c !== 'rgb(0, 0, 0)');
     if (list.length > 0) {
-      return `COPY_ME:${list.join('\n')}`;
+      return `COPY_ME:${list.join('\n')} `;
     }
     return 'COPIED:No colors found';
   },
@@ -2074,11 +2845,11 @@ const MacGyverTools = {
   injectConsole: () => {
     const script = document.createElement('script');
     script.textContent = `
-      console.clear();
-      console.log('%c ReMixr Console Injected ', 'background: #667eea; color: white; font-size: 14px; padding: 5px; border-radius: 4px;');
-      console.log('You now have full access to the window object.');
-      alert('Check your Developer Tools Console (F12) for the injected access.');
-    `;
+console.clear();
+console.log('%c ReMixr Console Injected ', 'background: #667eea; color: white; font-size: 14px; padding: 5px; border-radius: 4px;');
+console.log('You now have full access to the window object.');
+alert('Check your Developer Tools Console (F12) for the injected access.');
+`;
     document.body.appendChild(script);
     return 'COPIED:Console access enabled';
   }
@@ -2119,7 +2890,7 @@ function showStatus(message, type = 'info') {
   if (!statusEl) return;
 
   const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  statusEl.textContent = `[${timestamp}] ${message.toUpperCase()}`;
+  statusEl.textContent = `[${timestamp}] ${message.toUpperCase()} `;
 
   // Color the text based on type for instant recognition
   if (type === 'error') statusEl.style.color = 'var(--danger-color)';
@@ -2132,4 +2903,760 @@ function showStatus(message, type = 'info') {
     statusEl.textContent = `ReMixr IDE // Build 1.0.4 Ready`;
     statusEl.style.color = 'var(--text-dim)';
   }, 4000);
+}
+
+// ============================================
+// EXTENSION WIZARD
+// ============================================
+
+function generateExtensionFromWizard() {
+  const name = document.getElementById('wizard-name').value || 'My Extension';
+  const description = document.getElementById('wizard-description').value || 'A Chrome Extension';
+  const extType = document.querySelector('input[name="ext-type"]:checked').value;
+  const framework = document.getElementById('wizard-framework').value;
+  const hostPerms = document.querySelector('input[name="host-perms"]:checked').value;
+  const customHosts = document.getElementById('wizard-custom-hosts').value;
+
+  // Collect enabled features
+  const features = {
+    background: document.getElementById('feat-background').checked,
+    storage: document.getElementById('feat-storage').checked,
+    tabs: document.getElementById('feat-tabs').checked,
+    contextMenu: document.getElementById('feat-context-menu').checked,
+    notifications: document.getElementById('feat-notifications').checked,
+    bookmarks: document.getElementById('feat-bookmarks').checked,
+    history: document.getElementById('feat-history').checked,
+    downloads: document.getElementById('feat-downloads').checked,
+    cookies: document.getElementById('feat-cookies').checked,
+    webRequest: document.getElementById('feat-web-request').checked
+  };
+
+  // Collect enabled behaviors
+  const behaviors = {
+    matchSite: document.getElementById('behavior-match-site').checked,
+    autoOpen: document.getElementById('behavior-auto-open').checked,
+    persistState: document.getElementById('behavior-persist-state').checked,
+    keyboard: document.getElementById('behavior-keyboard').checked,
+    badge: document.getElementById('behavior-badge').checked,
+    autoRun: document.getElementById('behavior-auto-run').checked,
+    sync: document.getElementById('behavior-sync').checked,
+    theme: document.getElementById('behavior-theme').checked,
+    analytics: document.getElementById('behavior-analytics').checked,
+    hotReload: document.getElementById('behavior-hotreload').checked,
+    errorTracking: document.getElementById('behavior-error-tracking').checked
+  };
+
+  showStatus('Generating extension...', 'info');
+
+  // Generate manifest
+  const manifest = generateManifest(name, description, extType, features, hostPerms, customHosts, behaviors);
+  
+  // Generate files based on extension type, features, and behaviors
+  const files = generateExtensionFiles(extType, features, framework, behaviors);
+
+  // Create project
+  const projectId = `wizard-${Date.now()}`;
+  const project = {
+    id: projectId,
+    name: name,
+    manifest: manifest,
+    files: files,
+    created: new Date().toISOString()
+  };
+
+  // Save to storage
+  chrome.storage.local.get({ projects: [] }, (result) => {
+    const projects = result.projects;
+    projects.push(project);
+    chrome.storage.local.set({ projects }, () => {
+      showStatus('Extension generated successfully!', 'success');
+      loadProjects();
+      
+      // Switch to Builder tab and load the project
+      document.querySelector('[data-tab="builder"]').click();
+      loadProjectIntoBuilder(project);
+    });
+  });
+}
+
+function generateManifest(name, description, extType, features, hostPerms, customHosts, behaviors) {
+  const manifest = {
+    manifest_version: 3,
+    name: name,
+    version: '1.0.0',
+    description: description,
+    permissions: []
+  };
+
+  // Add icon placeholders
+  manifest.icons = {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  };
+
+  // Configure based on extension type
+  if (extType === 'content-script') {
+    manifest.content_scripts = [{
+      matches: hostPerms === 'custom' ? customHosts.split(',').map(h => h.trim()) : ['<all_urls>'],
+      js: ['content.js'],
+      run_at: 'document_idle'
+    }];
+  } else if (extType === 'popup') {
+    manifest.action = {
+      default_popup: 'popup.html',
+      default_title: name
+    };
+  } else if (extType === 'side-panel') {
+    manifest.action = {
+      default_title: name
+    };
+    manifest.side_panel = {
+      default_path: 'panel.html'
+    };
+  } else if (extType === 'page-action') {
+    manifest.action = {
+      default_title: name
+    };
+  }
+
+  // Add permissions based on features
+  if (features.storage) manifest.permissions.push('storage');
+  if (features.tabs) manifest.permissions.push('tabs');
+  if (features.contextMenu) manifest.permissions.push('contextMenus');
+  if (features.notifications) manifest.permissions.push('notifications');
+  if (features.bookmarks) manifest.permissions.push('bookmarks');
+  if (features.history) manifest.permissions.push('history');
+  if (features.downloads) manifest.permissions.push('downloads');
+  if (features.cookies) manifest.permissions.push('cookies');
+  if (features.webRequest) {
+    manifest.permissions.push('webRequest');
+    manifest.permissions.push('webRequestBlocking');
+  }
+
+  // Add permissions for behaviors
+  if (behaviors.sync) manifest.permissions.push('storage');
+  if (behaviors.keyboard) {
+    manifest.commands = {
+      "_execute_action": {
+        "suggested_key": {
+          "default": "Ctrl+Shift+Y",
+          "mac": "Command+Shift+Y"
+        },
+        "description": "Open extension"
+      },
+      "toggle": {
+        "suggested_key": {
+          "default": "Ctrl+Shift+K",
+          "mac": "Command+Shift+K"
+        },
+        "description": "Toggle extension"
+      }
+    };
+  }
+
+  // Add background service worker if needed
+  if (features.background || features.contextMenu || features.webRequest || behaviors.autoOpen || behaviors.badge || behaviors.errorTracking) {
+    manifest.background = {
+      service_worker: 'background.js'
+    };
+  }
+
+  // Add host permissions
+  if (hostPerms === 'all-urls') {
+    manifest.host_permissions = ['<all_urls>'];
+  } else if (hostPerms === 'custom') {
+    manifest.host_permissions = customHosts.split(',').map(h => h.trim());
+  } else {
+    manifest.permissions.push('activeTab');
+  }
+
+  return JSON.stringify(manifest, null, 2);
+}
+
+function generateExtensionFiles(extType, features, framework, behaviors) {
+  const files = [];
+
+  // Generate appropriate UI file based on type
+  if (extType === 'popup') {
+    files.push({
+      name: 'popup.html',
+      content: generateHTML('popup', framework, behaviors)
+    });
+    files.push({
+      name: 'popup.js',
+      content: generateJS('popup', features, framework, behaviors)
+    });
+    files.push({
+      name: 'popup.css',
+      content: generateCSS(behaviors)
+    });
+  } else if (extType === 'side-panel') {
+    files.push({
+      name: 'panel.html',
+      content: generateHTML('panel', framework, behaviors)
+    });
+    files.push({
+      name: 'panel.js',
+      content: generateJS('panel', features, framework, behaviors)
+    });
+    files.push({
+      name: 'panel.css',
+      content: generateCSS(behaviors)
+    });
+  } else if (extType === 'content-script') {
+    files.push({
+      name: 'content.js',
+      content: generateContentScript(features, behaviors)
+    });
+  }
+
+  // Generate background script if needed
+  if (features.background || features.contextMenu || features.webRequest || behaviors.autoOpen || behaviors.badge || behaviors.errorTracking) {
+    files.push({
+      name: 'background.js',
+      content: generateBackgroundScript(features, behaviors)
+    });
+  }
+
+  // Add README
+  files.push({
+    name: 'README.md',
+    content: generateReadme()
+  });
+
+  return files;
+}
+
+function generateHTML(type, framework, behaviors) {
+  const title = type === 'popup' ? 'Extension Popup' : 'Extension Panel';
+  const themeAttr = behaviors.theme ? ' data-theme="light"' : '';
+  
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <link rel="stylesheet" href="${type}.css">
+</head>
+<body${themeAttr}>
+  <div class="container">
+    <h1>Welcome!</h1>
+    <p>Your extension is ready to customize.</p>
+    ${framework === 'vanilla' ? '<div id="app"></div>' : '<div id="root"></div>'}
+    <button id="action-btn" class="btn">Click Me</button>
+    ${behaviors.theme ? '<button id="theme-toggle" class="btn-icon">🌓</button>' : ''}
+  </div>
+  <script src="${type}.js"></script>
+</body>
+</html>`;
+}
+
+function generateJS(type, features, framework, behaviors) {
+  let code = `// ${type.charAt(0).toUpperCase() + type.slice(1)} Script\n\n`;
+  
+  if (behaviors.persistState) {
+    code += `// State Management\n`;
+    code += `let state = {};\n\n`;
+    code += `async function loadState() {\n`;
+    code += `  const result = await chrome.storage.${behaviors.sync ? 'sync' : 'local'}.get('state');\n`;
+    code += `  state = result.state || {};\n`;
+    code += `  console.log('State loaded:', state);\n`;
+    code += `}\n\n`;
+    code += `async function saveState() {\n`;
+    code += `  await chrome.storage.${behaviors.sync ? 'sync' : 'local'}.set({ state });\n`;
+    code += `  console.log('State saved:', state);\n`;
+    code += `}\n\n`;
+  }
+
+  if (behaviors.errorTracking) {
+    code += `// Error Tracking\n`;
+    code += `window.addEventListener('error', (event) => {\n`;
+    code += `  console.error('Error tracked:', event.error);\n`;
+    code += `  // Send to analytics or error reporting service\n`;
+    code += `});\n\n`;
+  }
+
+  if (behaviors.matchSite) {
+    code += `// Match Parent Site Style\n`;
+    code += `async function matchParentSiteStyle() {\n`;
+    code += `  try {\n`;
+    code += `    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });\n`;
+    code += `    const response = await chrome.tabs.sendMessage(tab.id, { action: 'extractStyles' });\n`;
+    code += `    \n`;
+    code += `    if (response && response.styles) {\n`;
+    code += `      // Apply extracted styles to extension UI\n`;
+    code += `      const root = document.documentElement;\n`;
+    code += `      root.style.setProperty('--site-bg', response.styles.backgroundColor);\n`;
+    code += `      root.style.setProperty('--site-text', response.styles.textColor);\n`;
+    code += `      root.style.setProperty('--site-accent', response.styles.accentColor);\n`;
+    code += `      root.style.setProperty('--site-font', response.styles.fontFamily);\n`;
+    code += `      \n`;
+    code += `      // Update UI with site colors\n`;
+    code += `      document.body.style.background = response.styles.backgroundColor;\n`;
+    code += `      document.body.style.color = response.styles.textColor;\n`;
+    code += `      document.body.style.fontFamily = response.styles.fontFamily;\n`;
+    code += `      \n`;
+    code += `      console.log('Matched parent site style:', response.styles);\n`;
+    code += `    }\n`;
+    code += `  } catch (error) {\n`;
+    code += `    console.log('Could not extract parent site styles:', error);\n`;
+    code += `  }\n`;
+    code += `}\n\n`;
+  }
+  
+  code += `document.addEventListener('DOMContentLoaded', async () => {\n`;
+  
+  if (behaviors.persistState) {
+    code += `  await loadState();\n\n`;
+  }
+
+  if (behaviors.matchSite) {
+    code += `  await matchParentSiteStyle();\n\n`;
+  }
+
+  if (behaviors.theme) {
+    code += `  // Theme Support\n`;
+    code += `  const themeToggle = document.getElementById('theme-toggle');\n`;
+    code += `  const savedTheme = localStorage.getItem('theme') || 'light';\n`;
+    code += `  document.body.setAttribute('data-theme', savedTheme);\n\n`;
+    code += `  themeToggle?.addEventListener('click', () => {\n`;
+    code += `    const currentTheme = document.body.getAttribute('data-theme');\n`;
+    code += `    const newTheme = currentTheme === 'light' ? 'dark' : 'light';\n`;
+    code += `    document.body.setAttribute('data-theme', newTheme);\n`;
+    code += `    localStorage.setItem('theme', newTheme);\n`;
+    code += `  });\n\n`;
+  }
+  
+  code += `  const btn = document.getElementById('action-btn');\n`;
+  code += `  \n`;
+  code += `  btn.addEventListener('click', async () => {\n`;
+  code += `    console.log('Button clicked!');\n`;
+  
+  if (features.storage) {
+    code += `    \n    // Example: Save to storage\n`;
+    code += `    await chrome.storage.local.set({ lastClick: new Date().toISOString() });\n`;
+    code += `    console.log('Saved to storage');\n`;
+  }
+  
+  if (features.tabs) {
+    code += `    \n    // Example: Get active tab\n`;
+    code += `    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });\n`;
+    code += `    console.log('Active tab:', tab.url);\n`;
+  }
+  
+  if (features.notifications) {
+    code += `    \n    // Example: Show notification\n`;
+    code += `    chrome.notifications.create({\n`;
+    code += `      type: 'basic',\n`;
+    code += `      iconUrl: 'icons/icon48.png',\n`;
+    code += `      title: 'Extension Notification',\n`;
+    code += `      message: 'Button was clicked!'\n`;
+    code += `    });\n`;
+  }
+
+  if (behaviors.analytics) {
+    code += `    \n    // Track usage\n`;
+    code += `    chrome.runtime.sendMessage({ action: 'track', event: 'button_click' });\n`;
+  }
+  
+  if (behaviors.persistState) {
+    code += `    \n    // Update and save state\n`;
+    code += `    state.clicks = (state.clicks || 0) + 1;\n`;
+    code += `    await saveState();\n`;
+    code += `    });\n`;
+  }
+  
+  code += `  });\n`;
+  code += `});\n`;
+  
+  if (behaviors.keyboard) {
+    code += `\n// Keyboard Shortcuts\n`;
+    code += `chrome.commands.onCommand.addListener((command) => {\n`;
+    code += `  console.log('Command received:', command);\n`;
+    code += `  if (command === 'toggle') {\n`;
+    code += `    // Handle toggle action\n`;
+    code += `  }\n`;
+    code += `});\n`;
+  }
+
+  if (behaviors.hotReload) {
+    code += `\n// Hot Reload for Development\n`;
+    code += `if (process.env.NODE_ENV === 'development') {\n`;
+    code += `  chrome.runtime.onMessage.addListener((msg) => {\n`;
+    code += `    if (msg.type === 'reload') location.reload();\n`;
+    code += `  });\n`;
+    code += `}\n`;
+  }
+  
+  return code;
+}
+
+function generateCSS(behaviors) {
+  let css = `/* Extension Styles */
+
+:root {
+  --site-bg: #667eea;
+  --site-text: #ffffff;
+  --site-accent: #764ba2;
+  --site-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--site-font);
+  background: ${behaviors.matchSite ? 'var(--site-bg)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'};
+  ${behaviors.matchSite ? 'color: var(--site-text);' : ''}
+  min-width: 300px;
+  min-height: 200px;
+  transition: background 0.3s ease, color 0.3s ease;
+}
+`;
+
+  if (behaviors.theme) {
+    css += `
+body[data-theme="dark"] {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #ffffff;
+}
+
+body[data-theme="dark"] .btn {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+`;
+  }
+
+  if (behaviors.matchSite) {
+    css += `
+/* Adaptive styling that matches parent site */
+.btn {
+  background: var(--site-accent);
+  border-color: var(--site-accent);
+  color: var(--site-text);
+}
+
+.btn:hover {
+  opacity: 0.9;
+  filter: brightness(1.1);
+}
+`;
+  }
+
+  css += `
+.container {
+  padding: 32px 28px;
+  color: ${behaviors.matchSite ? 'var(--site-text)' : 'white'};
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+  color: ${behaviors.matchSite ? 'var(--site-text)' : 'white'};
+}
+
+p {
+  font-size: 14px;
+  opacity: 0.9;
+  margin-bottom: 24px;
+  color: ${behaviors.matchSite ? 'var(--site-text)' : 'white'};
+}
+`;
+
+  if (!behaviors.matchSite) {
+    css += `
+.btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 12px 24px;
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}`;
+  } else {
+    css += `
+.btn {
+  border-radius: 12px;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}`;
+  }
+
+  return css;
+}
+
+function generateContentScript(features, behaviors) {
+  let code = `// Content Script - Runs on web pages\n\n`;
+  code += `console.log('Extension content script loaded!');\n\n`;
+  
+  if (behaviors.matchSite) {
+    code += `// Extract parent site styles for extension to match\n`;
+    code += `function extractParentSiteStyles() {\n`;
+    code += `  const bodyStyles = window.getComputedStyle(document.body);\n`;
+    code += `  const bgColor = bodyStyles.backgroundColor;\n`;
+    code += `  const textColor = bodyStyles.color;\n`;
+    code += `  const fontFamily = bodyStyles.fontFamily;\n`;
+    code += `  \n`;
+    code += `  // Find accent color from links or buttons\n`;
+    code += `  let accentColor = '#6366f1'; // fallback\n`;
+    code += `  const links = document.querySelectorAll('a, button');\n`;
+    code += `  if (links.length > 0) {\n`;
+    code += `    const linkStyle = window.getComputedStyle(links[0]);\n`;
+    code += `    accentColor = linkStyle.color || accentColor;\n`;
+    code += `  }\n`;
+    code += `  \n`;
+    code += `  return {\n`;
+    code += `    backgroundColor: bgColor,\n`;
+    code += `    textColor: textColor,\n`;
+    code += `    accentColor: accentColor,\n`;
+    code += `    fontFamily: fontFamily\n`;
+    code += `  };\n`;
+    code += `}\n\n`;
+  }
+  
+  if (behaviors.autoRun) {
+    code += `// Auto-run enhancement\n`;
+    code += `let hasRun = false;\n\n`;
+  }
+  
+  code += `// Example: Modify page content\n`;
+  code += `function enhancePage() {\n`;
+  
+  if (behaviors.autoRun) {
+    code += `  if (hasRun) return;\n`;
+    code += `  hasRun = true;\n\n`;
+  }
+  
+  code += `  // Add your page modifications here\n`;
+  code += `  console.log('Enhancing page:', window.location.href);\n`;
+  
+  if (behaviors.analytics) {
+    code += `  \n  // Track page enhancement\n`;
+    code += `  chrome.runtime.sendMessage({ action: 'track', event: 'page_enhanced', url: window.location.href });\n`;
+  }
+  
+  code += `}\n\n`;
+  
+  if (behaviors.autoRun) {
+    code += `// Auto-run on page load\n`;
+  } else {
+    code += `// Run when page is ready\n`;
+  }
+  
+  code += `if (document.readyState === 'loading') {\n`;
+  code += `  document.addEventListener('DOMContentLoaded', enhancePage);\n`;
+  code += `} else {\n`;
+  code += `  enhancePage();\n`;
+  code += `}\n\n`;
+  
+  if (features.storage) {
+    code += `// Example: Listen for storage changes\n`;
+    code += `chrome.storage.onChanged.addListener((changes, area) => {\n`;
+    code += `  console.log('Storage changed:', changes);\n`;
+    code += `});\n\n`;
+  }
+  
+  code += `// Listen for messages from extension\n`;
+  code += `chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n`;
+  code += `  console.log('Message received:', request);\n`;
+  
+  if (behaviors.matchSite) {
+    code += `  \n  // Handle style extraction request\n`;
+    code += `  if (request.action === 'extractStyles') {\n`;
+    code += `    const styles = extractParentSiteStyles();\n`;
+    code += `    sendResponse({ styles });\n`;
+    code += `    return true;\n`;
+    code += `  }\n`;
+  }
+  
+  code += `  \n  sendResponse({ status: 'ok' });\n`;
+  code += `  return true;\n`;
+  code += `});\n`;
+  
+  if (behaviors.errorTracking) {
+    code += `\n// Error tracking\n`;
+    code += `window.addEventListener('error', (event) => {\n`;
+    code += `  chrome.runtime.sendMessage({ \n`;
+    code += `    action: 'error', \n`;
+    code += `    error: event.error.message,\n`;
+    code += `    url: window.location.href\n`;
+    code += `  });\n`;
+    code += `});\n`;
+  }
+  
+  return code;
+}
+
+function generateBackgroundScript(features, behaviors) {
+  let code = `// Background Service Worker\n\n`;
+  code += `console.log('Background service worker loaded!');\n\n`;
+  
+  if (behaviors.autoOpen) {
+    code += `// Auto-open side panel on install\n`;
+    code += `chrome.runtime.onInstalled.addListener(async () => {\n`;
+    code += `  const tabs = await chrome.tabs.query({ active: true, currentWindow: true });\n`;
+    code += `  if (tabs[0]?.id) {\n`;
+    code += `    try {\n`;
+    code += `      await chrome.sidePanel.open({ tabId: tabs[0].id });\n`;
+    code += `      console.log('Side panel opened automatically');\n`;
+    code += `    } catch (e) {\n`;
+    code += `      console.log('Side panel not available:', e);\n`;
+    code += `    }\n`;
+    code += `  }\n`;
+    code += `});\n\n`;
+  }
+  
+  if (behaviors.badge) {
+    code += `// Badge notification system\n`;
+    code += `let badgeCount = 0;\n\n`;
+    code += `function updateBadge(count) {\n`;
+    code += `  badgeCount = count;\n`;
+    code += `  chrome.action.setBadgeText({ text: count > 0 ? count.toString() : '' });\n`;
+    code += `  chrome.action.setBadgeBackgroundColor({ color: '#6366f1' });\n`;
+    code += `}\n\n`;
+  }
+
+  if (behaviors.analytics) {
+    code += `// Analytics tracking\n`;
+    code += `const analytics = {\n`;
+    code += `  events: [],\n`;
+    code += `  track(event, data) {\n`;
+    code += `    this.events.push({ event, data, timestamp: Date.now() });\n`;
+    code += `    console.log('Tracked:', event, data);\n`;
+    code += `    // Send to your analytics service\n`;
+    code += `  }\n`;
+    code += `};\n\n`;
+  }
+
+  if (behaviors.errorTracking) {
+    code += `// Error tracking\n`;
+    code += `const errors = [];\n\n`;
+    code += `function logError(error) {\n`;
+    code += `  errors.push({ error, timestamp: Date.now() });\n`;
+    code += `  console.error('Error logged:', error);\n`;
+    code += `  // Send to error reporting service\n`;
+    code += `}\n\n`;
+  }
+  
+  if (features.contextMenu) {
+    code += `// Create context menu\n`;
+    code += `chrome.runtime.onInstalled.addListener(() => {\n`;
+    code += `  chrome.contextMenus.create({\n`;
+    code += `    id: 'main-action',\n`;
+    code += `    title: 'Extension Action',\n`;
+    code += `    contexts: ['selection', 'page']\n`;
+    code += `  });\n`;
+    code += `});\n\n`;
+    code += `chrome.contextMenus.onClicked.addListener((info, tab) => {\n`;
+    code += `  console.log('Context menu clicked:', info);\n`;
+    
+    if (behaviors.analytics) {
+      code += `  analytics.track('context_menu_click', { selection: info.selectionText });\n`;
+    }
+    
+    code += `});\n\n`;
+  }
+  
+  if (features.webRequest) {
+    code += `// Network request interception\n`;
+    code += `chrome.webRequest.onBeforeRequest.addListener(\n`;
+    code += `  (details) => {\n`;
+    code += `    console.log('Request:', details.url);\n`;
+    code += `    return {}; // Can modify or block request\n`;
+    code += `  },\n`;
+    code += `  { urls: ['<all_urls>'] },\n`;
+    code += `  ['blocking']\n`;
+    code += `);\n\n`;
+  }
+  
+  code += `// Listen for messages\n`;
+  code += `chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n`;
+  code += `  console.log('Message received:', request);\n`;
+  
+  if (behaviors.analytics) {
+    code += `  \n  // Track incoming messages\n`;
+    code += `  if (request.action === 'track') {\n`;
+    code += `    analytics.track(request.event, request.data || {});\n`;
+    code += `  }\n`;
+  }
+
+  if (behaviors.errorTracking) {
+    code += `  \n  // Log errors\n`;
+    code += `  if (request.action === 'error') {\n`;
+    code += `    logError(request.error);\n`;
+    code += `  }\n`;
+  }
+
+  if (behaviors.badge) {
+    code += `  \n  // Update badge\n`;
+    code += `  if (request.action === 'updateBadge') {\n`;
+    code += `    updateBadge(request.count);\n`;
+    code += `  }\n`;
+  }
+  
+  code += `  \n  sendResponse({ status: 'ok' });\n`;
+  code += `  return true;\n`;
+  code += `});\n`;
+
+  if (behaviors.hotReload) {
+    code += `\n// Hot reload for development\n`;
+    code += `const filesInDirectory = dir => new Promise(resolve => {\n`;
+    code += `  // Watch for file changes and reload extension\n`;
+    code += `  // Note: This is a placeholder - full implementation requires file watching\n`;
+    code += `  console.log('Hot reload enabled for development');\n`;
+    code += `});\n`;
+  }
+  
+  return code;
+}
+
+function generateReadme() {
+  return `# Chrome Extension
+
+## Installation
+
+1. Open Chrome and navigate to \`chrome://extensions\`
+2. Enable "Developer mode"
+3. Click "Load unpacked"
+4. Select this extension directory
+
+## Development
+
+Modify the files to customize your extension:
+- \`manifest.json\` - Extension configuration
+- \`popup.html/js/css\` - Popup interface (if applicable)
+- \`content.js\` - Content script for page modifications
+- \`background.js\` - Background service worker
+
+## Features
+
+Built with ReMixr IDE - A meta-extension development environment.
+`;
 }
