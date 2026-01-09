@@ -24,6 +24,49 @@ let cmEditor = null;
 
 // Extension Templates
 const TEMPLATES = {
+  'starter': {
+    name: 'Starter Extension',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Starter Extension',
+        version: '1.0.0',
+        description: 'A basic starter extension',
+        permissions: ['activeTab'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Starter Extension</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>Starter Project</h1>
+  <p>Modify this template to build your extension.</p>
+  <button id="click-me">Click Me!</button>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `// Initial logic
+document.getElementById('click-me').addEventListener('click', () => {
+  alert('Hello from your new extension!');
+});`,
+      'styles.css': `body {
+  width: 250px;
+  padding: 15px;
+  font-family: sans-serif;
+  text-align: center;
+}
+button {
+  padding: 8px 16px;
+  cursor: pointer;
+}`
+    }
+  },
   'content-modifier': {
     name: 'Content Modifier',
     files: {
@@ -657,6 +700,7 @@ function setupEventListeners() {
   });
 
   document.getElementById('scan-visualize')?.addEventListener('click', () => runAnalysis('visualize'));
+  document.getElementById('scan-sequence')?.addEventListener('click', () => runAnalysis('sequence'));
   document.getElementById('scan-structure')?.addEventListener('click', () => runAnalysis('structure'));
   document.getElementById('scan-palette')?.addEventListener('click', () => runAnalysis('palette'));
   document.getElementById('scan-assets')?.addEventListener('click', () => runAnalysis('assets'));
@@ -666,6 +710,10 @@ function setupEventListeners() {
   document.getElementById('scan-workers')?.addEventListener('click', () => runAnalysis('workers'));
   document.getElementById('scan-perf')?.addEventListener('click', () => runAnalysis('perf'));
   document.getElementById('scan-stack')?.addEventListener('click', () => runAnalysis('stack'));
+  document.getElementById('scan-a11y')?.addEventListener('click', () => runAnalysis('a11y'));
+  document.getElementById('scan-seo')?.addEventListener('click', () => runAnalysis('seo'));
+  document.getElementById('scan-code')?.addEventListener('click', () => runAnalysis('code'));
+  document.getElementById('scan-net')?.addEventListener('click', () => runAnalysis('net'));
 
   document.getElementById('clear-results')?.addEventListener('click', () => {
     document.getElementById('analysis-results').style.display = 'none';
@@ -1032,23 +1080,34 @@ function testExtension() {
     return;
   }
 
-  showStatus('Opening extension test guide...', 'info');
+  showStatus('Loading test guide...', 'info');
+  switchTab('analyzer');
 
-  // Show instructions for testing
-  const instructions = `
-To test your extension:
+  const container = document.getElementById('analysis-results');
+  const content = document.getElementById('result-content');
+  const title = document.getElementById('result-title');
 
-1. Open chrome://extensions/
-2. Enable "Developer mode" (top right)
-3. Click "Load unpacked"
-4. Export your extension first (click Export button)
-5. Extract the .zip file
-6. Select the extracted folder
+  container.style.display = 'block';
+  document.getElementById('d3-container').style.display = 'none';
+  content.style.display = 'block';
+  title.textContent = 'Deployment Guide';
 
-Your extension will load and be ready to test!
+  content.innerHTML = `
+    <div class="analysis-item">
+      <h4>How to Load Your Extension</h4>
+      <div style="margin-top:10px; border-left: 2px solid var(--accent-color); padding-left:12px; font-size:12px; line-height:1.6; color:var(--text-secondary);">
+        1. Open <code style="color:var(--text-primary); background:var(--bg-tertiary); padding:2px 4px;">chrome://extensions/</code> in a new tab.<br>
+        2. Enable <strong>Developer mode</strong> in the top right.<br>
+        3. Click <strong>Load unpacked</strong>.<br>
+        4. Select the directory you exported from ReMixr (Extract the ZIP first).
+      </div>
+    </div>
+    <div class="analysis-item">
+      <h4>Iterating</h4>
+      <p style="font-size:11px; color:var(--text-dim);">After making changes here, re-export and click the "Reload" icon on the extension card in the Chrome Extensions page.</p>
+    </div>
+    <button class="btn btn-secondary btn-small" style="margin-top:20px; width:100%;" onclick="document.getElementById('analysis-results').style.display='none'">Dismiss Guide</button>
   `;
-
-  alert(instructions.trim());
 }
 
 // Export extension - now handled by export.js
@@ -1101,6 +1160,11 @@ async function runAnalysis(type) {
     case 'perf': func = analyzePerf; break;
     case 'stack': func = analyzeStack; break;
     case 'visualize': func = analyzeDomTree; break;
+    case 'sequence': func = analyzeSequence; break;
+    case 'a11y': func = analyzeA11y; break;
+    case 'seo': func = analyzeSEO; break;
+    case 'code': func = analyzeCode; break;
+    case 'net': func = analyzeNetwork; break;
   }
 
   chrome.scripting.executeScript({
@@ -1167,15 +1231,40 @@ function analyzePalette() {
 }
 
 function analyzeAssets() {
-  const images = Array.from(document.querySelectorAll('img')).map(i => i.src).filter(Boolean);
+  const imageElements = Array.from(document.querySelectorAll('img'));
+  const images = imageElements.map(img => ({
+    src: img.src,
+    width: img.naturalWidth || img.clientWidth,
+    height: img.naturalHeight || img.clientHeight,
+    alt: img.alt || 'No alt text',
+    type: img.src.split('.').pop().split(/[?#]/)[0].toUpperCase() || 'IMG',
+    broken: img.naturalWidth === 0 && img.src !== ''
+  })).filter(img => img.src);
+
+  // Add SVGs
+  const svgs = document.querySelectorAll('svg').length;
+
+  // Background images
+  const bgImages = [];
+  document.querySelectorAll('*').forEach(el => {
+    const bg = window.getComputedStyle(el).backgroundImage;
+    if (bg && bg !== 'none' && bg.includes('url')) {
+      const url = bg.match(/url\(['"]?([^'"]+)['"]?\)/)?.[1];
+      if (url) bgImages.push(url);
+    }
+  });
+
   const scripts = Array.from(document.querySelectorAll('script')).map(s => s.src).filter(Boolean);
   const css = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => l.href).filter(Boolean);
 
   return {
+    images,
+    svgs,
+    bgImages: [...new Set(bgImages)],
     imageCount: images.length,
     scriptCount: scripts.length,
     cssCount: css.length,
-    samples: images.slice(0, 3)
+    brokenCount: images.filter(i => i.broken).length
   };
 }
 
@@ -1281,6 +1370,125 @@ function analyzeDomTree() {
   return traverse(document.body);
 }
 
+function analyzeA11y() {
+  const images = Array.from(document.querySelectorAll('img'));
+  const missingAlt = images.filter(img => !img.alt).length;
+
+  const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+  const smallButtons = buttons.filter(btn => {
+    const r = btn.getBoundingClientRect();
+    return r.width < 24 || r.height < 24;
+  }).length;
+
+  const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
+  const unlabelled = inputs.filter(input => {
+    if (input.id && document.querySelector(`label[for="${input.id}"]`)) return false;
+    if (input.closest('label')) return false;
+    if (input.getAttribute('aria-label') || input.getAttribute('aria-labelledby')) return false;
+    return true;
+  }).length;
+
+  return {
+    images: { total: images.length, missingAlt },
+    buttons: { total: buttons.length, tooSmall: smallButtons },
+    inputs: { total: inputs.length, unlabelled },
+    ariaElements: document.querySelectorAll('[aria-label], [aria-labelledby], [role]').length
+  };
+}
+
+function analyzeSEO() {
+  const meta = (name) => document.querySelector(`meta[name="${name}"], meta[property="og:${name}"]`)?.content;
+
+  const headings = {};
+  ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].forEach(h => {
+    headings[h] = document.querySelectorAll(h).length;
+  });
+
+  const links = Array.from(document.querySelectorAll('a'));
+  const internal = links.filter(a => a.href.includes(window.location.hostname)).length;
+  const external = links.length - internal;
+
+  return {
+    title: document.title,
+    description: meta('description') || 'Missing',
+    ogTitle: meta('title') || 'Missing',
+    headings,
+    links: { total: links.length, internal, external },
+    lang: document.documentElement.lang || 'Not set'
+  };
+}
+
+function analyzeSequence() {
+  const steps = [];
+  const actors = ['User', 'DOM', 'Logic', 'API'];
+
+  // 1. Initial Load
+  steps.push({ from: 'User', to: 'DOM', label: 'HTTP GET /', type: 'request' });
+  steps.push({ from: 'DOM', to: 'Logic', label: 'Parse HTML & Scripts', type: 'call' });
+
+  // 2. State Detection
+  if (window.React || document.querySelector('[data-reactroot]')) {
+    steps.push({ from: 'Logic', to: 'DOM', label: 'Mount VirtualDOM', type: 'response' });
+  }
+
+  // 3. Data Fetching (Reconstructed from performance entries)
+  const resources = window.performance.getEntriesByType('resource');
+  const fetches = resources.filter(r => r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest').slice(0, 3);
+
+  fetches.forEach(req => {
+    const name = req.name.split('/').pop().split('?')[0] || 'API';
+    steps.push({ from: 'Logic', to: 'API', label: `fetch(${name})`, type: 'request' });
+    steps.push({ from: 'API', to: 'Logic', label: 'JSON Data', type: 'response' });
+    steps.push({ from: 'Logic', to: 'DOM', label: 'Update View', type: 'response' });
+  });
+
+  // 4. Interaction Points
+  const buttons = document.querySelectorAll('button').length;
+  if (buttons > 0) {
+    steps.push({ from: 'User', to: 'DOM', label: `Click Interaction (${buttons} entry pts)`, type: 'call' });
+    steps.push({ from: 'DOM', to: 'Logic', label: 'Event Handler', type: 'call' });
+  }
+
+  return { actors, steps };
+}
+
+function analyzeCode() {
+  const scripts = Array.from(document.querySelectorAll('script'));
+  const data = {
+    total: scripts.length,
+    external: scripts.filter(s => s.src).length,
+    inline: scripts.filter(s => !s.src).length,
+    modules: scripts.filter(s => s.type === 'module').length,
+    async: scripts.filter(s => s.async).length,
+    defer: scripts.filter(s => s.defer).length,
+    sources: scripts.filter(s => s.src).map(s => {
+      try {
+        const url = new URL(s.src);
+        return {
+          host: url.hostname,
+          path: url.pathname.split('/').pop() || 'index',
+          size: '?' // Browser doesn't expose script size easily without Fetch
+        };
+      } catch (e) { return { host: 'unknown', path: s.src }; }
+    })
+  };
+  return data;
+}
+
+function analyzeNetwork() {
+  const resources = window.performance.getEntriesByType('resource');
+  const apiCalls = resources.filter(r => r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest');
+
+  return apiCalls.map(r => ({
+    name: r.name ? r.name.split('/').pop().split('?')[0] : 'Unknown',
+    url: r.name,
+    type: r.initiatorType.toUpperCase(),
+    duration: Math.round(r.duration),
+    size: r.transferSize ? (r.transferSize / 1024).toFixed(1) + ' KB' : 'Cached',
+    status: r.responseStatus || '200?'
+  }));
+}
+
 // Render Results
 function displayAnalysisResults(type, data) {
   const container = document.getElementById('analysis-results');
@@ -1297,8 +1505,16 @@ function displayAnalysisResults(type, data) {
   window.SITE_CONTEXT = window.SITE_CONTEXT || {};
   window.SITE_CONTEXT[type] = data;
 
+  if (type === 'sequence') {
+    renderSequenceDiagram(data);
+    return;
+  }
+
   if (type === 'visualize') {
-    renderD3Graph(data);
+    // Small delay to ensure flexbox has settled and dimensions are correct
+    setTimeout(() => {
+      renderD3Graph(data);
+    }, 50);
     return;
   }
 
@@ -1327,9 +1543,48 @@ function displayAnalysisResults(type, data) {
      </div>`;
   } else if (type === 'assets') {
     html = `
-      <div class="stat-row"><strong>Images:</strong> ${data.imageCount}</div>
-      <div class="stat-row"><strong>Scripts:</strong> ${data.scriptCount}</div>
-      <div class="stat-row"><strong>Stylesheets:</strong> ${data.cssCount}</div>
+      <div class="analysis-item">
+        <h4>Resource Summary</h4>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:6px; margin-top:10px;">
+          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius); text-align:center;">
+            <div style="font-size:10px; color:var(--text-secondary);">Images</div>
+            <div style="font-size:16px; font-weight:bold;">${data.imageCount}</div>
+          </div>
+          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius); text-align:center;">
+            <div style="font-size:10px; color:var(--text-secondary);">SVGs</div>
+            <div style="font-size:16px; font-weight:bold;">${data.svgs}</div>
+          </div>
+          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius); text-align:center;">
+            <div style="font-size:10px; color:var(--text-secondary);">Styles</div>
+            <div style="font-size:16px; font-weight:bold;">${data.cssCount}</div>
+          </div>
+        </div>
+        ${data.brokenCount > 0 ? `
+          <div style="background:rgba(241, 76, 76, 0.1); border:1px solid var(--danger-color); padding:8px; border-radius:var(--radius); color:var(--danger-color); margin-top:10px; font-size:11px; display:flex; align-items:center; gap:8px;">
+            <span>⚠️</span> <strong>${data.brokenCount} Broken Assets Detected</strong>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="analysis-item" style="flex:1; display:flex; flex-direction:column; min-height:0; margin-bottom:0;">
+        <h4>Image Gallery</h4>
+        <div style="flex:1; overflow-y:auto; margin-top:10px; display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; padding-right:4px;">
+          ${data.images.map(img => `
+            <div style="background:rgba(255,255,255,0.03); border:1px solid #333; border-radius:var(--radius); overflow:hidden; display:flex; flex-direction:column;">
+              <div style="height:80px; display:flex; align-items:center; justify-content:center; background:#000; position:relative;">
+                <img src="${img.src}" style="max-width:100%; max-height:100%; object-fit:contain;" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2224%22 height=%2224%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%23444%22 stroke-width=%222%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22><rect x=%223%22 y=%223%22 width=%2218%22 height=%2218%22 rx=%222%22 ry=%222%22/><circle cx=%228.5%22 cy=%228.5%22 r=%221.5%22/><polyline points=%2221 15 16 10 5 21%22/></svg>'">
+                <div style="position:absolute; top:2px; right:2px; background:rgba(0,0,0,0.6); color:#fff; font-size:8px; padding:2px 4px; border-radius:2px;">
+                  ${img.type}
+                </div>
+              </div>
+              <div style="padding:6px;">
+                <div style="font-size:9px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${img.src}">${img.src.split('/').pop()}</div>
+                <div style="font-size:10px; margin-top:2px;">${img.width} × ${img.height} px</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
     `;
   } else if (type === 'fonts') {
     html = `<div class="font-list">
@@ -1390,13 +1645,121 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
+  } else if (type === 'a11y') {
+    html = `
+      <div class="analysis-item">
+        <h4>Images & Alt Text</h4>
+        <div class="stat-row"><span>Total Images</span> <span>${data.images.total}</span></div>
+        <div class="stat-row" style="color:${data.images.missingAlt > 0 ? 'var(--danger-color)' : 'var(--success-color)'}">
+          <span>Missing Alt Attribute</span> <span>${data.images.missingAlt}</span>
+        </div>
+      </div>
+      <div class="analysis-item">
+        <h4>Interactive Elements</h4>
+        <div class="stat-row"><span>Buttons/Roles</span> <span>${data.buttons.total}</span></div>
+        <div class="stat-row"><span>Too Small (<24px)</span> <span>${data.buttons.tooSmall}</span></div>
+        <div class="stat-row"><span>Unlabelled Inputs</span> <span>${data.inputs.unlabelled}</span></div>
+      </div>
+      <div class="analysis-item">
+        <h4>Semantic Markup</h4>
+        <div class="stat-row"><span>ARIA-enhanced Elements</span> <span>${data.ariaElements}</span></div>
+      </div>
+    `;
+  } else if (type === 'seo') {
+    html = `
+      <div class="analysis-item">
+        <h4>Meta Information</h4>
+        <div class="stat-row"><span>Title</span> <span style="font-size:10px">${data.title}</span></div>
+        <div class="stat-row"><span>Description</span> <span style="font-size:10px">${data.description}</span></div>
+        <div class="stat-row"><span>Language</span> <span>${data.lang}</span></div>
+      </div>
+      <div class="analysis-item">
+        <h4>Heading Hierarchy</h4>
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:4px;">
+          ${Object.entries(data.headings).map(([h, c]) => `
+            <div style="background:var(--bg-tertiary); padding:4px; text-align:center; border-radius:1px;">
+              <div style="font-size:10px; color:var(--text-secondary)">${h}</div>
+              <div style="font-weight:bold">${c}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="analysis-item">
+        <h4>Link Profile</h4>
+        <div class="stat-row"><span>Total Links</span> <span>${data.links.total}</span></div>
+        <div class="stat-row"><span>Internal</span> <span>${data.links.internal}</span></div>
+        <div class="stat-row"><span>External</span> <span>${data.links.external}</span></div>
+      </div>
+    `;
+  } else if (type === 'code') {
+    const extPct = Math.round((data.external / data.total) * 100) || 0;
+    const inlinePct = 100 - extPct;
+    html = `
+      <div class="analysis-item">
+        <h4>Script Distribution</h4>
+        <div style="height:8px; display:flex; border-radius:var(--radius); overflow:hidden; margin:10px 0; background:#333;">
+          <div style="width:${extPct}%; background:var(--accent-color);" title="External: ${data.external}"></div>
+          <div style="width:${inlinePct}%; background:#f59e0b;" title="Inline: ${data.inline}"></div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px;">
+          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius);">
+            <div style="font-size:10px; color:var(--text-secondary);">External</div>
+            <div style="font-size:16px; font-weight:bold;">${data.external}</div>
+          </div>
+          <div style="background:var(--bg-tertiary); padding:8px; border-radius:var(--radius);">
+            <div style="font-size:10px; color:var(--text-secondary);">Inline</div>
+            <div style="font-size:16px; font-weight:bold;">${data.inline}</div>
+          </div>
+        </div>
+      </div>
+      <div class="analysis-item" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+        <h4>All Detected Endpoints</h4>
+        <div style="flex:1; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:var(--radius); padding:10px;">
+          ${data.sources.map(s => `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:6px;">
+              <div>
+                <div style="color:var(--accent-color); font-weight:bold; font-size:11px;">${s.host}</div>
+                <div style="opacity:0.5; font-size:9px;">${s.path}</div>
+              </div>
+              <span class="tag-badge" style="background:#222; margin:0;">JS</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  } else if (type === 'net') {
+    if (data.length === 0) {
+      html = '<div class="empty-state">No API traffic detected since page load.</div>';
+    } else {
+      html = `
+        <div class="analysis-item" style="flex:1; display:flex; flex-direction:column; min-height:0; margin-bottom:0;">
+          <h4 style="margin-bottom:10px;">API & XHR Traffic</h4>
+          <div style="flex:1; overflow-y:auto; padding-right:4px;">
+            ${data.map(req => `
+              <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:var(--radius); margin-bottom:8px; border-left:3px solid ${req.type === 'FETCH' ? '#10b981' : '#6366f1'};">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
+                  <strong style="font-size:12px; color:#fff;">${req.name}</strong>
+                  <span class="tag-badge" style="background:#222; font-size:9px; border-color:#444;">${req.type}</span>
+                </div>
+                <div style="font-size:10px; opacity:0.6; word-break:break-all; margin-bottom:8px; font-family:var(--mono-font);">${req.url}</div>
+                <div style="display:flex; gap:12px; font-size:11px;">
+                  <span title="Duration">⏱️ ${req.duration}ms</span>
+                  <span title="Size">📦 ${req.size}</span>
+                  <span style="color:#4ade80" title="Status">✓ ${req.status}</span>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+       `;
+    }
   } else if (type === 'stack') {
     html = `
       <div class="stat-group">
         <strong>Detected Technologies:</strong>
         <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
           ${data.map(tech => `
-            <div style="background:linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding:8px 12px; border-radius:20px; font-weight:bold; font-size:12px;">
+            <div class="tag-badge" style="background:var(--accent-color); color: white; padding: 4px 10px; font-size: 11px;">
               ${tech}
             </div>
           `).join('')}
@@ -1411,8 +1774,11 @@ function displayAnalysisResults(type, data) {
 function renderD3Graph(rootData) {
   const container = document.getElementById('d3-container');
   container.innerHTML = ''; // Clear prev
-  const width = container.clientWidth || 600;
-  const height = 400;
+
+  // Use Precise bounding rect to avoid cropping in flex containers
+  const rect = container.getBoundingClientRect();
+  const width = rect.width || 600;
+  const height = rect.height || 500;
 
   // Flatten logic for Force Graph (simplified)
   const nodes = [];
@@ -1420,7 +1786,7 @@ function renderD3Graph(rootData) {
 
   function flatten(node, parentIndex = null) {
     const i = nodes.length;
-    nodes.push({ id: i, name: node.name, class: node.class, r: Math.min(node.value * 2 + 3, 20) });
+    nodes.push({ id: i, name: node.name, class: node.class, r: Math.min(node.value * 2 + 5, 25) });
     if (parentIndex !== null) links.push({ source: parentIndex, target: i });
     if (node.children) {
       node.children.forEach(c => flatten(c, i));
@@ -1429,27 +1795,41 @@ function renderD3Graph(rootData) {
   flatten(rootData);
 
   // Limit nodes for perf
-  const maxNodes = 300;
+  const maxNodes = 500;
   if (nodes.length > maxNodes) {
     nodes.length = maxNodes;
-    links.length = maxNodes; // rough cut
+    links.length = maxNodes;
   }
 
   const svg = d3.select("#d3-container")
     .append("svg")
     .attr("width", width)
     .attr("height", height)
-    .attr("viewBox", [0, 0, width, height]);
+    .attr("viewBox", [0, 0, width, height])
+    .style("cursor", "move")
+    .style("display", "block");
 
-  // Simulation
+  // Add zoom support
+  const g = svg.append("g");
+
+  const zoom = d3.zoom()
+    .extent([[0, 0], [width, height]])
+    .scaleExtent([0.1, 10])
+    .on("zoom", ({ transform }) => {
+      g.attr("transform", transform);
+    });
+
+  svg.call(zoom);
+
+  // Simulation centrered on exact measured dimensions
   const simulation = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id(d => d.id).distance(30))
-    .force("charge", d3.forceManyBody().strength(-30))
+    .force("link", d3.forceLink(links).id(d => d.id).distance(50))
+    .force("charge", d3.forceManyBody().strength(-80))
     .force("center", d3.forceCenter(width / 2, height / 2))
-    .force("collide", d3.forceCollide().radius(d => d.r + 2));
+    .force("collide", d3.forceCollide().radius(d => d.r + 5));
 
   // Render Links
-  const link = svg.append("g")
+  const link = g.append("g")
     .attr("stroke", "#475569")
     .attr("stroke-opacity", 0.6)
     .selectAll("line")
@@ -1457,7 +1837,7 @@ function renderD3Graph(rootData) {
     .join("line");
 
   // Render Nodes
-  const node = svg.append("g")
+  const node = g.append("g")
     .selectAll("circle")
     .data(nodes)
     .join("circle")
@@ -1470,6 +1850,18 @@ function renderD3Graph(rootData) {
       return '#cbd5e1';
     })
     .call(drag(simulation));
+
+  // Render Labels
+  const label = g.append("g")
+    .selectAll("text")
+    .data(nodes)
+    .join("text")
+    .text(d => d.name)
+    .attr("font-size", "8px")
+    .attr("fill", "#ffffff")
+    .attr("text-anchor", "middle")
+    .attr("pointer-events", "none")
+    .attr("style", "text-shadow: 1px 1px 2px rgba(0,0,0,0.8)");
 
   node.append("title")
     .text(d => `${d.name.toUpperCase()} ${d.class ? '.' + d.class : ''}`);
@@ -1485,6 +1877,10 @@ function renderD3Graph(rootData) {
     node
       .attr("cx", d => d.x)
       .attr("cy", d => d.y);
+
+    label
+      .attr("x", d => d.x)
+      .attr("y", d => d.y + 3);
   });
 
   // Helper: Drag
@@ -1522,17 +1918,31 @@ async function runMacGyver(action) {
     func: MacGyverTools[action]
   }, (results) => {
     if (results && results[0] && results[0].result) {
-      // Handle return values (like copied text)
-      if (typeof results[0].result === 'string' && results[0].result.startsWith('COPIED:')) {
-        showStatus(results[0].result.replace('COPIED:', ''), 'success');
-      } else if (results[0].result === 'SCREENSHOT') {
-        chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
-          const a = document.createElement('a');
-          a.href = dataUrl;
-          a.download = `screenshot_${Date.now()}.png`;
-          a.click();
-          showStatus('Screenshot saved', 'success');
-        });
+      const result = results[0].result;
+
+      // Handle special command prefixes from tab
+      if (typeof result === 'string') {
+        if (result.startsWith('COPIED:')) {
+          showStatus(result.replace('COPIED:', ''), 'success');
+        } else if (result.startsWith('COPY_ME:')) {
+          const textToCopy = result.replace('COPY_ME:', '');
+          navigator.clipboard.writeText(textToCopy).then(() => {
+            showStatus('Copied to clipboard!', 'success');
+          }).catch(err => {
+            console.error('Clipboard error:', err);
+            showStatus('Copy failed - use console', 'error');
+          });
+        } else if (result === 'SCREENSHOT') {
+          chrome.tabs.captureVisibleTab(null, { format: 'png' }, (dataUrl) => {
+            const a = document.createElement('a');
+            a.href = dataUrl;
+            a.download = `screenshot_${Date.now()}.png`;
+            a.click();
+            showStatus('Screenshot saved', 'success');
+          });
+        } else {
+          showStatus('Operation complete', 'success');
+        }
       } else {
         showStatus('Operation complete', 'success');
       }
@@ -1626,8 +2036,7 @@ const MacGyverTools = {
     const regex = /[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}/g;
     const emails = [...new Set(document.body.innerText.match(regex) || [])];
     if (emails.length > 0) {
-      navigator.clipboard.writeText(emails.join('\n'));
-      return `COPIED:Copied ${emails.length} emails`;
+      return `COPY_ME:${emails.join('\n')}`;
     }
     return 'COPIED:No emails found';
   },
@@ -1638,8 +2047,10 @@ const MacGyverTools = {
       .map(a => a.href)
       .filter(h => h && h.startsWith('http'));
     const unique = [...new Set(links)];
-    navigator.clipboard.writeText(unique.join('\n'));
-    return `COPIED:Copied ${unique.length} links`;
+    if (unique.length > 0) {
+      return `COPY_ME:${unique.join('\n')}`;
+    }
+    return 'COPIED:No links found';
   },
 
   exportColors: () => {
@@ -1650,8 +2061,10 @@ const MacGyverTools = {
       colors.add(s.backgroundColor);
     });
     const list = [...colors].filter(c => c !== 'rgba(0, 0, 0, 0)' && c !== 'rgb(0, 0, 0)');
-    navigator.clipboard.writeText(list.join('\n'));
-    return `COPIED:Copied ${list.length} colors`;
+    if (list.length > 0) {
+      return `COPY_ME:${list.join('\n')}`;
+    }
+    return 'COPIED:No colors found';
   },
 
   takeScreenshot: () => {
@@ -1671,13 +2084,52 @@ const MacGyverTools = {
   }
 };
 
-// Show status message
-function showStatus(message, type = 'info') {
-  const status = document.getElementById('status');
-  status.textContent = message;
-  status.className = `status ${type} show`;
+function renderSequenceDiagram(data) {
+  const content = document.getElementById('result-content');
+  const { actors, steps } = data;
 
+  let html = `<div class="sequence-viz">
+    <div class="sequence-actors">
+      ${actors.map(a => `<div class="actor"><span>${a}</span></div>`).join('')}
+    </div>
+    <div class="sequence-flow">`;
+
+  steps.forEach(step => {
+    const fromIdx = actors.indexOf(step.from);
+    const toIdx = actors.indexOf(step.to);
+    const left = Math.min(fromIdx, toIdx) * (100 / (actors.length - 1));
+    const width = Math.abs(toIdx - fromIdx) * (100 / (actors.length - 1));
+    const isReverse = toIdx < fromIdx;
+
+    html += `
+      <div class="sequence-step ${step.type}" style="left:${left}%; width:${width}%">
+        <div class="step-line ${isReverse ? 'reverse' : ''}"></div>
+        <div class="step-label" style="text-align:${isReverse ? 'right' : 'left'}">${step.label}</div>
+      </div>
+    `;
+  });
+
+  html += `</div></div>`;
+  content.innerHTML = html;
+}
+
+// Show status message in the professional status bar
+function showStatus(message, type = 'info') {
+  const statusEl = document.getElementById('status-message');
+  if (!statusEl) return;
+
+  const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  statusEl.textContent = `[${timestamp}] ${message.toUpperCase()}`;
+
+  // Color the text based on type for instant recognition
+  if (type === 'error') statusEl.style.color = 'var(--danger-color)';
+  else if (type === 'success') statusEl.style.color = 'var(--success-color)';
+  else if (type === 'info') statusEl.style.color = 'var(--accent-color)';
+  else statusEl.style.color = 'var(--text-dim)';
+
+  // Reset after 4s
   setTimeout(() => {
-    status.classList.remove('show');
-  }, 3000);
+    statusEl.textContent = `ReMixr IDE // Build 1.0.4 Ready`;
+    statusEl.style.color = 'var(--text-dim)';
+  }, 4000);
 }

@@ -143,8 +143,9 @@ function toggleInspector(active) {
 // Listen for messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'toggleInspector') {
-        toggleInspector(request.state);
-        sendResponse({ active: request.state });
+        const newState = request.state !== undefined ? request.state : !inspectorActive;
+        toggleInspector(newState);
+        sendResponse({ active: newState });
     }
     return true;
 });

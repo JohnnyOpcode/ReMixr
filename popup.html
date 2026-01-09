@@ -1,17 +1,6 @@
 <!--
   Copyright 2026 John Kost
-
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+  Licensed under the Apache License, Version 2.0
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -19,99 +8,49 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ReMixr Extension Builder</title>
+  <title>ReMixr IDE</title>
   <link rel="stylesheet" href="popup.css">
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <!-- CodeMirror -->
+  <link rel="stylesheet" href="lib/codemirror/codemirror.min.css">
+  <link rel="stylesheet" href="lib/codemirror/theme/dracula.min.css">
 </head>
 
 <body>
+
   <div class="container">
     <!-- Header -->
     <header>
-      <h1>🎨 ReMixr</h1>
-      <p class="tagline">Build Browser Extensions with AI</p>
+      <h1>ReMixr IDE</h1>
+      <p class="tagline">Meta-Extension Environment</p>
     </header>
 
-    <!-- Main Navigation Tabs -->
-    <div class="tabs">
+    <!-- Navigation -->
+    <nav class="tabs">
       <button class="tab-btn active" data-tab="projects">Projects</button>
-      <button class="tab-btn" data-tab="builder">Builder</button>
-      <button class="tab-btn" data-tab="tools">Tools</button>
       <button class="tab-btn" data-tab="templates">Templates</button>
-      <button class="tab-btn" data-tab="analyzer">Analyze</button>
-    </div>
+      <button class="tab-btn" data-tab="builder">Builder</button>
+      <button class="tab-btn" data-tab="analyzer">Inspector</button>
+      <button class="tab-btn" data-tab="tools">Tools</button>
+    </nav>
+
+    <!-- CONTENT AREAS -->
 
     <!-- Projects Tab -->
     <div id="projects-tab" class="tab-content active">
       <div class="section">
         <h2>Your Projects</h2>
-        <button id="new-project-btn" class="btn btn-primary">
-          + New Extension Project
+        <button id="new-project-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;">
+          + New Project
         </button>
         <div id="projects-list" class="projects-list">
-          <p class="empty-state">No projects yet. Create your first extension!</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Builder Tab -->
-    <div id="builder-tab" class="tab-content">
-      <div class="section">
-        <div class="builder-header">
-          <input type="text" id="project-name" placeholder="My Extension" class="project-name-input">
-          <div class="builder-actions">
-            <button id="save-project-btn" class="btn btn-small">Save</button>
-            <button id="preview-btn" class="btn btn-small btn-secondary">👁️ Preview</button>
-            <button id="test-extension-btn" class="btn btn-small btn-success">Test</button>
-            <button id="export-extension-btn" class="btn btn-small btn-primary">Export</button>
-          </div>
-        </div>
-
-        <!-- AI Generation -->
-        <div class="ai-section">
-          <h3>🤖 AI Assistant</h3>
-          <textarea id="ai-prompt" placeholder="Describe your extension... 
-
-Examples:
-• Create an extension that highlights all external links
-• Build a timer to track time spent on each site
-• Make a tool that extracts all images from a page
-• Tip: Use the 'Analyze' tab to find selectors!" rows="4"></textarea>
-          <button id="generate-btn" class="btn btn-primary">Generate Extension Code</button>
-        </div>
-
-        <!-- File Manager -->
-        <div class="files-section">
-          <h3>📁 Project Files</h3>
-          <div class="file-tree" id="file-tree">
-            <div class="file-item active" data-file="manifest.json">📄 manifest.json</div>
-            <div class="file-item" data-file="popup.html">📄 popup.html</div>
-            <div class="file-item" data-file="popup.js">📄 popup.js</div>
-            <div class="file-item" data-file="content.js">📄 content.js</div>
-            <div class="file-item" data-file="background.js">📄 background.js</div>
-            <div class="file-item" data-file="styles.css">📄 styles.css</div>
-          </div>
-        </div>
-
-        <!-- Editor & Preview Area -->
-        <div class="workspace-area">
-          <!-- Code Editor -->
-          <div id="editor-container" class="editor-section">
-            <div class="editor-header">
-              <span id="current-file">manifest.json</span>
-            </div>
-            <textarea id="code-editor" class="code-editor" rows="15"></textarea>
-          </div>
-
-          <!-- Live Preview -->
-          <div id="preview-container" class="preview-section" style="display: none;">
-            <div class="preview-header">
-              <span>Live Preview (popup.html)</span>
-              <button id="close-preview" class="btn btn-small">Close</button>
-            </div>
-            <div class="preview-frame-wrapper">
-              <iframe id="preview-frame"></iframe>
-            </div>
-          </div>
+          <!-- Populated by JS -->
+          <div class="empty-state">No projects found. Start building!</div>
         </div>
       </div>
     </div>
@@ -119,139 +58,248 @@ Examples:
     <!-- Templates Tab -->
     <div id="templates-tab" class="tab-content">
       <div class="section">
-        <h2>Extension Templates</h2>
+        <h2>Templates</h2>
         <div class="templates-grid">
+          <div class="template-card" data-template="starter">
+            <div class="template-icon">🚀</div>
+            <h3>Starter</h3>
+            <p>Empty Boilerplate</p>
+          </div>
           <div class="template-card" data-template="content-modifier">
             <div class="template-icon">🎨</div>
-            <h3>Content Modifier</h3>
-            <p>Change how websites look and behave</p>
-            <button class="btn btn-small">Use Template</button>
-          </div>
-          <div class="template-card" data-template="productivity">
-            <div class="template-icon">⏱️</div>
-            <h3>Productivity Tool</h3>
-            <p>Time tracking, blockers, and focus tools</p>
-            <button class="btn btn-small">Use Template</button>
+            <h3>Modifier</h3>
+            <p>Inject CSS/JS</p>
           </div>
           <div class="template-card" data-template="data-extractor">
             <div class="template-icon">📊</div>
-            <h3>Data Extractor</h3>
-            <p>Scrape and export webpage data</p>
-            <button class="btn btn-small">Use Template</button>
+            <h3>Scraper</h3>
+            <p>Extract Data</p>
           </div>
-          <div class="template-card" data-template="page-monitor">
-            <div class="template-icon">👁️</div>
-            <h3>Page Monitor</h3>
-            <p>Track changes on websites</p>
-            <button class="btn btn-small">Use Template</button>
+          <div class="template-card" data-template="productivity">
+            <div class="template-icon">⏱️</div>
+            <h3>Timer</h3>
+            <p>Productivity</p>
           </div>
           <div class="template-card" data-template="popup-tool">
             <div class="template-icon">🔧</div>
-            <h3>Popup Tool</h3>
-            <p>Simple utility with popup interface</p>
-            <button class="btn btn-small">Use Template</button>
-          </div>
-          <div class="template-card" data-template="blank">
-            <div class="template-icon">📝</div>
-            <h3>Blank Project</h3>
-            <p>Start from scratch</p>
-            <button class="btn btn-small">Use Template</button>
+            <h3>Utility</h3>
+            <p>Popup Tool</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Analyzer Tab -->
+    <!-- Builder Tab -->
+    <div id="builder-tab" class="tab-content">
+      <div class="section">
+        <div class="builder-controls-header">
+          <div class="builder-header">
+            <input type="text" id="project-name" placeholder="Extension Name" class="project-name-input">
+            <div class="builder-actions">
+              <button id="save-project-btn" class="btn btn-secondary btn-small">Save</button>
+              <button id="test-extension-btn" class="btn btn-primary btn-small">Load</button>
+            </div>
+          </div>
+
+          <div class="ai-section">
+            <textarea id="ai-prompt"
+              placeholder="Describe functionality... e.g. 'Highlight all external links in red'"></textarea>
+            <button id="generate-btn" class="btn btn-primary btn-small">✨ AI Generate</button>
+          </div>
+
+          <div class="files-section">
+            <h3>Files</h3>
+            <div class="file-tree" id="file-tree">
+              <div class="file-item active" data-file="manifest.json">manifest.json</div>
+              <div class="file-item" data-file="popup.html">popup.html</div>
+              <div class="file-item" data-file="popup.js">popup.js</div>
+              <div class="file-item" data-file="content.js">content.js</div>
+              <div class="file-item" data-file="background.js">background.js</div>
+              <div class="file-item" data-file="styles.css">styles.css</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-section">
+          <div class="editor-header">
+            <span id="current-file">manifest.json</span>
+          </div>
+          <textarea id="code-editor"></textarea>
+        </div>
+
+        <div class="builder-footer">
+          <button id="export-extension-btn" class="btn btn-secondary btn-small" style="flex:1;">Download ZIP</button>
+          <button id="preview-btn" class="btn btn-secondary btn-small" style="flex:1;">Preview UI</button>
+        </div>
+
+        <!-- Preview Modal/Divider (Hidden by default) -->
+        <div id="preview-container"
+          style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+          <h3>Preview</h3>
+          <div class="preview-frame-wrapper" style="background:#fff; padding:10px; border-radius:4px;">
+            <iframe id="preview-frame" style="width:100%; height:300px; border:1px solid #ddd;"></iframe>
+          </div>
+          <button id="close-preview" class="btn btn-secondary btn-small" style="width:100%; margin-top:5px;">Close
+            Preview</button>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Analyzer/Inspector Tab -->
     <div id="analyzer-tab" class="tab-content">
       <div class="section">
-        <h2>🔍 Site Analysis</h2>
-
-        <!-- Interactive Inspector -->
-        <div class="analyzer-card highlight-card">
-          <div class="card-header">
-            <h3>Interactive Inspector</h3>
-            <label class="switch">
-              <input type="checkbox" id="inspector-toggle">
-              <span class="slider round"></span>
-            </label>
+        <div class="analyzer-controls">
+          <div class="analyzer-card">
+            <div class="card-header">
+              <h3>Diagnostic Suite</h3>
+              <label class="switch" title="Real-time element inspection overlay">
+                <input type="checkbox" id="inspector-toggle">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <p style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">
+              Toggle the Inspector to highlight elements directly on the page.
+            </p>
           </div>
-          <p>Hover over elements to see details. Click to copy selector.</p>
+
+          <div class="suite-header">
+            <h2>Scan Suite</h2>
+            <div class="suite-tag">Internal Engines</div>
+          </div>
+          <div class="tools-grid">
+            <button id="scan-visualize" class="tool-btn" title="Generate a DOM tree graph">
+              <span class="icon">🕸️</span> <span class="tool-btn-label">Graph</span>
+            </button>
+            <button id="scan-sequence" class="tool-btn" title="Generate a UML Sequence diagram of page logic">
+              <span class="icon">🧬</span> <span class="tool-btn-label">Sequence</span>
+            </button>
+            <button id="scan-structure" class="tool-btn" title="Analyze element counts and nesting">
+              <span class="icon">🏗️</span> <span class="tool-btn-label">Struct</span>
+            </button>
+            <button id="scan-palette" class="tool-btn" title="Extract page color palette">
+              <span class="icon">🎨</span> <span class="tool-btn-label">Palette</span>
+            </button>
+            <button id="scan-assets" class="tool-btn" title="Audit resources">
+              <span class="icon">📦</span> <span class="tool-btn-label">Assets</span>
+            </button>
+            <button id="scan-fonts" class="tool-btn" title="Identify fonts">
+              <span class="icon">🔤</span> <span class="tool-btn-label">Fonts</span>
+            </button>
+            <button id="scan-storage" class="tool-btn" title="Audit LocalStorage & Cookies">
+              <span class="icon">💾</span> <span class="tool-btn-label">Storage</span>
+            </button>
+            <button id="scan-workers" class="tool-btn" title="List service workers">
+              <span class="icon">⚙️</span> <span class="tool-btn-label">Worker</span>
+            </button>
+            <button id="scan-a11y" class="tool-btn" title="Accessibility health check (Alt text, Contrast, Labels)">
+              <span class="icon">♿</span> A11y
+            </button>
+            <button id="scan-seo" class="tool-btn" title="SEO health check (Meta tags, Headings, Links)">
+              <span class="icon">📈</span> SEO
+            </button>
+            <button id="scan-code" class="tool-btn" title="Code Visualizer: Analyze scripts and code distribution">
+              <span class="icon">📜</span> Code
+            </button>
+            <button id="scan-net" class="tool-btn" title="Network Visualizer: Analyze XHR/Fetch and API traffic">
+              <span class="icon">🌐</span> Network
+            </button>
+            <button id="scan-perf" class="tool-btn" title="Measure page load times">
+              <span class="icon">⚡</span> <span class="tool-btn-label">Perf</span>
+            </button>
+            <button id="scan-stack" class="tool-btn" title="Identify libraries">
+              <span class="icon">🧬</span> <span class="tool-btn-label">Stack</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Deep Scan Tools -->
-        <h3>Deep Scan</h3>
-        <div class="tools-grid">
-          <button id="scan-visualize" class="tool-btn">
-            <span class="icon">🕸️</span>
-            <span>Visualize</span>
-          </button>
-          <button id="scan-structure" class="tool-btn">
-            <span class="icon">🏗️</span>
-            <span>Structure</span>
-          </button>
-          <button id="scan-palette" class="tool-btn">
-            <span class="icon">🎨</span>
-            <span>Palette</span>
-          </button>
-          <button id="scan-assets" class="tool-btn">
-            <span class="icon">📦</span>
-            <span>Assets</span>
-          </button>
-        </div>
-
-        <!-- Advanced Tools -->
-        <h3>Under the Hood</h3>
-        <div class="tools-grid">
-          <button id="scan-storage" class="tool-btn">
-            <span class="icon">💾</span>
-            <span>Storage</span>
-          </button>
-          <button id="scan-workers" class="tool-btn">
-            <span class="icon">⚙️</span>
-            <span>Workers</span>
-          </button>
-          <button id="scan-perf" class="tool-btn">
-            <span class="icon">⚡</span>
-            <span>Perf & Net</span>
-          </button>
-          <button id="scan-stack" class="tool-btn">
-            <span class="icon">🧬</span>
-            <span>Stack</span>
-          </button>
-        </div>
-
-        <!-- Results Area -->
         <div id="analysis-results" class="results-area" style="display: none;">
           <div class="results-header">
-            <h3 id="result-title">Results</h3>
-            <button id="clear-results" class="btn-text">Clear</button>
+            <strong id="result-title">Analysis Results</strong>
+            <span id="clear-results" style="cursor:pointer; color: var(--accent-color); font-size: 11px;">Clear</span>
           </div>
           <div id="result-content"></div>
-          <div id="d3-container"
-            style="width: 100%; height: 400px; overflow: hidden; background: #0f172a; border-radius: 8px; display: none;">
-          </div>
+          <div id="d3-container" style="display: none;"></div>
         </div>
       </div>
     </div>
 
-    <!-- Status Messages -->
+
+    <!-- Tools Tab -->
+    <div id="tools-tab" class="tab-content">
+      <div class="section">
+        <div class="suite-header">
+          <h2>Operation Suite</h2>
+          <div class="suite-tag">Quick Actions</div>
+        </div>
+        <div class="tools-grid">
+          <button id="tool-edit" class="tool-btn" title="Toggle universal edit mode">
+            <span class="icon">✏️</span> <span class="tool-btn-label">Edit</span>
+          </button>
+          <button id="tool-zap" class="tool-btn" title="Remove element from DOM">
+            <span class="icon">⚡</span> <span class="tool-btn-label">Zap</span>
+          </button>
+          <button id="tool-wireframe" class="tool-btn" title="Toggle wireframe mode">
+            <span class="icon">🖼️</span> <span class="tool-btn-label">Wire</span>
+          </button>
+          <button id="tool-images" class="tool-btn" title="Toggle image visibility">
+            <span class="icon">👁️</span> <span class="tool-btn-label">Images</span>
+          </button>
+          <button id="tool-unmask" class="tool-btn" title="Show password fields">
+            <span class="icon">🔑</span> <span class="tool-btn-label">Unmask</span>
+          </button>
+          <button id="tool-enable" class="tool-btn" title="Enable disabled inputs">
+            <span class="icon">🔓</span> <span class="tool-btn-label">Inputs</span>
+          </button>
+          <button id="tool-kill-sticky" class="tool-btn" title="Remove sticky elements">
+            <span class="icon">🩹</span> <span class="tool-btn-label">Stickies</span>
+          </button>
+          <button id="tool-pii" class="tool-btn" title="Scan for emails">
+            <span class="icon">📧</span> <span class="tool-btn-label">Emails</span>
+          </button>
+          <button id="tool-export-links" class="tool-btn" title="Extract links">
+            <span class="icon">🔗</span> <span class="tool-btn-label">Links</span>
+          </button>
+          <button id="tool-export-colors" class="tool-btn" title="Extract colors">
+            <span class="icon">🎨</span> <span class="tool-btn-label">Colors</span>
+          </button>
+          <button id="tool-screenshot" class="tool-btn" title="Take screenshot">
+            <span class="icon">📸</span> <span class="tool-btn-label">Shot</span>
+          </button>
+          <button id="tool-console" class="tool-btn" title="Inject console">
+            <span class="icon">💻</span> <span class="tool-btn-label">Console</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Bar & Toast moved inside container -->
     <div id="status" class="status"></div>
+
+    <footer class="status-bar">
+      <div id="status-message">ReMixr IDE // Build 1.0.4 Ready</div>
+      <div class="status-indicators">
+        <span class="indicator">WASM</span>
+        <span class="indicator">V3</span>
+        <span class="indicator-active">ACTIVE</span>
+      </div>
+    </footer>
   </div>
 
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <!-- D3.js -->
-  <script src="https://d3js.org/d3.v7.min.js"></script>
-  <!-- CodeMirror -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/css/css.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/xml/xml.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/htmlmixed/htmlmixed.min.js"></script>
 
-  <script src="export.js"></script>
+
+  <!-- Scripts -->
+  <script src="lib/d3.v7.min.js"></script>
+  <script src="lib/jszip.min.js"></script>
+  <!-- CodeMirror -->
+  <script src="lib/codemirror/codemirror.min.js"></script>
+  <script src="lib/codemirror/mode/javascript.min.js"></script>
+  <script src="lib/codemirror/mode/css.min.js"></script>
+  <script src="lib/codemirror/mode/xml.min.js"></script>
+  <script src="lib/codemirror/mode/htmlmixed.min.js"></script>
+
   <script src="popup.js"></script>
+  <script src="export.js"></script>
 </body>
 
 </html>

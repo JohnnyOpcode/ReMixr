@@ -28,6 +28,7 @@ const INCLUDES = [
     'content.js',
     'background.js',
     'export.js',
+    'lib',
     'icons',
     'README.md',
     'LICENSE'

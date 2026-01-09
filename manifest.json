@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "ReMixr - Extension Builder",
+  "name": "ReMixr IDE",
   "version": "2.0.0",
   "description": "Build browser extensions with AI - A meta-extension development environment",
   "permissions": [
@@ -8,27 +8,31 @@
     "storage",
     "scripting",
     "downloads",
-    "management"
+    "management",
+    "contextMenus",
+    "sidePanel"
   ],
   "host_permissions": [
     "https://*/*",
     "http://*/*"
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
+    "default_title": "Open ReMixr"
+  },
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],

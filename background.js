@@ -19,6 +19,14 @@
 
 chrome.runtime.onInstalled.addListener(() => {
   console.log('ReMixr Extension Builder installed!');
+  setupSidePanel();
+
+  // Create context menu item
+  chrome.contextMenus.create({
+    id: "remixr-toggle",
+    title: "ReMixr IDE",
+    contexts: ["all"]
+  });
 
   // Initialize storage if needed
   chrome.storage.local.get(['extensionProjects'], (result) => {
@@ -26,6 +34,38 @@ chrome.runtime.onInstalled.addListener(() => {
       chrome.storage.local.set({ extensionProjects: [] });
     }
   });
+});
+
+// Also run on startup to ensure state handles restarts
+chrome.runtime.onStartup.addListener(() => {
+  setupSidePanel();
+});
+
+function setupSidePanel() {
+  // Set side panel to open on click
+  // This persists across sessions
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((error) => console.error(error));
+}
+
+// Fallback: If for some reason the above doesn't work, manual trigger
+// Note: setPanelBehavior {openPanelOnActionClick: true} is usually sufficient.
+// However, adding a direct listener provides double assurance if the API allows it.
+// The doc says: "The onClicked event will not be dispatched if the extension has an active popup."
+// We removed default_popup, so this should fire if setPanelBehavior fails or isn't supported.
+chrome.action.onClicked.addListener((tab) => {
+  chrome.sidePanel.open({ windowId: tab.windowId });
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "remixr-toggle") {
+    // Open the side panel first
+    chrome.sidePanel.open({ windowId: tab.windowId });
+
+    // Then toggle the inspector in the current tab
+    chrome.tabs.sendMessage(tab.id, { action: "toggleInspector" });
+  }
 });
 
 // Listen for messages from popup
