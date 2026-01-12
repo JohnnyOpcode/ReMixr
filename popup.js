@@ -506,6 +506,940 @@ console.log('Extension loaded!');`,
   font-family: Arial, sans-serif;
 }`
     }
+  },
+  'tab-manager': {
+    name: 'Tab Manager',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Tab Manager',
+        version: '1.0.0',
+        description: 'Organize and manage your browser tabs',
+        permissions: ['tabs', 'storage'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Tab Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>📑 Tab Manager</h1>
+  <div class="actions">
+    <button id="close-duplicates">Close Duplicates</button>
+    <button id="group-by-domain">Group by Domain</button>
+    <button id="save-session">Save Session</button>
+  </div>
+  <div id="tab-list"></div>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `// Tab Manager Logic
+async function loadTabs() {
+  const tabs = await chrome.tabs.query({});
+  const tabList = document.getElementById('tab-list');
+  
+  tabList.innerHTML = tabs.map(tab => \`
+    <div class="tab-item" data-id="\${tab.id}">
+      <img src="\${tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>'}" width="16" height="16">
+      <span>\${tab.title}</span>
+      <button class="close-tab" data-id="\${tab.id}">×</button>
+    </div>
+  \`).join('');
+  
+  // Add close handlers
+  document.querySelectorAll('.close-tab').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const tabId = parseInt(btn.dataset.id);
+      await chrome.tabs.remove(tabId);
+      loadTabs();
+    });
+  });
+}
+
+document.getElementById('close-duplicates').addEventListener('click', async () => {
+  const tabs = await chrome.tabs.query({});
+  const urls = new Set();
+  const toClose = [];
+  
+  tabs.forEach(tab => {
+    if (urls.has(tab.url)) {
+      toClose.push(tab.id);
+    } else {
+      urls.add(tab.url);
+    }
+  });
+  
+  if (toClose.length > 0) {
+    await chrome.tabs.remove(toClose);
+    loadTabs();
+  }
+});
+
+document.getElementById('group-by-domain').addEventListener('click', async () => {
+  const tabs = await chrome.tabs.query({});
+  const groups = {};
+  
+  tabs.forEach(tab => {
+    const domain = new URL(tab.url).hostname;
+    if (!groups[domain]) groups[domain] = [];
+    groups[domain].push(tab);
+  });
+  
+  console.log('Tab groups:', groups);
+  alert('Check console for grouped tabs');
+});
+
+document.getElementById('save-session').addEventListener('click', async () => {
+  const tabs = await chrome.tabs.query({});
+  const session = tabs.map(t => ({ url: t.url, title: t.title }));
+  
+  await chrome.storage.local.set({ 
+    savedSession: session,
+    savedAt: new Date().toISOString()
+  });
+  
+  alert('Session saved!');
+});
+
+loadTabs();`,
+      'styles.css': `body {
+  width: 400px;
+  max-height: 600px;
+  padding: 15px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 15px 0;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+button {
+  flex: 1;
+  padding: 8px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+button:hover {
+  background: #45a049;
+}
+
+#tab-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.tab-item:hover {
+  background: #f5f5f5;
+}
+
+.tab-item span {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close-tab {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: #f44336;
+  font-size: 16px;
+  line-height: 1;
+}`
+    }
+  },
+  'bookmark-organizer': {
+    name: 'Bookmark Organizer',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Bookmark Organizer',
+        version: '1.0.0',
+        description: 'Organize and search bookmarks efficiently',
+        permissions: ['bookmarks', 'storage'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Bookmark Organizer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>🔖 Bookmarks</h1>
+  <input type="text" id="search" placeholder="Search bookmarks...">
+  <div id="bookmark-list"></div>
+  <button id="add-current">+ Add Current Page</button>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `// Bookmark Organizer
+let allBookmarks = [];
+
+async function loadBookmarks() {
+  const tree = await chrome.bookmarks.getTree();
+  allBookmarks = [];
+  
+  function traverse(nodes) {
+    nodes.forEach(node => {
+      if (node.url) {
+        allBookmarks.push(node);
+      }
+      if (node.children) {
+        traverse(node.children);
+      }
+    });
+  }
+  
+  traverse(tree);
+  displayBookmarks(allBookmarks);
+}
+
+function displayBookmarks(bookmarks) {
+  const list = document.getElementById('bookmark-list');
+  list.innerHTML = bookmarks.slice(0, 50).map(b => \`
+    <div class="bookmark-item">
+      <a href="\${b.url}" target="_blank">\${b.title || b.url}</a>
+    </div>
+  \`).join('');
+}
+
+document.getElementById('search').addEventListener('input', (e) => {
+  const query = e.target.value.toLowerCase();
+  const filtered = allBookmarks.filter(b => 
+    (b.title && b.title.toLowerCase().includes(query)) ||
+    (b.url && b.url.toLowerCase().includes(query))
+  );
+  displayBookmarks(filtered);
+});
+
+document.getElementById('add-current').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  await chrome.bookmarks.create({
+    title: tab.title,
+    url: tab.url
+  });
+  alert('Bookmark added!');
+  loadBookmarks();
+});
+
+loadBookmarks();`,
+      'styles.css': `body {
+  width: 400px;
+  max-height: 500px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 10px 0;
+}
+
+#search {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+#bookmark-list {
+  max-height: 350px;
+  overflow-y: auto;
+  margin-bottom: 10px;
+}
+
+.bookmark-item {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+.bookmark-item a {
+  color: #1a73e8;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.bookmark-item a:hover {
+  text-decoration: underline;
+}
+
+#add-current {
+  width: 100%;
+  padding: 10px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}`
+    }
+  },
+  'form-filler': {
+    name: 'Form Filler',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Smart Form Filler',
+        version: '1.0.0',
+        description: 'Auto-fill forms with saved data',
+        permissions: ['activeTab', 'scripting', 'storage'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Form Filler</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>📝 Form Filler</h1>
+  <div class="profile">
+    <input type="text" id="name" placeholder="Full Name">
+    <input type="email" id="email" placeholder="Email">
+    <input type="tel" id="phone" placeholder="Phone">
+    <button id="save-profile">Save Profile</button>
+    <button id="fill-form">Fill Current Form</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `// Form Filler Logic
+async function loadProfile() {
+  const data = await chrome.storage.local.get(['profile']);
+  if (data.profile) {
+    document.getElementById('name').value = data.profile.name || '';
+    document.getElementById('email').value = data.profile.email || '';
+    document.getElementById('phone').value = data.profile.phone || '';
+  }
+}
+
+document.getElementById('save-profile').addEventListener('click', async () => {
+  const profile = {
+    name: document.getElementById('name').value,
+    email: document.getElementById('email').value,
+    phone: document.getElementById('phone').value
+  };
+  
+  await chrome.storage.local.set({ profile });
+  alert('Profile saved!');
+});
+
+document.getElementById('fill-form').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const data = await chrome.storage.local.get(['profile']);
+  
+  if (!data.profile) {
+    alert('Please save a profile first');
+    return;
+  }
+  
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: (profile) => {
+      // Fill name fields
+      document.querySelectorAll('input[name*="name"], input[id*="name"]').forEach(input => {
+        if (input.type === 'text') input.value = profile.name;
+      });
+      
+      // Fill email fields
+      document.querySelectorAll('input[type="email"], input[name*="email"]').forEach(input => {
+        input.value = profile.email;
+      });
+      
+      // Fill phone fields
+      document.querySelectorAll('input[type="tel"], input[name*="phone"]').forEach(input => {
+        input.value = profile.phone;
+      });
+    },
+    args: [data.profile]
+  });
+  
+  alert('Form filled!');
+});
+
+loadProfile();`,
+      'styles.css': `body {
+  width: 300px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 15px 0;
+}
+
+.profile input {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.profile button {
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  background: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.profile button:hover {
+  background: #0b7dda;
+}
+
+#fill-form {
+  background: #4CAF50;
+}
+
+#fill-form:hover {
+  background: #45a049;
+}`
+    }
+  },
+  'dark-mode': {
+    name: 'Universal Dark Mode',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Universal Dark Mode',
+        version: '1.0.0',
+        description: 'Apply dark mode to any website',
+        permissions: ['activeTab', 'scripting'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Dark Mode</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>🌙 Dark Mode</h1>
+  <button id="toggle-dark">Toggle Dark Mode</button>
+  <div class="intensity">
+    <label>Intensity:</label>
+    <input type="range" id="intensity" min="0" max="100" value="100">
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `document.getElementById('toggle-dark').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const intensity = document.getElementById('intensity').value / 100;
+  
+  await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    func: (intensity) => {
+      const existingFilter = document.querySelector('#dark-mode-filter');
+      
+      if (existingFilter) {
+        existingFilter.remove();
+      } else {
+        const style = document.createElement('style');
+        style.id = 'dark-mode-filter';
+        style.textContent = \`
+          html {
+            filter: invert(\${intensity}) hue-rotate(180deg) !important;
+          }
+          img, video, [style*="background-image"] {
+            filter: invert(\${intensity}) hue-rotate(180deg) !important;
+          }
+        \`;
+        document.head.appendChild(style);
+      }
+    },
+    args: [intensity]
+  });
+});`,
+      'styles.css': `body {
+  width: 250px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+  background: #1a1a1a;
+  color: #fff;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 15px 0;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+button:hover {
+  background: #4f46e5;
+}
+
+.intensity {
+  margin-top: 15px;
+}
+
+.intensity label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.intensity input {
+  width: 100%;
+}`
+    }
+  },
+  'ad-blocker': {
+    name: 'Simple Ad Blocker',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Simple Ad Blocker',
+        version: '1.0.0',
+        description: 'Block common ads and trackers',
+        permissions: ['activeTab', 'scripting'],
+        content_scripts: [{
+          matches: ['<all_urls>'],
+          js: ['content.js'],
+          run_at: 'document_start'
+        }],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'content.js': `// Ad Blocker Content Script
+const adSelectors = [
+  '[class*="ad-"]',
+  '[id*="ad-"]',
+  '[class*="advertisement"]',
+  'iframe[src*="doubleclick"]',
+  'iframe[src*="googlesyndication"]',
+  '[class*="sponsored"]',
+  '[data-ad-slot]'
+];
+
+function blockAds() {
+  adSelectors.forEach(selector => {
+    document.querySelectorAll(selector).forEach(el => {
+      el.style.display = 'none';
+      el.remove();
+    });
+  });
+}
+
+// Run on load
+blockAds();
+
+// Run on DOM changes
+const observer = new MutationObserver(blockAds);
+observer.observe(document.body, { childList: true, subtree: true });`,
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Ad Blocker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>🛡️ Ad Blocker</h1>
+  <div class="status">
+    <p>Blocking ads on this page</p>
+    <div class="indicator active"></div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `console.log('Ad Blocker active');`,
+      'styles.css': `body {
+  width: 250px;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+  text-align: center;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 15px 0;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ccc;
+}
+
+.indicator.active {
+  background: #4CAF50;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}`
+    }
+  },
+  'screenshot-tool': {
+    name: 'Screenshot Tool',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Screenshot Tool',
+        version: '1.0.0',
+        description: 'Capture screenshots of web pages',
+        permissions: ['activeTab', 'downloads'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Screenshot</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>📸 Screenshot</h1>
+  <button id="capture-visible">Capture Visible Area</button>
+  <button id="capture-full">Capture Full Page</button>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `document.getElementById('capture-visible').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  
+  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
+    format: 'png'
+  });
+  
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = \`screenshot-\${Date.now()}.png\`;
+  link.click();
+});
+
+document.getElementById('capture-full').addEventListener('click', () => {
+  alert('Full page capture requires additional permissions. Use "Capture Visible Area" for now.');
+});`,
+      'styles.css': `body {
+  width: 250px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 15px 0;
+}
+
+button {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0b7dda;
+}`
+    }
+  },
+  'password-generator': {
+    name: 'Password Generator',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Password Generator',
+        version: '1.0.0',
+        description: 'Generate secure passwords',
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Password Generator</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>🔐 Password Generator</h1>
+  <div class="options">
+    <label><input type="checkbox" id="uppercase" checked> Uppercase</label>
+    <label><input type="checkbox" id="lowercase" checked> Lowercase</label>
+    <label><input type="checkbox" id="numbers" checked> Numbers</label>
+    <label><input type="checkbox" id="symbols"> Symbols</label>
+    <label>Length: <input type="number" id="length" value="16" min="8" max="64"></label>
+  </div>
+  <button id="generate">Generate Password</button>
+  <div id="password" class="password"></div>
+  <button id="copy" style="display:none;">Copy to Clipboard</button>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `function generatePassword() {
+  const length = parseInt(document.getElementById('length').value);
+  const useUpper = document.getElementById('uppercase').checked;
+  const useLower = document.getElementById('lowercase').checked;
+  const useNumbers = document.getElementById('numbers').checked;
+  const useSymbols = document.getElementById('symbols').checked;
+  
+  let chars = '';
+  if (useUpper) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (useLower) chars += 'abcdefghijklmnopqrstuvwxyz';
+  if (useNumbers) chars += '0123456789';
+  if (useSymbols) chars += '!@#$%^&*()_+-=[]{}|;:,.<>?';
+  
+  if (!chars) {
+    alert('Select at least one character type');
+    return;
+  }
+  
+  let password = '';
+  for (let i = 0; i < length; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  
+  document.getElementById('password').textContent = password;
+  document.getElementById('copy').style.display = 'block';
+}
+
+document.getElementById('generate').addEventListener('click', generatePassword);
+
+document.getElementById('copy').addEventListener('click', () => {
+  const password = document.getElementById('password').textContent;
+  navigator.clipboard.writeText(password);
+  alert('Password copied to clipboard!');
+});
+
+generatePassword();`,
+      'styles.css': `body {
+  width: 300px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 15px 0;
+}
+
+.options {
+  margin-bottom: 15px;
+}
+
+.options label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.options input[type="number"] {
+  width: 60px;
+  padding: 4px;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+button:hover {
+  background: #45a049;
+}
+
+.password {
+  padding: 12px;
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: monospace;
+  word-break: break-all;
+  margin-bottom: 10px;
+  min-height: 20px;
+}
+
+#copy {
+  background: #2196F3;
+}
+
+#copy:hover {
+  background: #0b7dda;
+}`
+    }
+  },
+  'note-taker': {
+    name: 'Quick Notes',
+    files: {
+      'manifest.json': {
+        manifest_version: 3,
+        name: 'Quick Notes',
+        version: '1.0.0',
+        description: 'Take quick notes while browsing',
+        permissions: ['storage'],
+        action: {
+          default_popup: 'popup.html'
+        }
+      },
+      'popup.html': `<!DOCTYPE html>
+<html>
+<head>
+  <title>Quick Notes</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>📝 Quick Notes</h1>
+  <textarea id="notes" placeholder="Type your notes here..."></textarea>
+  <div class="footer">
+    <span id="char-count">0 characters</span>
+    <button id="clear">Clear</button>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>`,
+      'popup.js': `const textarea = document.getElementById('notes');
+const charCount = document.getElementById('char-count');
+
+// Load saved notes
+chrome.storage.local.get(['notes'], (result) => {
+  if (result.notes) {
+    textarea.value = result.notes;
+    updateCharCount();
+  }
+});
+
+// Auto-save on input
+textarea.addEventListener('input', () => {
+  chrome.storage.local.set({ notes: textarea.value });
+  updateCharCount();
+});
+
+function updateCharCount() {
+  charCount.textContent = \`\${textarea.value.length} characters\`;
+}
+
+document.getElementById('clear').addEventListener('click', () => {
+  if (confirm('Clear all notes?')) {
+    textarea.value = '';
+    chrome.storage.local.set({ notes: '' });
+    updateCharCount();
+  }
+});`,
+      'styles.css': `body {
+  width: 400px;
+  height: 500px;
+  padding: 15px;
+  font-family: Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+h1 {
+  font-size: 16px;
+  margin: 0 0 10px 0;
+}
+
+#notes {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  resize: none;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+}
+
+#char-count {
+  font-size: 11px;
+  color: #666;
+}
+
+#clear {
+  padding: 6px 12px;
+  background: #f44336;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#clear:hover {
+  background: #da190b;
+}`
+    }
   }
 };
 
@@ -602,6 +1536,7 @@ document.getElementById('new-project-btn')?.addEventListener('click', () => {
   };
 
   switchTab('builder');
+  updateFileTree();
   loadFileIntoEditor('manifest.json');
   document.getElementById('project-name').value = currentProject.name;
   showStatus('New project created', 'success');
@@ -613,6 +1548,7 @@ function loadProject(index) {
   currentProject.index = index;
 
   switchTab('builder');
+  updateFileTree();
   loadFileIntoEditor('manifest.json');
   document.getElementById('project-name').value = currentProject.name;
   showStatus('Project loaded', 'success');
@@ -626,6 +1562,30 @@ function deleteProject(index) {
     renderProjectsList();
     showStatus('Project deleted', 'success');
   }
+}
+
+// Update file tree UI
+function updateFileTree() {
+  const container = document.getElementById('file-tree');
+  if (!container || !currentProject) return;
+
+  container.innerHTML = '';
+
+  Object.keys(currentProject.files).sort().forEach(filename => {
+    const item = document.createElement('div');
+    item.className = 'file-item';
+    if (filename === currentFile) item.classList.add('active');
+    item.dataset.file = filename;
+    item.textContent = filename;
+
+    item.addEventListener('click', () => {
+      loadFileIntoEditor(filename);
+      document.querySelectorAll('.file-item').forEach(f => f.classList.remove('active'));
+      item.classList.add('active');
+    });
+
+    container.appendChild(item);
+  });
 }
 
 // Setup event listeners
@@ -650,16 +1610,8 @@ function setupEventListeners() {
   // Export button
   document.getElementById('export-extension-btn')?.addEventListener('click', exportExtension);
 
-  // File tree
-  document.querySelectorAll('.file-item').forEach(item => {
-    item.addEventListener('click', () => {
-      const file = item.dataset.file;
-      loadFileIntoEditor(file);
-
-      document.querySelectorAll('.file-item').forEach(f => f.classList.remove('active'));
-      item.classList.add('active');
-    });
-  });
+  // File tree - Now dynamic
+  updateFileTree();
 
   // Template cards
   document.querySelectorAll('.template-card').forEach(card => {
@@ -730,7 +1682,7 @@ function setupEventListeners() {
     const d3Container = document.getElementById('d3-container');
     const resultsArea = document.getElementById('analysis-results');
     const fullscreenBtn = document.getElementById('fullscreen-toggle');
-    
+
     if (d3Container.classList.contains('fullscreen')) {
       d3Container.classList.remove('fullscreen');
       fullscreenBtn.textContent = '⛶';
@@ -760,6 +1712,17 @@ function setupEventListeners() {
     });
   });
 
+  document.querySelectorAll('input[name="inject-host-perms"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+      const customInput = document.getElementById('inject-custom-hosts');
+      if (e.target.value === 'custom') {
+        customInput.style.display = 'block';
+      } else {
+        customInput.style.display = 'none';
+      }
+    });
+  });
+
   document.getElementById('generate-extension-btn')?.addEventListener('click', generateExtensionFromWizard);
 
   document.getElementById('tool-unmask')?.addEventListener('click', () => runMacGyver('showPasswords'));
@@ -771,6 +1734,23 @@ function setupEventListeners() {
   document.getElementById('tool-export-colors')?.addEventListener('click', () => runMacGyver('exportColors'));
   document.getElementById('tool-screenshot')?.addEventListener('click', () => runMacGyver('takeScreenshot'));
   document.getElementById('tool-console')?.addEventListener('click', () => runMacGyver('injectConsole'));
+
+  // Feature Injector toggle
+  document.getElementById('feature-injector-toggle')?.addEventListener('click', () => {
+    const content = document.getElementById('feature-injector-content');
+    const header = document.getElementById('feature-injector-toggle');
+
+    if (content.style.display === 'none') {
+      content.style.display = 'block';
+      header.classList.add('active');
+    } else {
+      content.style.display = 'none';
+      header.classList.remove('active');
+    }
+  });
+
+  // Feature Injector inject button
+  document.getElementById('inject-features-btn')?.addEventListener('click', injectFeatures);
 }
 
 // Switch tabs
@@ -806,8 +1786,10 @@ function loadTemplate(templateName) {
   }
 
   switchTab('builder');
-  loadFileIntoEditor('manifest.json');
   document.getElementById('project-name').value = currentProject.name;
+  currentFile = 'manifest.json';
+  updateFileTree();
+  loadFileIntoEditor('manifest.json');
   showStatus(`Template "${template.name}" loaded`, 'success');
 }
 
@@ -856,6 +1838,7 @@ async function generateExtension() {
   };
 
   switchTab('builder');
+  updateFileTree();
   loadFileIntoEditor('manifest.json');
   document.getElementById('project-name').value = currentProject.name;
   showStatus('Extension generated!', 'success');
@@ -1090,6 +2073,670 @@ function extractName(prompt) {
   return null;
 }
 
+// Generate Extension from Wizard
+function generateExtensionFromWizard() {
+  // Collect all wizard inputs
+  const name = document.getElementById('wizard-name').value.trim() || 'My Extension';
+  const description = document.getElementById('wizard-description').value.trim() || 'A custom Chrome extension';
+
+  // Get extension type
+  const extType = document.querySelector('input[name="ext-type"]:checked')?.value || 'popup';
+
+  // Get selected features
+  const features = {
+    background: document.getElementById('feat-background')?.checked || false,
+    storage: document.getElementById('feat-storage')?.checked || false,
+    tabs: document.getElementById('feat-tabs')?.checked || false,
+    contextMenu: document.getElementById('feat-context-menu')?.checked || false,
+    notifications: document.getElementById('feat-notifications')?.checked || false,
+    bookmarks: document.getElementById('feat-bookmarks')?.checked || false,
+    history: document.getElementById('feat-history')?.checked || false,
+    downloads: document.getElementById('feat-downloads')?.checked || false,
+    cookies: document.getElementById('feat-cookies')?.checked || false,
+    webRequest: document.getElementById('feat-web-request')?.checked || false
+  };
+
+  // Get host permissions
+  const hostPerms = document.querySelector('input[name="host-perms"]:checked')?.value || 'active-tab';
+  const customHosts = document.getElementById('wizard-custom-hosts')?.value.trim();
+
+  // Get framework
+  const framework = document.getElementById('wizard-framework')?.value || 'vanilla';
+
+  // Get behaviors
+  const behaviors = {
+    matchSite: document.getElementById('behavior-match-site')?.checked || false,
+    autoOpen: document.getElementById('behavior-auto-open')?.checked || false,
+    persistState: document.getElementById('behavior-persist-state')?.checked || false,
+    keyboard: document.getElementById('behavior-keyboard')?.checked || false,
+    badge: document.getElementById('behavior-badge')?.checked || false,
+    autoRun: document.getElementById('behavior-auto-run')?.checked || false,
+    sync: document.getElementById('behavior-sync')?.checked || false,
+    theme: document.getElementById('behavior-theme')?.checked || false,
+    analytics: document.getElementById('behavior-analytics')?.checked || false,
+    hotreload: document.getElementById('behavior-hotreload')?.checked || false,
+    errorTracking: document.getElementById('behavior-error-tracking')?.checked || false
+  };
+
+  // Build permissions array
+  const permissions = [];
+  if (hostPerms === 'active-tab') permissions.push('activeTab');
+  if (features.storage || behaviors.persistState || behaviors.sync) permissions.push('storage');
+  if (features.tabs) permissions.push('tabs');
+  if (features.contextMenu) permissions.push('contextMenus');
+  if (features.notifications) permissions.push('notifications');
+  if (features.bookmarks) permissions.push('bookmarks');
+  if (features.history) permissions.push('history');
+  if (features.downloads) permissions.push('downloads');
+  if (features.cookies) permissions.push('cookies');
+  if (features.webRequest) permissions.push('webRequest', 'webRequestBlocking');
+  if (extType === 'content-script') permissions.push('scripting');
+
+  // Build host permissions
+  const host_permissions = [];
+  if (hostPerms === 'all-urls') {
+    host_permissions.push('<all_urls>');
+  } else if (hostPerms === 'custom' && customHosts) {
+    host_permissions.push(...customHosts.split(',').map(h => h.trim()).filter(Boolean));
+  }
+
+  // Build manifest
+  const manifest = {
+    manifest_version: 3,
+    name: name,
+    version: '1.0.0',
+    description: description,
+    permissions: permissions
+  };
+
+  if (host_permissions.length > 0) {
+    manifest.host_permissions = host_permissions;
+  }
+
+  // Add action or side panel based on type
+  if (extType === 'popup' || extType === 'page-action') {
+    manifest.action = {
+      default_popup: 'popup.html',
+      default_icon: {
+        '16': 'icon16.png',
+        '48': 'icon48.png',
+        '128': 'icon128.png'
+      }
+    };
+  } else if (extType === 'side-panel') {
+    manifest.side_panel = {
+      default_path: 'sidepanel.html'
+    };
+  }
+
+  // Add content scripts if needed
+  if (extType === 'content-script') {
+    manifest.content_scripts = [{
+      matches: host_permissions.length > 0 ? host_permissions : ['<all_urls>'],
+      js: ['content.js'],
+      run_at: behaviors.autoRun ? 'document_start' : 'document_idle'
+    }];
+  }
+
+  // Add background service worker if needed
+  if (features.background || features.contextMenu || behaviors.badge) {
+    manifest.background = {
+      service_worker: 'background.js'
+    };
+  }
+
+  // Add keyboard shortcuts if needed
+  if (behaviors.keyboard) {
+    manifest.commands = {
+      "_execute_action": {
+        "suggested_key": {
+          "default": "Ctrl+Shift+Y",
+          "mac": "Command+Shift+Y"
+        }
+      }
+    };
+  }
+
+  // Generate files
+  const files = {
+    'manifest.json': JSON.stringify(manifest, null, 2)
+  };
+
+  // Generate HTML based on type
+  const htmlFile = extType === 'side-panel' ? 'sidepanel.html' : 'popup.html';
+  files[htmlFile] = generateHTML(name, framework, behaviors);
+
+  // Generate JavaScript
+  const jsFile = extType === 'side-panel' ? 'sidepanel.js' : 'popup.js';
+  files[jsFile] = generateJS(features, behaviors, framework);
+
+  // Generate CSS
+  files['styles.css'] = generateCSS(behaviors);
+
+  // Generate content script if needed
+  if (extType === 'content-script') {
+    files['content.js'] = generateContentScript(behaviors);
+  }
+
+  // Generate background script if needed
+  if (features.background || features.contextMenu || behaviors.badge) {
+    files['background.js'] = generateBackgroundScript(features, behaviors);
+  }
+
+  // Create project
+  currentProject = {
+    name: name,
+    files: files,
+    created: Date.now(),
+    modified: Date.now()
+  };
+
+  // Switch to builder and load
+  switchTab('builder');
+  updateFileTree();
+  loadFileIntoEditor('manifest.json');
+  document.getElementById('project-name').value = currentProject.name;
+  showStatus('Extension generated from wizard!', 'success');
+}
+
+// Helper: Generate HTML
+function generateHTML(name, framework, behaviors) {
+  const themeSupport = behaviors.theme ? `
+  <script>
+    // Theme support
+    const theme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+  </script>` : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${name}</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>${name}</h1>
+    <p>Your extension is ready to customize!</p>
+    <button id="action-btn">Click Me</button>
+    <div id="output"></div>
+  </div>
+  ${themeSupport}
+  <script src="${framework === 'vanilla' ? 'popup.js' : 'sidepanel.js'}"></script>
+</body>
+</html>`;
+}
+
+// Helper: Generate JavaScript
+function generateJS(features, behaviors, framework) {
+  let code = `// ${framework === 'vanilla' ? 'Vanilla JavaScript' : framework.charAt(0).toUpperCase() + framework.slice(1)} Extension\n\n`;
+
+  code += `document.addEventListener('DOMContentLoaded', () => {\n`;
+  code += `  const actionBtn = document.getElementById('action-btn');\n`;
+  code += `  const output = document.getElementById('output');\n\n`;
+
+  code += `  actionBtn.addEventListener('click', async () => {\n`;
+  code += `    output.textContent = 'Button clicked!';\n`;
+
+  if (features.storage || behaviors.persistState) {
+    code += `\n    // Save to storage\n`;
+    code += `    await chrome.storage.${behaviors.sync ? 'sync' : 'local'}.set({ lastClick: Date.now() });\n`;
+  }
+
+  if (features.tabs) {
+    code += `\n    // Get current tab\n`;
+    code += `    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });\n`;
+    code += `    console.log('Current tab:', tab);\n`;
+  }
+
+  if (features.notifications) {
+    code += `\n    // Show notification\n`;
+    code += `    chrome.notifications.create({\n`;
+    code += `      type: 'basic',\n`;
+    code += `      iconUrl: 'icon48.png',\n`;
+    code += `      title: 'Extension Action',\n`;
+    code += `      message: 'Action completed!'\n`;
+    code += `    });\n`;
+  }
+
+  code += `  });\n`;
+
+  if (behaviors.theme) {
+    code += `\n  // Theme toggle\n`;
+    code += `  const themeToggle = document.createElement('button');\n`;
+    code += `  themeToggle.textContent = '🌓 Toggle Theme';\n`;
+    code += `  themeToggle.addEventListener('click', () => {\n`;
+    code += `    const current = document.documentElement.getAttribute('data-theme');\n`;
+    code += `    const newTheme = current === 'dark' ? 'light' : 'dark';\n`;
+    code += `    document.documentElement.setAttribute('data-theme', newTheme);\n`;
+    code += `    localStorage.setItem('theme', newTheme);\n`;
+    code += `  });\n`;
+    code += `  document.querySelector('.container').appendChild(themeToggle);\n`;
+  }
+
+  if (behaviors.errorTracking) {
+    code += `\n  // Error tracking\n`;
+    code += `  window.addEventListener('error', (e) => {\n`;
+    code += `    console.error('Extension error:', e.message);\n`;
+    code += `  });\n`;
+  }
+
+  code += `});\n`;
+
+  return code;
+}
+
+// Helper: Generate CSS
+function generateCSS(behaviors) {
+  let css = `/* Extension Styles */\n\n`;
+
+  css += `body {\n`;
+  css += `  width: 400px;\n`;
+  css += `  min-height: 300px;\n`;
+  css += `  margin: 0;\n`;
+  css += `  padding: 0;\n`;
+  css += `  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n`;
+  css += `  background: #ffffff;\n`;
+  css += `  color: #333333;\n`;
+  css += `}\n\n`;
+
+  css += `.container {\n`;
+  css += `  padding: 20px;\n`;
+  css += `}\n\n`;
+
+  css += `h1 {\n`;
+  css += `  font-size: 20px;\n`;
+  css += `  margin: 0 0 15px 0;\n`;
+  css += `  color: #1a73e8;\n`;
+  css += `}\n\n`;
+
+  css += `button {\n`;
+  css += `  padding: 10px 20px;\n`;
+  css += `  background: #1a73e8;\n`;
+  css += `  color: white;\n`;
+  css += `  border: none;\n`;
+  css += `  border-radius: 4px;\n`;
+  css += `  cursor: pointer;\n`;
+  css += `  font-size: 14px;\n`;
+  css += `  margin: 5px 0;\n`;
+  css += `}\n\n`;
+
+  css += `button:hover {\n`;
+  css += `  background: #1557b0;\n`;
+  css += `}\n\n`;
+
+  css += `#output {\n`;
+  css += `  margin-top: 15px;\n`;
+  css += `  padding: 10px;\n`;
+  css += `  background: #f5f5f5;\n`;
+  css += `  border-radius: 4px;\n`;
+  css += `  min-height: 20px;\n`;
+  css += `}\n`;
+
+  if (behaviors.theme) {
+    css += `\n/* Theme Support */\n`;
+    css += `[data-theme="dark"] body {\n`;
+    css += `  background: #1a1a1a;\n`;
+    css += `  color: #e0e0e0;\n`;
+    css += `}\n\n`;
+    css += `[data-theme="dark"] #output {\n`;
+    css += `  background: #2a2a2a;\n`;
+    css += `}\n`;
+  }
+
+  return css;
+}
+
+// Helper: Generate Content Script
+function generateContentScript(behaviors) {
+  let code = `// Content Script\n`;
+  code += `console.log('Content script loaded');\n\n`;
+
+  if (behaviors.matchSite) {
+    code += `// Match site styles\n`;
+    code += `const bodyStyles = window.getComputedStyle(document.body);\n`;
+    code += `console.log('Site background:', bodyStyles.backgroundColor);\n`;
+    code += `console.log('Site font:', bodyStyles.fontFamily);\n\n`;
+  }
+
+  code += `// Your content script logic here\n`;
+  code += `document.addEventListener('DOMContentLoaded', () => {\n`;
+  code += `  console.log('Page loaded, extension active');\n`;
+  code += `});\n`;
+
+  return code;
+}
+
+// Helper: Generate Background Script
+function generateBackgroundScript(features, behaviors) {
+  let code = `// Background Service Worker\n\n`;
+
+  code += `chrome.runtime.onInstalled.addListener(() => {\n`;
+  code += `  console.log('Extension installed');\n`;
+
+  if (features.contextMenu) {
+    code += `\n  // Create context menu\n`;
+    code += `  chrome.contextMenus.create({\n`;
+    code += `    id: 'extension-action',\n`;
+    code += `    title: 'Extension Action',\n`;
+    code += `    contexts: ['selection']\n`;
+    code += `  });\n`;
+  }
+
+  code += `});\n\n`;
+
+  if (features.contextMenu) {
+    code += `chrome.contextMenus.onClicked.addListener((info, tab) => {\n`;
+    code += `  if (info.menuItemId === 'extension-action') {\n`;
+    code += `    console.log('Context menu clicked:', info.selectionText);\n`;
+    code += `  }\n`;
+    code += `});\n\n`;
+  }
+
+  if (behaviors.badge) {
+    code += `// Update badge\n`;
+    code += `chrome.action.setBadgeText({ text: '1' });\n`;
+    code += `chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });\n\n`;
+  }
+
+  if (behaviors.autoOpen) {
+    code += `// Auto-open side panel\n`;
+    code += `chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {\n`;
+    code += `  if (changeInfo.status === 'complete') {\n`;
+    code += `    chrome.sidePanel.open({ tabId });\n`;
+    code += `  }\n`;
+    code += `});\n`;
+  }
+
+  return code;
+}
+
+// Feature Injector - Inject features into current project
+function injectFeatures() {
+  if (!currentProject) {
+    showStatus('No project loaded. Create or load a project first.', 'error');
+    return;
+  }
+
+  const selectedFeatures = {
+    // Core Features
+    storage: document.getElementById('inject-storage')?.checked || false,
+    tabs: document.getElementById('inject-tabs')?.checked || false,
+    notifications: document.getElementById('inject-notifications')?.checked || false,
+    contextMenu: document.getElementById('inject-context-menu')?.checked || false,
+    background: document.getElementById('inject-background')?.checked || false,
+    bookmarks: document.getElementById('inject-bookmarks')?.checked || false,
+    history: document.getElementById('inject-history')?.checked || false,
+    downloads: document.getElementById('inject-downloads')?.checked || false,
+    cookies: document.getElementById('inject-cookies')?.checked || false,
+    webRequest: document.getElementById('inject-web-request')?.checked || false,
+    // UI Components
+    sidePanel: document.getElementById('inject-side-panel')?.checked || false,
+    theme: document.getElementById('inject-theme')?.checked || false,
+    keyboard: document.getElementById('inject-keyboard')?.checked || false,
+    badge: document.getElementById('inject-badge')?.checked || false,
+    // Behaviors
+    syncStorage: document.getElementById('inject-sync-storage')?.checked || false,
+    autoOpen: document.getElementById('inject-auto-open')?.checked || false,
+    persistState: document.getElementById('inject-persist-state')?.checked || false,
+    matchSite: document.getElementById('inject-match-site')?.checked || false,
+    autoRun: document.getElementById('inject-auto-run')?.checked || false,
+    analytics: document.getElementById('inject-analytics')?.checked || false,
+    hotReload: document.getElementById('inject-hot-reload')?.checked || false,
+    errorTracking: document.getElementById('inject-error-tracking')?.checked || false,
+    // Host Permissions
+    hostPerms: document.querySelector('input[name="inject-host-perms"]:checked')?.value || 'active-tab',
+    customHosts: document.getElementById('inject-custom-hosts')?.value.trim() || '',
+    // Framework
+    framework: document.getElementById('inject-framework')?.value || 'none',
+    // Identity & Type
+    name: document.getElementById('inject-name')?.value.trim() || '',
+    description: document.getElementById('inject-description')?.value.trim() || '',
+    extType: document.querySelector('input[name="inject-ext-type"]:checked')?.value || 'none'
+  };
+
+  const hasSelection = Object.values(selectedFeatures).some(v => v);
+  if (!hasSelection) {
+    showStatus('Please select at least one feature to inject', 'error');
+    return;
+  }
+
+  try {
+    let manifest = JSON.parse(currentProject.files['manifest.json']);
+    if (!manifest.permissions) manifest.permissions = [];
+
+    // Identity update
+    if (selectedFeatures.name) {
+      manifest.name = selectedFeatures.name;
+      currentProject.name = selectedFeatures.name;
+    }
+    if (selectedFeatures.description) {
+      manifest.description = selectedFeatures.description;
+    }
+
+    // Type switching
+    if (selectedFeatures.extType !== 'none') {
+      if (selectedFeatures.extType === 'content-script') {
+        if (!manifest.content_scripts) {
+          manifest.content_scripts = [{
+            "matches": ["<all_urls>"],
+            "js": ["content.js"]
+          }];
+          if (!currentProject.files['content.js']) {
+            currentProject.files['content.js'] = '// Content Script\nconsole.log("Content script loaded");\n';
+          }
+        }
+      } else if (selectedFeatures.extType === 'popup') {
+        manifest.action = {
+          "default_popup": "popup.html",
+          "default_icon": "icon48.png"
+        };
+      } else if (selectedFeatures.extType === 'side-panel') {
+        manifest.side_panel = { "default_path": "sidepanel.html" };
+        if (!manifest.permissions.includes('sidePanel')) manifest.permissions.push('sidePanel');
+      } else if (selectedFeatures.extType === 'page-action') {
+        manifest.action = {
+          "default_popup": "popup.html"
+        };
+        // In MV3, Page Action is merged into Action, but we can trigger it conditionally in logic
+      }
+    }
+
+    const permissionsToAdd = [];
+    if (selectedFeatures.storage || selectedFeatures.persistState) permissionsToAdd.push('storage');
+    if (selectedFeatures.tabs) permissionsToAdd.push('tabs');
+    if (selectedFeatures.notifications) permissionsToAdd.push('notifications');
+    if (selectedFeatures.contextMenu) permissionsToAdd.push('contextMenus');
+    if (selectedFeatures.bookmarks) permissionsToAdd.push('bookmarks');
+    if (selectedFeatures.history) permissionsToAdd.push('history');
+    if (selectedFeatures.downloads) permissionsToAdd.push('downloads');
+    if (selectedFeatures.cookies) permissionsToAdd.push('cookies');
+    if (selectedFeatures.webRequest) {
+      permissionsToAdd.push('webRequest');
+      permissionsToAdd.push('webRequestBlocking');
+    }
+
+    permissionsToAdd.forEach(perm => {
+      if (!manifest.permissions.includes(perm)) manifest.permissions.push(perm);
+    });
+
+    // Host Permissions
+    if (!manifest.host_permissions) manifest.host_permissions = [];
+    if (selectedFeatures.hostPerms === 'all-urls') {
+      if (!manifest.host_permissions.includes('<all_urls>')) manifest.host_permissions.push('<all_urls>');
+    } else if (selectedFeatures.hostPerms === 'custom' && selectedFeatures.customHosts) {
+      const hosts = selectedFeatures.customHosts.split(',').map(h => h.trim());
+      hosts.forEach(host => {
+        if (!manifest.host_permissions.includes(host)) manifest.host_permissions.push(host);
+      });
+    }
+
+    if (selectedFeatures.background || selectedFeatures.contextMenu || selectedFeatures.badge || selectedFeatures.autoOpen) {
+      if (!manifest.background) manifest.background = { service_worker: 'background.js' };
+    }
+
+    if (selectedFeatures.sidePanel && !manifest.side_panel) {
+      manifest.side_panel = { default_path: 'sidepanel.html' };
+    }
+
+    if (selectedFeatures.keyboard && !manifest.commands) {
+      manifest.commands = {
+        "_execute_action": {
+          "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
+          "description": "Activate extension"
+        }
+      };
+    }
+
+    currentProject.files['manifest.json'] = JSON.stringify(manifest, null, 2);
+
+    // Framework Boilerplate
+    if (selectedFeatures.framework !== 'none') {
+      if (selectedFeatures.framework === 'react') {
+        currentProject.files['popup.html'] = `<!DOCTYPE html>\n<html>\n<head>\n  <title>React Popup</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <div id="root"></div>\n  <script src="popup.js"></script>\n</body>\n</html>`;
+        currentProject.files['popup.js'] = `// React Popup\nimport React from 'react';\nimport ReactDOM from 'react-dom/client';\n\nconst App = () => (\n  <div className="container">\n    <h1>React Extension</h1>\n    <p>Build your React extension here.</p>\n  </div>\n);\n\nconst root = ReactDOM.createRoot(document.getElementById('root'));\nroot.render(<App />);`;
+      } else if (selectedFeatures.framework === 'vue') {
+        currentProject.files['popup.html'] = `<!DOCTYPE html>\n<html>\n<head>\n  <title>Vue Popup</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <div id="app">{{ message }}</div>\n  <script src="popup.js"></script>\n</body>\n</html>`;
+        currentProject.files['popup.js'] = `// Vue Popup\nimport { createApp } from 'vue';\n\nconst app = createApp({\n  data() {\n    return {\n      message: 'Hello from Vue!'\n    }\n  }\n});\n\napp.mount('#app');`;
+      } else if (selectedFeatures.framework === 'svelte') {
+        currentProject.files['popup.html'] = `<!DOCTYPE html>\n<html>\n<head>\n  <title>Svelte Popup</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <script src="popup.js"></script>\n</body>\n</html>`;
+        currentProject.files['popup.js'] = `// Svelte Popup\nimport App from './App.svelte';\n\nconst app = new App({\n  target: document.body,\n  props: {\n    name: 'Svelte'\n  }\n});\n\nexport default app;`;
+        currentProject.files['App.svelte'] = `<script>\n  export let name;\n</script>\n\n<main>\n  <h1>Hello {name}!</h1>\n  <p>Svelte extension components.</p>\n</main>\n\n<style>\n  main {\n    text-align: center;\n    padding: 1em;\n  }\n</style>`;
+      } else if (selectedFeatures.framework === 'vanilla') {
+        // Basic vanilla structure if it doesn't already exist or if they want to reset
+        currentProject.files['popup.html'] = `<!DOCTYPE html>\n<html>\n<head>\n  <title>Extension Popup</title>\n  <link rel="stylesheet" href="styles.css">\n</head>\n<body>\n  <h1>Extension</h1>\n  <script src="popup.js"></script>\n</body>\n</html>`;
+      }
+    }
+
+    let popupJs = currentProject.files['popup.js'] || '// Extension Logic\n\n';
+
+    if ((selectedFeatures.storage || selectedFeatures.persistState) && !popupJs.includes('chrome.storage')) {
+      const storageType = selectedFeatures.syncStorage ? 'sync' : 'local';
+      popupJs += `\n// Storage (${storageType})\nasync function saveData(key, value) {\n  await chrome.storage.${storageType}.set({ [key]: value });\n}\n\nasync function loadData(key) {\n  const result = await chrome.storage.${storageType}.get([key]);\n  return result[key];\n}\n`;
+    }
+
+    if (selectedFeatures.tabs && !popupJs.includes('chrome.tabs')) {
+      popupJs += `\n// Tabs\nasync function getCurrentTab() {\n  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });\n  return tab;\n}\n\nasync function getAllTabs() {\n  const tabs = await chrome.tabs.query({});\n  return tabs;\n}\n`;
+    }
+
+    if (selectedFeatures.history && !popupJs.includes('chrome.history')) {
+      popupJs += `\n// History\nasync function searchHistory(query, maxResults = 100) {\n  const results = await chrome.history.search({ text: query, maxResults });\n  return results;\n}\n\nasync function getVisits(url) {\n  const visits = await chrome.history.getVisits({ url });\n  return visits;\n}\n`;
+    }
+
+    if (selectedFeatures.bookmarks && !popupJs.includes('chrome.bookmarks')) {
+      popupJs += `\n// Bookmarks\nasync function getAllBookmarks() {\n  const tree = await chrome.bookmarks.getTree();\n  return tree;\n}\n\nasync function createBookmark(title, url) {\n  await chrome.bookmarks.create({ title, url });\n}\n`;
+    }
+
+    if (selectedFeatures.downloads && !popupJs.includes('chrome.downloads')) {
+      popupJs += `\n// Downloads\nfunction downloadFile(url, filename) {\n  chrome.downloads.download({ url, filename });\n}\n`;
+    }
+
+    if (selectedFeatures.notifications && !popupJs.includes('chrome.notifications')) {
+      popupJs += `\n// Notifications\nfunction showNotification(title, message) {\n  chrome.notifications.create({ type: 'basic', iconUrl: 'icon48.png', title, message });\n}\n`;
+    }
+
+    if (selectedFeatures.theme && !popupJs.includes('toggleTheme')) {
+      popupJs += `\n// Theme\nfunction toggleTheme() {\n  const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';\n  document.documentElement.setAttribute('data-theme', theme);\n  localStorage.setItem('theme', theme);\n}\n\n// Load saved theme\nconst savedTheme = localStorage.getItem('theme') || 'light';\ndocument.documentElement.setAttribute('data-theme', savedTheme);\n`;
+    }
+
+    if (selectedFeatures.matchSite && !popupJs.includes('matchSiteStyles')) {
+      popupJs += `\n// Match site styles\nfunction matchSiteStyles() {\n  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {\n    chrome.scripting.executeScript({\n      target: { tabId: tab.id },\n      func: () => {\n        const styles = window.getComputedStyle(document.body);\n        return {\n          bg: styles.backgroundColor,\n          color: styles.color,\n          font: styles.fontFamily\n        };\n      }\n    }, (results) => {\n      if (results && results[0]) {\n        const { bg, color, font } = results[0].result;\n        document.body.style.backgroundColor = bg;\n        document.body.style.color = color;\n        document.body.style.fontFamily = font;\n      }\n    });\n  });\n}\n`;
+    }
+
+    if (selectedFeatures.analytics && !popupJs.includes('trackEvent')) {
+      popupJs += `\n// Analytics\nfunction trackEvent(category, action, label) {\n  console.log('Analytics:', { category, action, label, timestamp: Date.now() });\n  // Add your analytics service here\n}\n`;
+    }
+
+    if (selectedFeatures.errorTracking && !popupJs.includes('error tracking')) {
+      popupJs += `\n// Error tracking\nwindow.addEventListener('error', (e) => console.error('Error:', e.message));\nwindow.addEventListener('unhandledrejection', (e) => console.error('Promise rejection:', e.reason));\n`;
+    }
+
+    currentProject.files['popup.js'] = popupJs;
+
+    if (selectedFeatures.background || selectedFeatures.contextMenu || selectedFeatures.badge || selectedFeatures.autoOpen || selectedFeatures.webRequest || selectedFeatures.hotReload) {
+      let backgroundJs = currentProject.files['background.js'] || '// Background\n\n';
+
+      if (selectedFeatures.contextMenu && !backgroundJs.includes('contextMenus')) {
+        backgroundJs += `\nchrome.runtime.onInstalled.addListener(() => {\n  chrome.contextMenus.create({ id: 'action', title: 'Extension Action', contexts: ['selection', 'page'] });\n});\n\nchrome.contextMenus.onClicked.addListener((info, tab) => {\n  console.log('Menu clicked:', info);\n});\n`;
+      }
+
+      if (selectedFeatures.badge && !backgroundJs.includes('setBadgeText')) {
+        backgroundJs += `\nfunction updateBadge(count) {\n  chrome.action.setBadgeText({ text: count > 0 ? String(count) : '' });\n  chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });\n}\n`;
+      }
+
+      if (selectedFeatures.autoOpen && !backgroundJs.includes('auto-open')) {
+        backgroundJs += `\n// Auto-open side panel\nchrome.tabs.onUpdated.addListener((tabId, changeInfo) => {\n  if (changeInfo.status === 'complete') {\n    chrome.sidePanel.open({ tabId });\n  }\n});\n`;
+      }
+
+      if (selectedFeatures.webRequest && !backgroundJs.includes('webRequest')) {
+        backgroundJs += `\n// Web request interception\nchrome.webRequest.onBeforeRequest.addListener(\n  (details) => {\n    console.log('Request:', details.url);\n    return {};\n  },\n  { urls: ['<all_urls>'] },\n  ['blocking']\n);\n`;
+      }
+
+      if (selectedFeatures.hotReload && !backgroundJs.includes('hot reload')) {
+        backgroundJs += `\n// Hot reload for development\nconst filesInDirectory = dir => new Promise(resolve => {\n  dir.createReader().readEntries(entries => {\n    Promise.all(entries.filter(e => e.name[0] !== '.').map(e =>\n      e.isDirectory ? filesInDirectory(e) : new Promise(resolve => e.file(resolve))\n    )).then(files => [].concat(...files)).then(resolve);\n  });\n});\n\nconst timestampForFilesInDirectory = dir =>\n  filesInDirectory(dir).then(files =>\n    files.map(f => f.name + f.lastModifiedDate).join());\n\nconst reload = () => {\n  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {\n    if (tabs[0]) chrome.tabs.reload(tabs[0].id);\n    chrome.runtime.reload();\n  });\n};\n\nconst watchChanges = (dir, lastTimestamp) => {\n  timestampForFilesInDirectory(dir).then(timestamp => {\n    if (!lastTimestamp || (lastTimestamp === timestamp)) {\n      setTimeout(() => watchChanges(dir, timestamp), 1000);\n    } else {\n      reload();\n    }\n  });\n};\n\nchrome.management.getSelf(self => {\n  if (self.installType === 'development') {\n    chrome.runtime.getPackageDirectoryEntry(dir => watchChanges(dir));\n  }\n});\n`;
+      }
+
+      currentProject.files['background.js'] = backgroundJs;
+    }
+
+    if (selectedFeatures.sidePanel && !currentProject.files['sidepanel.html']) {
+      currentProject.files['sidepanel.html'] = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Side Panel</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <h1>Side Panel</h1>
+  <p>Your side panel content here</p>
+  <script src="sidepanel.js"></script>
+</body>
+</html>`;
+
+      currentProject.files['sidepanel.js'] = `// Side panel logic\nconsole.log('Side panel loaded');\n`;
+    }
+
+    if (selectedFeatures.theme) {
+      let css = currentProject.files['styles.css'] || '';
+      if (!css.includes('[data-theme="dark"]')) {
+        css += `\n[data-theme="dark"] body { background: #1a1a1a; color: #e0e0e0; }\n[data-theme="dark"] button { background: #6366f1; }\n`;
+        currentProject.files['styles.css'] = css;
+      }
+    }
+
+    updateFileTree();
+    if (currentFile) loadFileIntoEditor(currentFile);
+    currentProject.modified = Date.now();
+
+    const injected = Object.entries(selectedFeatures).filter(([_, v]) => v).map(([k, _]) => k).join(', ');
+    showStatus(`Features injected: ${injected}`, 'success');
+
+    Object.keys(selectedFeatures).forEach(f => {
+      const id = `inject-${f.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+      const el = document.getElementById(id);
+      if (el) {
+        if (el.type === 'checkbox') el.checked = false;
+        else if (el.type === 'text' || el.tagName === 'SELECT') el.value = '';
+      }
+    });
+    // Clear radios
+    document.querySelectorAll('input[name="inject-host-perms"][value="active-tab"]').forEach(r => r.checked = true);
+    document.querySelectorAll('input[name="inject-ext-type"][value="none"]').forEach(r => r.checked = true);
+    document.getElementById('inject-framework').value = 'none';
+    document.getElementById('inject-custom-hosts').style.display = 'none';
+
+    // Auto-shrink/collapse the injector for better UI flow
+    const injectorContent = document.getElementById('feature-injector-content');
+    const injectorHeader = document.getElementById('feature-injector-toggle');
+    if (injectorContent) injectorContent.style.display = 'none';
+    if (injectorHeader) injectorHeader.classList.remove('active');
+  } catch (error) {
+    showStatus('Error: ' + error.message, 'error');
+  }
+}
+
 // Save current project
 function saveCurrentProject() {
   if (!currentProject) {
@@ -1188,7 +2835,7 @@ async function runAnalysis(type) {
 
   // New psychological analyses use message-based communication with content.js
   const messageBasedAnalyses = ['psyche', 'archetype', 'soul', 'shadow', 'rhetoric', 'emotion'];
-  
+
   if (messageBasedAnalyses.includes(type)) {
     const actionMap = {
       'psyche': 'analyzePsyche',
@@ -1198,7 +2845,7 @@ async function runAnalysis(type) {
       'rhetoric': 'analyzeRhetoric',
       'emotion': 'analyzeEmotion'
     };
-    
+
     try {
       // First, ensure content script is injected
       try {
@@ -1209,10 +2856,10 @@ async function runAnalysis(type) {
       } catch (e) {
         // Content script may already be injected, continue
       }
-      
+
       // Small delay to ensure content script is ready
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       const response = await chrome.tabs.sendMessage(tab.id, { action: actionMap[type] });
       if (response) {
         showStatus(`${type} scan complete`, 'success');
@@ -1600,7 +3247,7 @@ function displayAnalysisResults(type, data) {
   const createDeepDive = (id, statsHtml, detailHtml, options = {}) => {
     const hasSearch = options.search !== false;
     const hasExport = options.export !== false;
-    
+
     return `
     <div class="analysis-item">
       <div class="analysis-header">
@@ -1640,8 +3287,8 @@ function displayAnalysisResults(type, data) {
       <div class="chart-container">
         <div class="bar-chart">
           ${data.topTags.slice(0, 10).map(([tag, count]) => {
-            const pct = (count / data.totalElements * 100).toFixed(1);
-            return `
+      const pct = (count / data.totalElements * 100).toFixed(1);
+      return `
               <div class="bar-chart-item">
                 <div class="bar-chart-label">&lt;${tag}&gt;</div>
                 <div class="bar-chart-bar">
@@ -1649,7 +3296,7 @@ function displayAnalysisResults(type, data) {
                 </div>
               </div>
             `;
-          }).join('')}
+    }).join('')}
         </div>
       </div>
       <div class="data-table-wrapper">
@@ -1673,7 +3320,7 @@ function displayAnalysisResults(type, data) {
         </table>
       </div>
     `;
-    
+
     html = createDeepDive('struct',
       `<strong>${data.totalElements}</strong> Nodes · <strong>${data.maxDepth}</strong> Depth · <strong>${data.topTags.length}</strong> Types`,
       detailHtml,
@@ -1717,7 +3364,7 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
-    
+
     html = createDeepDive('palette-dive',
       `<strong>${data.text.length}</strong> Text · <strong>${data.backgrounds.length}</strong> Background · <strong>${data.text.length + data.backgrounds.length}</strong> Total`,
       detailHtml,
@@ -1769,7 +3416,7 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
-    
+
     html = createDeepDive('assets-overview',
       `<strong>${data.imageCount + data.svgs}</strong> Images · <strong>${data.cssCount}</strong> CSS · <strong>${data.jsCount || 0}</strong> JS`,
       detailHtml,
@@ -1842,7 +3489,7 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
-    
+
     html = createDeepDive('storage-dive',
       `<span>LS: <strong>${data.lsSize} KB</strong></span> · <span>Cookies: <strong>${data.cookies}</strong></span> · <span>Items: <strong>${data.lsItems.length + data.ssItems.length}</strong></span>`,
       detailHtml,
@@ -1854,7 +3501,7 @@ function displayAnalysisResults(type, data) {
       if (ms < 3000) return 'severity-med';
       return 'severity-high';
     };
-    
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
@@ -1916,7 +3563,7 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
-    
+
     html = createDeepDive('perf-metrics',
       `<span>Load: <span class="${getLoadTimeColor(data.loadTime)}">${data.loadTime}ms</span></span> · <span>DOM: <strong>${data.domReady}ms</strong></span> · <span>Resources: <strong>${data.resources.js + data.resources.img + data.resources.xhr}</strong></span>`,
       detailHtml,
@@ -1930,7 +3577,7 @@ function displayAnalysisResults(type, data) {
       if (score >= 50) return 'severity-med';
       return 'severity-high';
     };
-    
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
@@ -2002,7 +3649,7 @@ function displayAnalysisResults(type, data) {
         </div>
       `}
     `;
-    
+
     html = createDeepDive('a11y-audit',
       `<span>Score: <span class="${getScoreColor(score)}">${score}/100</span></span> · <span>Issues: <span class="${totalFlaws > 0 ? 'severity-high' : 'severity-low'}">${totalFlaws}</span></span>`,
       detailHtml,
@@ -2077,7 +3724,7 @@ function displayAnalysisResults(type, data) {
   } else if (type === 'psyche') {
     const totalPatterns = data.darkPatterns.length + data.persuasionTechniques.length;
     const loadScore = Math.max(0, 100 - Math.floor(data.cognitiveLoad / 10));
-    
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
@@ -2157,7 +3804,7 @@ function displayAnalysisResults(type, data) {
         </div>
       ` : ''}
     `;
-    
+
     html = createDeepDive('psyche-analysis',
       `<span>Patterns: <strong class="severity-${totalPatterns > 10 ? 'high' : totalPatterns > 5 ? 'med' : 'low'}">${totalPatterns}</strong></span> · <span>Load: <strong>${data.cognitiveLoad}</strong></span> · <span>Dark: <strong class="severity-${data.darkPatterns.length > 5 ? 'high' : data.darkPatterns.length > 2 ? 'med' : 'low'}">${data.darkPatterns.length}</strong></span>`,
       detailHtml,
@@ -2201,12 +3848,12 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="bar-chart">
           ${Object.entries(data.allScores)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 8)
-            .map(([archetype, score]) => {
-              const maxScore = Math.max(...Object.values(data.allScores));
-              const pct = (score / maxScore * 100).toFixed(1);
-              return `
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 8)
+        .map(([archetype, score]) => {
+          const maxScore = Math.max(...Object.values(data.allScores));
+          const pct = (score / maxScore * 100).toFixed(1);
+          return `
                 <div class="bar-chart-item">
                   <div class="bar-chart-label">${archetype.charAt(0).toUpperCase() + archetype.slice(1)}</div>
                   <div class="bar-chart-bar">
@@ -2214,7 +3861,7 @@ function displayAnalysisResults(type, data) {
                   </div>
                 </div>
               `;
-            }).join('')}
+        }).join('')}
         </div>
       </div>
       <div class="dive-section">
@@ -2241,7 +3888,7 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
-    
+
     html = createDeepDive('archetype-analysis',
       `<span>Primary: <strong>${data.primary ? data.primary.type.toUpperCase() : 'N/A'}</strong></span> · <span>Score: <strong>${data.primary ? data.primary.score : 0}</strong></span>`,
       detailHtml,
@@ -2250,7 +3897,7 @@ function displayAnalysisResults(type, data) {
   } else if (type === 'soul') {
     const authenticityScore = Math.max(0, Math.min(100, data.authenticity));
     const humanScore = Math.round((data.humanCentered / Math.max(data.corporateness, 1)) * 100);
-    
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
@@ -2300,7 +3947,7 @@ function displayAnalysisResults(type, data) {
         </div>
       </div>
     `;
-    
+
     html = createDeepDive('soul-analysis',
       `<span>Authenticity: <strong class="severity-${authenticityScore > 70 ? 'low' : authenticityScore > 40 ? 'med' : 'high'}">${authenticityScore}</strong></span> · <span>Intent: <strong>${data.intention}</strong></span> · <span>Trust: <strong>${data.trustSignals}</strong></span>`,
       detailHtml,
@@ -2308,7 +3955,7 @@ function displayAnalysisResults(type, data) {
     );
   } else if (type === 'shadow') {
     const shadowScore = data.deceptivePatterns.length + data.manipulativeDesign.length + (data.hiddenCosts ? 5 : 0);
-    
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
@@ -2370,14 +4017,14 @@ function displayAnalysisResults(type, data) {
         <div class="dive-section-header">
           <h5>Data Collection</h5>
         </div>
-        ${data.dataCollection.length > 0 ? 
-          data.dataCollection.map(type => `
+        ${data.dataCollection.length > 0 ?
+        data.dataCollection.map(type => `
             <div class="metric-badge">
               ${type}
             </div>
-          `).join('') : 
-          '<div style="color: var(--text-dim); text-align: center; padding: 20px;">No explicit data collection detected</div>'
-        }
+          `).join('') :
+        '<div style="color: var(--text-dim); text-align: center; padding: 20px;">No explicit data collection detected</div>'
+      }
       </div>
       ${data.hiddenCosts ? `
         <div style="padding: 16px; background: rgba(239, 68, 68, 0.1); border-radius: 12px; border: 1px solid rgba(239, 68, 68, 0.3); margin-top: 16px;">
@@ -2386,7 +4033,7 @@ function displayAnalysisResults(type, data) {
         </div>
       ` : ''}
     `;
-    
+
     html = createDeepDive('shadow-analysis',
       `<span>Shadow: <strong class="severity-${shadowScore > 10 ? 'high' : shadowScore > 5 ? 'med' : 'low'}">${shadowScore}</strong></span> · <span>Trackers: <strong>${data.invisibleTrackers}</strong></span> · <span>Deceptive: <strong>${data.deceptivePatterns.length}</strong></span>`,
       detailHtml,
@@ -2450,7 +4097,7 @@ function displayAnalysisResults(type, data) {
         </div>
       ` : ''}
     `;
-    
+
     html = createDeepDive('rhetoric-analysis',
       `<span>Tone: <strong>${data.tone}</strong></span> · <span>Reading: <strong>${data.readingLevel}</strong></span> · <span>Commands: <strong>${data.imperatives}</strong></span>`,
       detailHtml,
@@ -2518,7 +4165,7 @@ function displayAnalysisResults(type, data) {
         </div>
       ` : ''}
     `;
-    
+
     html = createDeepDive('emotion-analysis',
       `<span>Mood: <strong>${data.typographyMood}</strong></span> · <span>Intent: <strong>${data.emotionalIntent}</strong></span> · <span>Space: <strong>${data.spacingAnalysis.feeling}</strong></span>`,
       detailHtml,
@@ -2534,7 +4181,7 @@ function displayAnalysisResults(type, data) {
       const searchTerm = e.target.value.toLowerCase();
       const diveId = e.target.dataset.search;
       const diveContent = document.querySelector(`[data-content="${diveId}"]`);
-      
+
       if (diveContent) {
         const items = diveContent.querySelectorAll('tr, .data-row, .bar-chart-item');
         items.forEach(item => {
@@ -2599,17 +4246,17 @@ function displayAnalysisResults(type, data) {
       const tbody = table.querySelector('tbody');
       const rows = Array.from(tbody.querySelectorAll('tr'));
       const isNumeric = rows[0]?.cells[index]?.textContent.match(/^\\d+/);
-      
+
       rows.sort((a, b) => {
         const aVal = a.cells[index]?.textContent || '';
         const bVal = b.cells[index]?.textContent || '';
-        
+
         if (isNumeric) {
           return parseFloat(bVal) - parseFloat(aVal);
         }
         return aVal.localeCompare(bVal);
       });
-      
+
       rows.forEach(row => tbody.appendChild(row));
       showStatus('Table sorted', 'info');
     });
@@ -2950,7 +4597,7 @@ function generateExtensionFromWizard() {
 
   // Generate manifest
   const manifest = generateManifest(name, description, extType, features, hostPerms, customHosts, behaviors);
-  
+
   // Generate files based on extension type, features, and behaviors
   const files = generateExtensionFiles(extType, features, framework, behaviors);
 
@@ -2971,7 +4618,7 @@ function generateExtensionFromWizard() {
     chrome.storage.local.set({ projects }, () => {
       showStatus('Extension generated successfully!', 'success');
       loadProjects();
-      
+
       // Switch to Builder tab and load the project
       document.querySelector('[data-tab="builder"]').click();
       loadProjectIntoBuilder(project);
@@ -3131,7 +4778,7 @@ function generateExtensionFiles(extType, features, framework, behaviors) {
 function generateHTML(type, framework, behaviors) {
   const title = type === 'popup' ? 'Extension Popup' : 'Extension Panel';
   const themeAttr = behaviors.theme ? ' data-theme="light"' : '';
-  
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -3155,7 +4802,7 @@ function generateHTML(type, framework, behaviors) {
 
 function generateJS(type, features, framework, behaviors) {
   let code = `// ${type.charAt(0).toUpperCase() + type.slice(1)} Script\n\n`;
-  
+
   if (behaviors.persistState) {
     code += `// State Management\n`;
     code += `let state = {};\n\n`;
@@ -3205,9 +4852,9 @@ function generateJS(type, features, framework, behaviors) {
     code += `  }\n`;
     code += `}\n\n`;
   }
-  
+
   code += `document.addEventListener('DOMContentLoaded', async () => {\n`;
-  
+
   if (behaviors.persistState) {
     code += `  await loadState();\n\n`;
   }
@@ -3228,24 +4875,24 @@ function generateJS(type, features, framework, behaviors) {
     code += `    localStorage.setItem('theme', newTheme);\n`;
     code += `  });\n\n`;
   }
-  
+
   code += `  const btn = document.getElementById('action-btn');\n`;
   code += `  \n`;
   code += `  btn.addEventListener('click', async () => {\n`;
   code += `    console.log('Button clicked!');\n`;
-  
+
   if (features.storage) {
     code += `    \n    // Example: Save to storage\n`;
     code += `    await chrome.storage.local.set({ lastClick: new Date().toISOString() });\n`;
     code += `    console.log('Saved to storage');\n`;
   }
-  
+
   if (features.tabs) {
     code += `    \n    // Example: Get active tab\n`;
     code += `    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });\n`;
     code += `    console.log('Active tab:', tab.url);\n`;
   }
-  
+
   if (features.notifications) {
     code += `    \n    // Example: Show notification\n`;
     code += `    chrome.notifications.create({\n`;
@@ -3260,17 +4907,17 @@ function generateJS(type, features, framework, behaviors) {
     code += `    \n    // Track usage\n`;
     code += `    chrome.runtime.sendMessage({ action: 'track', event: 'button_click' });\n`;
   }
-  
+
   if (behaviors.persistState) {
     code += `    \n    // Update and save state\n`;
     code += `    state.clicks = (state.clicks || 0) + 1;\n`;
     code += `    await saveState();\n`;
     code += `    });\n`;
   }
-  
+
   code += `  });\n`;
   code += `});\n`;
-  
+
   if (behaviors.keyboard) {
     code += `\n// Keyboard Shortcuts\n`;
     code += `chrome.commands.onCommand.addListener((command) => {\n`;
@@ -3289,7 +4936,7 @@ function generateJS(type, features, framework, behaviors) {
     code += `  });\n`;
     code += `}\n`;
   }
-  
+
   return code;
 }
 
@@ -3415,7 +5062,7 @@ p {
 function generateContentScript(features, behaviors) {
   let code = `// Content Script - Runs on web pages\n\n`;
   code += `console.log('Extension content script loaded!');\n\n`;
-  
+
   if (behaviors.matchSite) {
     code += `// Extract parent site styles for extension to match\n`;
     code += `function extractParentSiteStyles() {\n`;
@@ -3440,53 +5087,53 @@ function generateContentScript(features, behaviors) {
     code += `  };\n`;
     code += `}\n\n`;
   }
-  
+
   if (behaviors.autoRun) {
     code += `// Auto-run enhancement\n`;
     code += `let hasRun = false;\n\n`;
   }
-  
+
   code += `// Example: Modify page content\n`;
   code += `function enhancePage() {\n`;
-  
+
   if (behaviors.autoRun) {
     code += `  if (hasRun) return;\n`;
     code += `  hasRun = true;\n\n`;
   }
-  
+
   code += `  // Add your page modifications here\n`;
   code += `  console.log('Enhancing page:', window.location.href);\n`;
-  
+
   if (behaviors.analytics) {
     code += `  \n  // Track page enhancement\n`;
     code += `  chrome.runtime.sendMessage({ action: 'track', event: 'page_enhanced', url: window.location.href });\n`;
   }
-  
+
   code += `}\n\n`;
-  
+
   if (behaviors.autoRun) {
     code += `// Auto-run on page load\n`;
   } else {
     code += `// Run when page is ready\n`;
   }
-  
+
   code += `if (document.readyState === 'loading') {\n`;
   code += `  document.addEventListener('DOMContentLoaded', enhancePage);\n`;
   code += `} else {\n`;
   code += `  enhancePage();\n`;
   code += `}\n\n`;
-  
+
   if (features.storage) {
     code += `// Example: Listen for storage changes\n`;
     code += `chrome.storage.onChanged.addListener((changes, area) => {\n`;
     code += `  console.log('Storage changed:', changes);\n`;
     code += `});\n\n`;
   }
-  
+
   code += `// Listen for messages from extension\n`;
   code += `chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n`;
   code += `  console.log('Message received:', request);\n`;
-  
+
   if (behaviors.matchSite) {
     code += `  \n  // Handle style extraction request\n`;
     code += `  if (request.action === 'extractStyles') {\n`;
@@ -3495,11 +5142,11 @@ function generateContentScript(features, behaviors) {
     code += `    return true;\n`;
     code += `  }\n`;
   }
-  
+
   code += `  \n  sendResponse({ status: 'ok' });\n`;
   code += `  return true;\n`;
   code += `});\n`;
-  
+
   if (behaviors.errorTracking) {
     code += `\n// Error tracking\n`;
     code += `window.addEventListener('error', (event) => {\n`;
@@ -3510,14 +5157,14 @@ function generateContentScript(features, behaviors) {
     code += `  });\n`;
     code += `});\n`;
   }
-  
+
   return code;
 }
 
 function generateBackgroundScript(features, behaviors) {
   let code = `// Background Service Worker\n\n`;
   code += `console.log('Background service worker loaded!');\n\n`;
-  
+
   if (behaviors.autoOpen) {
     code += `// Auto-open side panel on install\n`;
     code += `chrome.runtime.onInstalled.addListener(async () => {\n`;
@@ -3532,7 +5179,7 @@ function generateBackgroundScript(features, behaviors) {
     code += `  }\n`;
     code += `});\n\n`;
   }
-  
+
   if (behaviors.badge) {
     code += `// Badge notification system\n`;
     code += `let badgeCount = 0;\n\n`;
@@ -3564,7 +5211,7 @@ function generateBackgroundScript(features, behaviors) {
     code += `  // Send to error reporting service\n`;
     code += `}\n\n`;
   }
-  
+
   if (features.contextMenu) {
     code += `// Create context menu\n`;
     code += `chrome.runtime.onInstalled.addListener(() => {\n`;
@@ -3576,14 +5223,14 @@ function generateBackgroundScript(features, behaviors) {
     code += `});\n\n`;
     code += `chrome.contextMenus.onClicked.addListener((info, tab) => {\n`;
     code += `  console.log('Context menu clicked:', info);\n`;
-    
+
     if (behaviors.analytics) {
       code += `  analytics.track('context_menu_click', { selection: info.selectionText });\n`;
     }
-    
+
     code += `});\n\n`;
   }
-  
+
   if (features.webRequest) {
     code += `// Network request interception\n`;
     code += `chrome.webRequest.onBeforeRequest.addListener(\n`;
@@ -3595,11 +5242,11 @@ function generateBackgroundScript(features, behaviors) {
     code += `  ['blocking']\n`;
     code += `);\n\n`;
   }
-  
+
   code += `// Listen for messages\n`;
   code += `chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n`;
   code += `  console.log('Message received:', request);\n`;
-  
+
   if (behaviors.analytics) {
     code += `  \n  // Track incoming messages\n`;
     code += `  if (request.action === 'track') {\n`;
@@ -3620,7 +5267,7 @@ function generateBackgroundScript(features, behaviors) {
     code += `    updateBadge(request.count);\n`;
     code += `  }\n`;
   }
-  
+
   code += `  \n  sendResponse({ status: 'ok' });\n`;
   code += `  return true;\n`;
   code += `});\n`;
@@ -3633,7 +5280,7 @@ function generateBackgroundScript(features, behaviors) {
     code += `  console.log('Hot reload enabled for development');\n`;
     code += `});\n`;
   }
-  
+
   return code;
 }
 

@@ -85,19 +85,60 @@
             <h3>Utility</h3>
             <p>Popup Tool</p>
           </div>
+          <div class="template-card" data-template="tab-manager">
+            <div class="template-icon">📑</div>
+            <h3>Tab Manager</h3>
+            <p>Organize Tabs</p>
+          </div>
+          <div class="template-card" data-template="bookmark-organizer">
+            <div class="template-icon">🔖</div>
+            <h3>Bookmarks</h3>
+            <p>Search & Save</p>
+          </div>
+          <div class="template-card" data-template="form-filler">
+            <div class="template-icon">📝</div>
+            <h3>Form Filler</h3>
+            <p>Auto-Fill Forms</p>
+          </div>
+          <div class="template-card" data-template="dark-mode">
+            <div class="template-icon">🌙</div>
+            <h3>Dark Mode</h3>
+            <p>Universal Theme</p>
+          </div>
+          <div class="template-card" data-template="ad-blocker">
+            <div class="template-icon">🛡️</div>
+            <h3>Ad Blocker</h3>
+            <p>Block Ads</p>
+          </div>
+          <div class="template-card" data-template="screenshot-tool">
+            <div class="template-icon">📸</div>
+            <h3>Screenshot</h3>
+            <p>Capture Pages</p>
+          </div>
+          <div class="template-card" data-template="password-generator">
+            <div class="template-icon">🔐</div>
+            <h3>Password Gen</h3>
+            <p>Secure Passwords</p>
+          </div>
+          <div class="template-card" data-template="note-taker">
+            <div class="template-icon">📝</div>
+            <h3>Quick Notes</h3>
+            <p>Take Notes</p>
+          </div>
         </div>
 
         <div style="height: 32px;"></div>
 
         <h2>Extension Wizard</h2>
-        
+
         <!-- Extension Wizard -->
         <div class="wizard-container">
           <div class="wizard-header">
             <div class="wizard-icon">✨</div>
             <div>
               <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Scaffold Chrome Extension</h3>
-              <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-secondary);">Configure features and generate your extension structure</p>
+              <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-secondary);">Configure features and
+                generate your extension structure</p>
             </div>
           </div>
 
@@ -108,7 +149,8 @@
 
           <div class="wizard-section">
             <label class="wizard-label">Description</label>
-            <input type="text" id="wizard-description" class="wizard-input" placeholder="Enhance your browsing experience">
+            <input type="text" id="wizard-description" class="wizard-input"
+              placeholder="Enhance your browsing experience">
           </div>
 
           <div class="wizard-section">
@@ -195,7 +237,8 @@
                 <span>Custom Domains</span>
               </label>
             </div>
-            <input type="text" id="wizard-custom-hosts" class="wizard-input" placeholder="https://example.com/*" style="display: none; margin-top: 12px;">
+            <input type="text" id="wizard-custom-hosts" class="wizard-input" placeholder="https://example.com/*"
+              style="display: none; margin-top: 12px;">
           </div>
 
           <div class="wizard-section">
@@ -283,15 +326,185 @@
             <button id="generate-btn" class="btn btn-primary btn-small">✨ AI Generate</button>
           </div>
 
+          <!-- Feature Injector -->
+          <div class="feature-injector-section">
+            <div class="feature-injector-header" id="feature-injector-toggle">
+              <h3>🔧 Feature Injector</h3>
+              <span class="toggle-icon">▼</span>
+            </div>
+            <div class="feature-injector-content" id="feature-injector-content" style="display: none;">
+              <p class="feature-injector-description">Modify and enhance your project dynamically</p>
+
+              <h4 class="injector-category">Identity & Type</h4>
+              <div style="margin-bottom: 12px;">
+                <input type="text" id="inject-name" class="wizard-input" placeholder="Update Extension Name"
+                  style="font-size: 12px; padding: 6px; margin-bottom: 6px; width: 100%;">
+                <input type="text" id="inject-description" class="wizard-input" placeholder="Update Description"
+                  style="font-size: 12px; padding: 6px; width: 100%;">
+              </div>
+              <div class="wizard-radio-group"
+                style="padding: 8px 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 8px;">
+                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
+                  <input type="radio" name="inject-ext-type" value="none" checked>
+                  <span>No Change (Keep Current)</span>
+                </label>
+                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
+                  <input type="radio" name="inject-ext-type" value="content-script">
+                  <span>Content Script</span>
+                </label>
+                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
+                  <input type="radio" name="inject-ext-type" value="popup">
+                  <span>Popup</span>
+                </label>
+                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
+                  <input type="radio" name="inject-ext-type" value="side-panel">
+                  <span>Side Panel</span>
+                </label>
+                <label class="wizard-radio" style="font-size: 11px;">
+                  <input type="radio" name="inject-ext-type" value="page-action">
+                  <span>Page Action</span>
+                </label>
+              </div>
+
+              <h4 class="injector-category">Core Features</h4>
+              <div class="feature-injector-grid">
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-storage">
+                  <span>💾 Storage</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-tabs">
+                  <span>📑 Tabs</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-notifications">
+                  <span>🔔 Notifications</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-context-menu">
+                  <span>📋 Context Menu</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-background">
+                  <span>⚙️ Background</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-bookmarks">
+                  <span>🔖 Bookmarks</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-history">
+                  <span>📜 History</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-downloads">
+                  <span>⬇️ Downloads</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-cookies">
+                  <span>🍪 Cookies</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-web-request">
+                  <span>🌐 Web Request</span>
+                </label>
+              </div>
+
+              <h4 class="injector-category">UI Components</h4>
+              <div class="feature-injector-grid">
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-side-panel">
+                  <span>📱 Side Panel</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-theme">
+                  <span>🌓 Theme Toggle</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-keyboard">
+                  <span>⌨️ Keyboard</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-badge">
+                  <span>🔴 Badge</span>
+                </label>
+              </div>
+
+              <h4 class="injector-category">Host Permissions</h4>
+              <div class="wizard-radio-group"
+                style="padding: 8px 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 8px;">
+                <label class="wizard-radio" style="font-size: 12px; margin-bottom: 4px;">
+                  <input type="radio" name="inject-host-perms" value="active-tab" checked>
+                  <span>Active Tab Only</span>
+                </label>
+                <label class="wizard-radio" style="font-size: 12px; margin-bottom: 4px;">
+                  <input type="radio" name="inject-host-perms" value="all-urls">
+                  <span>All Websites</span>
+                </label>
+                <label class="wizard-radio" style="font-size: 12px;">
+                  <input type="radio" name="inject-host-perms" value="custom">
+                  <span>Custom Domains</span>
+                </label>
+              </div>
+              <input type="text" id="inject-custom-hosts" class="wizard-input" placeholder="https://example.com/*"
+                style="display: none; margin-bottom: 12px; font-size: 12px; padding: 6px;">
+
+              <h4 class="injector-category">UI Framework</h4>
+              <select id="inject-framework" class="wizard-select"
+                style="width: 100%; margin-bottom: 12px; font-size: 12px; padding: 6px; background: var(--bg-glass); border-color: var(--border-color); color: var(--text-primary);">
+                <option value="none">No Change (Keep Current)</option>
+                <option value="vanilla">Vanilla JavaScript</option>
+                <option value="react">React (Boilerplate)</option>
+                <option value="vue">Vue (Boilerplate)</option>
+                <option value="svelte">Svelte (Boilerplate)</option>
+              </select>
+
+              <h4 class="injector-category">Behaviors</h4>
+              <div class="feature-injector-grid">
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-sync-storage">
+                  <span>☁️ Sync Storage</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-auto-open">
+                  <span>🚀 Auto-Open</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-persist-state">
+                  <span>💿 Persist State</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-match-site">
+                  <span>🎨 Match Site</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-auto-run">
+                  <span>⚡ Auto-Run</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-analytics">
+                  <span>📊 Analytics</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-hot-reload">
+                  <span>🔥 Hot Reload</span>
+                </label>
+                <label class="feature-checkbox">
+                  <input type="checkbox" id="inject-error-tracking">
+                  <span>🐛 Errors</span>
+                </label>
+              </div>
+
+              <button id="inject-features-btn" class="btn btn-primary btn-small" style="width: 100%; margin-top: 12px;">
+                ⚡ Inject Selected Features
+              </button>
+            </div>
+          </div>
+
           <div class="files-section">
             <h3>Files</h3>
             <div class="file-tree" id="file-tree">
-              <div class="file-item active" data-file="manifest.json">manifest.json</div>
-              <div class="file-item" data-file="popup.html">popup.html</div>
-              <div class="file-item" data-file="popup.js">popup.js</div>
-              <div class="file-item" data-file="content.js">content.js</div>
-              <div class="file-item" data-file="background.js">background.js</div>
-              <div class="file-item" data-file="styles.css">styles.css</div>
+              <!-- Dynamically populated -->
             </div>
           </div>
         </div>
@@ -386,7 +599,8 @@
             <button id="scan-stack" class="tool-btn" title="Identify libraries">
               <span class="icon">🧬</span> <span class="tool-btn-label">Stack</span>
             </button>
-            <button id="scan-psyche" class="tool-btn" title="Psychological Pattern Analysis - Dark patterns, persuasion, manipulation">
+            <button id="scan-psyche" class="tool-btn"
+              title="Psychological Pattern Analysis - Dark patterns, persuasion, manipulation">
               <span class="icon">🧠</span> <span class="tool-btn-label">Psyche</span>
             </button>
             <button id="scan-archetype" class="tool-btn" title="Brand Archetype & Symbolic Analysis">
@@ -395,13 +609,16 @@
             <button id="scan-soul" class="tool-btn" title="Soul Analysis - Authenticity, intention, coherence">
               <span class="icon">✨</span> <span class="tool-btn-label">Soul</span>
             </button>
-            <button id="scan-shadow" class="tool-btn" title="Shadow Analysis - Hidden manipulations, deceptive patterns">
+            <button id="scan-shadow" class="tool-btn"
+              title="Shadow Analysis - Hidden manipulations, deceptive patterns">
               <span class="icon">🌑</span> <span class="tool-btn-label">Shadow</span>
             </button>
-            <button id="scan-rhetoric" class="tool-btn" title="Rhetorical Analysis - Linguistic patterns, persuasion techniques">
+            <button id="scan-rhetoric" class="tool-btn"
+              title="Rhetorical Analysis - Linguistic patterns, persuasion techniques">
               <span class="icon">📜</span> <span class="tool-btn-label">Rhetoric</span>
             </button>
-            <button id="scan-emotion" class="tool-btn" title="Emotional Design Analysis - Psychology of colors, typography, space">
+            <button id="scan-emotion" class="tool-btn"
+              title="Emotional Design Analysis - Psychology of colors, typography, space">
               <span class="icon">💭</span> <span class="tool-btn-label">Emotion</span>
             </button>
           </div>
