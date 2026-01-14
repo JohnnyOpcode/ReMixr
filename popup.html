@@ -34,7 +34,8 @@
     <nav class="tabs">
       <button class="tab-btn active" data-tab="projects">Projects</button>
       <button class="tab-btn" data-tab="templates">Templates</button>
-      <button class="tab-btn" data-tab="builder">Builder</button>
+      <button class="tab-btn" data-tab="code">Code</button>
+      <button class="tab-btn" data-tab="ui">UI</button>
       <button class="tab-btn" data-tab="analyzer">Inspector</button>
       <button class="tab-btn" data-tab="tools">Tools</button>
     </nav>
@@ -45,9 +46,7 @@
     <div id="projects-tab" class="tab-content active">
       <div class="section">
         <h2>Your Projects</h2>
-        <button id="new-project-btn" class="btn btn-primary" style="width: 100%; margin-bottom: 15px;">
-          + New Project
-        </button>
+
         <div id="projects-list" class="projects-list">
           <!-- Populated by JS -->
           <div class="empty-state">No projects found. Start building!</div>
@@ -308,230 +307,274 @@
       </div>
     </div>
 
-    <!-- Builder Tab -->
-    <div id="builder-tab" class="tab-content">
-      <div class="section">
-        <div class="builder-controls-header">
-          <div class="builder-header">
-            <input type="text" id="project-name" placeholder="Extension Name" class="project-name-input">
-            <div class="builder-actions">
-              <button id="save-project-btn" class="btn btn-secondary btn-small">Save</button>
-              <button id="test-extension-btn" class="btn btn-primary btn-small">Load</button>
+    <!-- Code Tab -->
+    <div id="code-tab" class="tab-content">
+      <div class="vscode-layout">
+        <!-- Sidebar -->
+        <div class="vscode-sidebar">
+          <div class="sidebar-header">
+            <span>EXPLORER</span>
+            <span class="header-actions">...</span>
+          </div>
+
+          <div class="sidebar-content">
+            <!-- Project Name -->
+            <div class="vscode-section">
+              <div class="vscode-section-header">PROJECT</div>
+              <div class="vscode-section-content">
+                <input type="text" id="project-name" placeholder="Extension Name" class="vscode-input">
+              </div>
+            </div>
+
+            <!-- File Explorer -->
+            <div class="vscode-section">
+              <div class="vscode-section-header">FILES</div>
+              <div class="vscode-section-content" style="padding: 0;">
+                <div class="file-tree" id="file-tree">
+                  <!-- Dynamically populated -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Feature Injector -->
+            <div class="vscode-section collapsed">
+              <div class="vscode-section-header" id="feature-injector-toggle">FEATURE INJECTOR</div>
+              <div class="vscode-section-content" id="feature-injector-content" style="display: none;">
+                <p class="feature-injector-description" style="font-size: 10px; opacity: 0.7; margin-bottom: 12px;">
+                  Modify and enhance your project dynamically</p>
+
+                <h4 class="injector-category">Identity & Type</h4>
+                <input type="text" id="inject-name" class="vscode-input" placeholder="Update Name"
+                  style="margin-bottom: 4px !important;">
+                <input type="text" id="inject-description" class="vscode-input" placeholder="Update Description"
+                  style="margin-bottom: 8px !important;">
+
+                <div class="wizard-radio-group">
+                  <label class="wizard-radio"><input type="radio" name="inject-ext-type" value="none" checked><span>Keep
+                      Original</span></label>
+                  <label class="wizard-radio"><input type="radio" name="inject-ext-type"
+                      value="content-script"><span>Content Script</span></label>
+                  <label class="wizard-radio"><input type="radio" name="inject-ext-type"
+                      value="popup"><span>Popup</span></label>
+                  <label class="wizard-radio"><input type="radio" name="inject-ext-type" value="side-panel"><span>Side
+                      Panel</span></label>
+                  <label class="wizard-radio"><input type="radio" name="inject-ext-type" value="page-action"><span>Page
+                      Action</span></label>
+                </div>
+
+                <h4 class="injector-category">Core Features</h4>
+                <div class="feature-injector-grid">
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-storage"><span>💾
+                      Storage</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-tabs"><span>📑 Tabs</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-notifications"><span>🔔
+                      Notifications</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-context-menu"><span>📋 Context
+                      Menu</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-background"><span>⚙️
+                      Background</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-bookmarks"><span>🔖
+                      Bookmarks</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-history"><span>📜
+                      History</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-downloads"><span>⬇️
+                      Downloads</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-cookies"><span>🍪
+                      Cookies</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-web-request"><span>🌐 Web
+                      Request</span></label>
+                </div>
+
+                <h4 class="injector-category">UI Components</h4>
+                <div class="feature-injector-grid">
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-side-panel"><span>📱 Side
+                      Panel</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-theme"><span>🌓 Theme
+                      Toggle</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-keyboard"><span>⌨️
+                      Keyboard</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-badge"><span>🔴 Badge</span></label>
+                </div>
+
+                <h4 class="injector-category">Host Permissions</h4>
+                <div class="wizard-radio-group">
+                  <label class="wizard-radio"><input type="radio" name="inject-host-perms" value="active-tab"
+                      checked><span>Active Tab Only</span></label>
+                  <label class="wizard-radio"><input type="radio" name="inject-host-perms" value="all-urls"><span>All
+                      Websites</span></label>
+                  <label class="wizard-radio"><input type="radio" name="inject-host-perms" value="custom"><span>Custom
+                      Domains</span></label>
+                </div>
+                <input type="text" id="inject-custom-hosts" class="vscode-input" placeholder="https://example.com/*"
+                  style="display: none; margin-top: 4px !important;">
+
+                <h4 class="injector-category">UI Framework</h4>
+                <select id="inject-framework" class="vscode-input"
+                  style="background: var(--bg-tertiary); cursor: pointer;">
+                  <option value="none">Keep Original</option>
+                  <option value="vanilla">Vanilla JS</option>
+                  <option value="react">React</option>
+                  <option value="vue">Vue</option>
+                  <option value="svelte">Svelte</option>
+                </select>
+
+                <h4 class="injector-category">Behaviors</h4>
+                <div class="feature-injector-grid">
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-sync-storage"><span>☁️ Sync
+                      Store</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-auto-open"><span>🚀
+                      Auto-Open</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-persist-state"><span>💿
+                      Persist</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-match-site"><span>🎨 Match
+                      Site</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-auto-run"><span>⚡
+                      Auto-Run</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-analytics"><span>📊
+                      Analytics</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-hot-reload"><span>🔥 Hot
+                      Reload</span></label>
+                  <label class="feature-checkbox"><input type="checkbox" id="inject-error-tracking"><span>🐛
+                      Errors</span></label>
+                </div>
+
+                <button id="inject-features-btn" class="vscode-btn primary" style="width: 100%; margin-top: 16px;">⚡
+                  Inject Features</button>
+              </div>
             </div>
           </div>
 
-          <div class="ai-section">
-            <textarea id="ai-prompt"
-              placeholder="Describe functionality... e.g. 'Highlight all external links in red'"></textarea>
-            <button id="generate-btn" class="btn btn-primary btn-small">✨ AI Generate</button>
+          <div class="sidebar-footer">
+            <button id="save-project-btn" class="vscode-btn">💾 Save Project</button>
+            <button id="test-extension-btn" class="vscode-btn primary">🚀 Load Extension</button>
+            <div style="display: flex; gap: 4px; width: 100%;">
+              <button id="export-extension-btn" class="vscode-btn" style="flex:1; margin: 0;">📦 ZIP</button>
+              <button id="preview-btn" class="vscode-btn" style="flex:1; margin: 0;">👁️ Preview</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Editor Area -->
+        <div class="vscode-main">
+          <div class="editor-tabs">
+            <div class="editor-tab active">
+              <span id="current-file">manifest.json</span>
+            </div>
           </div>
 
-          <!-- Feature Injector -->
-          <div class="feature-injector-section">
-            <div class="feature-injector-header" id="feature-injector-toggle">
-              <h3>🔧 Feature Injector</h3>
-              <span class="toggle-icon">▼</span>
+          <div class="editor-section">
+            <textarea id="code-editor"></textarea>
+          </div>
+
+
+          <!-- Preview Modal -->
+          <div id="preview-container"
+            style="display: none; padding: 12px; border-top: 1px solid #007acc; background: #1e1e1e;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+              <h3 style="font-size: 11px; color: var(--text-dim);">PREVIEW</h3>
+              <button id="close-preview" class="btn btn-secondary btn-small">Close</button>
             </div>
-            <div class="feature-injector-content" id="feature-injector-content" style="display: none;">
-              <p class="feature-injector-description">Modify and enhance your project dynamically</p>
+            <div style="background:#fff; border-radius:4px; overflow: hidden;">
+              <iframe id="preview-frame" style="width:100%; height:250px; border:none;"></iframe>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
-              <h4 class="injector-category">Identity & Type</h4>
-              <div style="margin-bottom: 12px;">
-                <input type="text" id="inject-name" class="wizard-input" placeholder="Update Extension Name"
-                  style="font-size: 12px; padding: 6px; margin-bottom: 6px; width: 100%;">
-                <input type="text" id="inject-description" class="wizard-input" placeholder="Update Description"
-                  style="font-size: 12px; padding: 6px; width: 100%;">
+    <!-- UI Tab -->
+    <div id="ui-tab" class="tab-content">
+      <div class="shiny-container">
+        <!-- Sidebar - Chat & Context -->
+        <div class="shiny-sidebar">
+          <div class="shiny-sidebar-header">
+            <h3>Visual Designer</h3>
+            <div class="ai-status">
+              <span class="status-dot"></span> Online
+            </div>
+          </div>
+          <div class="shiny-chat-history" id="shiny-chat-history">
+            <div class="chat-message ai">
+              <div class="chat-icon">✨</div>
+              <div class="chat-bubble">
+                Hello! I'm your Visual Design Assistant. Describe the UI you want to build, and I'll generate it in the
+                canvas.
+                <br><br>
+                Try: <em>"A sleek dark-mode dashboard with a sidebar and a task list."</em>
               </div>
-              <div class="wizard-radio-group"
-                style="padding: 8px 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 8px;">
-                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
-                  <input type="radio" name="inject-ext-type" value="none" checked>
-                  <span>No Change (Keep Current)</span>
-                </label>
-                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
-                  <input type="radio" name="inject-ext-type" value="content-script">
-                  <span>Content Script</span>
-                </label>
-                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
-                  <input type="radio" name="inject-ext-type" value="popup">
-                  <span>Popup</span>
-                </label>
-                <label class="wizard-radio" style="font-size: 11px; margin-bottom: 4px;">
-                  <input type="radio" name="inject-ext-type" value="side-panel">
-                  <span>Side Panel</span>
-                </label>
-                <label class="wizard-radio" style="font-size: 11px;">
-                  <input type="radio" name="inject-ext-type" value="page-action">
-                  <span>Page Action</span>
-                </label>
-              </div>
-
-              <h4 class="injector-category">Core Features</h4>
-              <div class="feature-injector-grid">
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-storage">
-                  <span>💾 Storage</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-tabs">
-                  <span>📑 Tabs</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-notifications">
-                  <span>🔔 Notifications</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-context-menu">
-                  <span>📋 Context Menu</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-background">
-                  <span>⚙️ Background</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-bookmarks">
-                  <span>🔖 Bookmarks</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-history">
-                  <span>📜 History</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-downloads">
-                  <span>⬇️ Downloads</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-cookies">
-                  <span>🍪 Cookies</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-web-request">
-                  <span>🌐 Web Request</span>
-                </label>
-              </div>
-
-              <h4 class="injector-category">UI Components</h4>
-              <div class="feature-injector-grid">
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-side-panel">
-                  <span>📱 Side Panel</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-theme">
-                  <span>🌓 Theme Toggle</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-keyboard">
-                  <span>⌨️ Keyboard</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-badge">
-                  <span>🔴 Badge</span>
-                </label>
-              </div>
-
-              <h4 class="injector-category">Host Permissions</h4>
-              <div class="wizard-radio-group"
-                style="padding: 8px 12px; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: 8px;">
-                <label class="wizard-radio" style="font-size: 12px; margin-bottom: 4px;">
-                  <input type="radio" name="inject-host-perms" value="active-tab" checked>
-                  <span>Active Tab Only</span>
-                </label>
-                <label class="wizard-radio" style="font-size: 12px; margin-bottom: 4px;">
-                  <input type="radio" name="inject-host-perms" value="all-urls">
-                  <span>All Websites</span>
-                </label>
-                <label class="wizard-radio" style="font-size: 12px;">
-                  <input type="radio" name="inject-host-perms" value="custom">
-                  <span>Custom Domains</span>
-                </label>
-              </div>
-              <input type="text" id="inject-custom-hosts" class="wizard-input" placeholder="https://example.com/*"
-                style="display: none; margin-bottom: 12px; font-size: 12px; padding: 6px;">
-
-              <h4 class="injector-category">UI Framework</h4>
-              <select id="inject-framework" class="wizard-select"
-                style="width: 100%; margin-bottom: 12px; font-size: 12px; padding: 6px; background: var(--bg-glass); border-color: var(--border-color); color: var(--text-primary);">
-                <option value="none">No Change (Keep Current)</option>
-                <option value="vanilla">Vanilla JavaScript</option>
-                <option value="react">React (Boilerplate)</option>
-                <option value="vue">Vue (Boilerplate)</option>
-                <option value="svelte">Svelte (Boilerplate)</option>
-              </select>
-
-              <h4 class="injector-category">Behaviors</h4>
-              <div class="feature-injector-grid">
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-sync-storage">
-                  <span>☁️ Sync Storage</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-auto-open">
-                  <span>🚀 Auto-Open</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-persist-state">
-                  <span>💿 Persist State</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-match-site">
-                  <span>🎨 Match Site</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-auto-run">
-                  <span>⚡ Auto-Run</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-analytics">
-                  <span>📊 Analytics</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-hot-reload">
-                  <span>🔥 Hot Reload</span>
-                </label>
-                <label class="feature-checkbox">
-                  <input type="checkbox" id="inject-error-tracking">
-                  <span>🐛 Errors</span>
-                </label>
-              </div>
-
-              <button id="inject-features-btn" class="btn btn-primary btn-small" style="width: 100%; margin-top: 12px;">
-                ⚡ Inject Selected Features
+            </div>
+          </div>
+          <div class="shiny-input-area">
+            <div class="input-wrapper">
+              <textarea id="shiny-prompt" placeholder="Message Visual AI..."></textarea>
+              <button id="shiny-generate-btn" title="Generate UI">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="white">
+                  <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+                </svg>
               </button>
             </div>
           </div>
+        </div>
 
-          <div class="files-section">
-            <h3>Files</h3>
-            <div class="file-tree" id="file-tree">
-              <!-- Dynamically populated -->
+        <!-- Main - Canvas & Properties -->
+        <div class="shiny-main">
+          <div class="shiny-toolbar">
+            <div class="toolbar-left">
+              <div class="view-toggles">
+                <button class="view-btn active" data-view="desktop" title="Desktop View">🖥️</button>
+                <button class="view-btn" data-view="mobile" title="Mobile View">📱</button>
+              </div>
+            </div>
+            <div class="toolbar-center">
+              <span id="shiny-project-title">shiny_project_1</span>
+            </div>
+            <div class="toolbar-right">
+              <button id="shiny-code-toggle" class="btn btn-small btn-secondary">Code</button>
+              <button id="shiny-publish-btn" class="btn btn-small btn-primary">Publish</button>
+            </div>
+          </div>
+
+          <div class="shiny-canvas-area">
+            <div id="canvas-wrapper" class="canvas-wrapper desktop">
+              <div class="canvas-chrome">
+                <div class="chrome-dots"><span></span><span></span><span></span></div>
+                <div class="chrome-address">re-mixr://preview</div>
+              </div>
+              <div class="iframe-container">
+                <iframe id="shiny-preview-frame"></iframe>
+                <div id="canvas-overlay" class="canvas-overlay">
+                  <div class="loader-container" style="display: none;">
+                    <div class="shiny-loader"></div>
+                    <p>Brewing your UI...</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="shiny-quick-controls">
+            <div class="control-group">
+              <label>Theme</label>
+              <div class="swatch-group">
+                <button class="swatch dark active" data-theme="dark" title="Dark Mode"></button>
+                <button class="swatch light" data-theme="light" title="Light Mode"></button>
+                <button class="swatch glass" data-theme="glass" title="Glassmorphism"></button>
+              </div>
+            </div>
+            <div class="control-divider"></div>
+            <div class="control-group">
+              <label>Accent</label>
+              <div class="accent-wrapper">
+                <input type="color" id="shiny-accent-picker" value="#6366f1">
+              </div>
+            </div>
+            <div class="control-divider"></div>
+            <div class="control-group">
+              <button id="shiny-magic-polish" class="btn btn-small btn-secondary">🪄 Polish</button>
+              <button id="shiny-undo" class="btn btn-small btn-secondary" title="Undo">↩️</button>
             </div>
           </div>
         </div>
-
-        <div class="editor-section">
-          <div class="editor-header">
-            <span id="current-file">manifest.json</span>
-          </div>
-          <textarea id="code-editor"></textarea>
-        </div>
-
-        <div class="builder-footer">
-          <button id="export-extension-btn" class="btn btn-secondary btn-small" style="flex:1;">Download ZIP</button>
-          <button id="preview-btn" class="btn btn-secondary btn-small" style="flex:1;">Preview UI</button>
-        </div>
-
-        <!-- Preview Modal/Divider (Hidden by default) -->
-        <div id="preview-container"
-          style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-          <h3>Preview</h3>
-          <div class="preview-frame-wrapper" style="background:#fff; padding:10px; border-radius:4px;">
-            <iframe id="preview-frame" style="width:100%; height:300px; border:1px solid #ddd;"></iframe>
-          </div>
-          <button id="close-preview" class="btn btn-secondary btn-small" style="width:100%; margin-top:5px;">Close
-            Preview</button>
-        </div>
-
       </div>
     </div>
 
@@ -689,16 +732,8 @@
 
     <!-- Status Bar & Toast moved inside container -->
     <div id="status" class="status"></div>
-
-    <footer class="status-bar">
-      <div id="status-message">ReMixr IDE // Build 1.0.4 Ready</div>
-      <div class="status-indicators">
-        <span class="indicator">WASM</span>
-        <span class="indicator">V3</span>
-        <span class="indicator-active">ACTIVE</span>
-      </div>
-    </footer>
   </div>
+
 
 
 

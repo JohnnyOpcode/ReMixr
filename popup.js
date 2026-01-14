@@ -1496,11 +1496,10 @@ function renderProjectsList() {
 
   projectsList.innerHTML = projects.map((project, index) => `
     <div class="project-item" data-index="${index}">
-      <div>
-        <div class="project-name">${project.name}</div>
-        <div class="project-meta">Modified: ${new Date(project.modified).toLocaleDateString()}</div>
-      </div>
-      <button class="btn btn-small btn-danger" onclick="deleteProject(${index})">Delete</button>
+      <button class="project-delete-btn" onclick="deleteProject(${index})" title="Delete project">×</button>
+      <div class="project-icon">📦</div>
+      <div class="project-name">${project.name}</div>
+      <div class="project-meta">Modified: ${new Date(project.modified).toLocaleDateString()}</div>
     </div>
   `).join('');
 
@@ -1735,22 +1734,63 @@ function setupEventListeners() {
   document.getElementById('tool-screenshot')?.addEventListener('click', () => runMacGyver('takeScreenshot'));
   document.getElementById('tool-console')?.addEventListener('click', () => runMacGyver('injectConsole'));
 
-  // Feature Injector toggle
-  document.getElementById('feature-injector-toggle')?.addEventListener('click', () => {
-    const content = document.getElementById('feature-injector-content');
-    const header = document.getElementById('feature-injector-toggle');
+  // VS Code Section Toggles
+  document.querySelectorAll('.vscode-section-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const section = header.closest('.vscode-section');
+      section.classList.toggle('collapsed');
 
-    if (content.style.display === 'none') {
-      content.style.display = 'block';
-      header.classList.add('active');
-    } else {
-      content.style.display = 'none';
-      header.classList.remove('active');
-    }
+      const content = section.querySelector('.vscode-section-content');
+      if (content) {
+        content.style.display = section.classList.contains('collapsed') ? 'none' : 'block';
+      }
+    });
   });
 
   // Feature Injector inject button
   document.getElementById('inject-features-btn')?.addEventListener('click', injectFeatures);
+
+  // Shiny Tab Listeners
+  document.getElementById('shiny-generate-btn')?.addEventListener('click', handleShinyGenerate);
+  document.getElementById('shiny-prompt')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleShinyGenerate();
+    }
+  });
+
+  document.querySelectorAll('.view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const wrapper = document.getElementById('canvas-wrapper');
+      wrapper.className = `canvas-wrapper ${btn.dataset.view}`;
+    });
+  });
+
+  document.querySelectorAll('.swatch').forEach(swatch => {
+    swatch.addEventListener('click', () => {
+      document.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+      swatch.classList.add('active');
+      updateShinyTheme(swatch.dataset.theme);
+    });
+  });
+
+  document.getElementById('shiny-accent-picker')?.addEventListener('input', (e) => {
+    updateShinyAccent(e.target.value);
+  });
+
+  document.getElementById('shiny-magic-polish')?.addEventListener('click', () => {
+    addChatMessage('ai', 'Polishing your design with modern aesthetics...', '🪄');
+    handleShinyGenerate('Make the design more premium with better spacing, refined typography, and subtle shadows.');
+  });
+
+  document.getElementById('shiny-publish-btn')?.addEventListener('click', publishShinyProject);
+  document.getElementById('shiny-code-toggle')?.addEventListener('click', () => {
+    if (currentProject) {
+      switchTab('code');
+    }
+  });
 }
 
 // Switch tabs
@@ -1762,6 +1802,10 @@ function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(content => {
     content.classList.toggle('active', content.id === `${tabName}-tab`);
   });
+
+  if (tabName === 'ui') {
+    initShinyTab();
+  }
 }
 
 // Load template
@@ -1785,7 +1829,7 @@ function loadTemplate(templateName) {
     }
   }
 
-  switchTab('builder');
+  switchTab('code');
   document.getElementById('project-name').value = currentProject.name;
   currentFile = 'manifest.json';
   updateFileTree();
@@ -1816,53 +1860,238 @@ function loadFileIntoEditor(filename) {
   fileHeader.textContent = filename;
 }
 
-// AI Generation
-async function generateExtension() {
-  const prompt = document.getElementById('ai-prompt').value.trim();
+// SHINY LOGIC
+let shinyProject = null;
+let shinyHistory = [];
 
-  if (!prompt) {
-    showStatus('Please enter a description', 'error');
-    return;
+function initShinyTab() {
+  if (!shinyProject) {
+    // Initial state
+    shinyProject = {
+      name: 'shiny_project_1',
+      html: `<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8f9fa; }
+    .card { background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+    h1 { color: #333; margin-bottom: 0.5rem; }
+    p { color: #666; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Hello Shiny!</h1>
+    <p>Describe your ideas to start designing.</p>
+  </div>
+</body>
+</html>`,
+      theme: 'light',
+      accent: '#6366f1'
+    };
+    updateShinyPreview();
   }
+}
 
-  showStatus('Generating extension...', 'info');
+async function handleShinyGenerate(overridePrompt) {
+  const promptInput = document.getElementById('shiny-prompt');
+  const prompt = overridePrompt || promptInput.value.trim();
 
-  // Simple AI simulation - keyword matching
-  const generated = await generateFromPrompt(prompt);
+  if (!prompt) return;
+
+  if (!overridePrompt) promptInput.value = '';
+
+  addChatMessage('user', prompt);
+
+  // Show loading
+  const wrapper = document.getElementById('canvas-wrapper');
+  const loader = document.querySelector('.loader-container');
+  wrapper.classList.add('loading');
+  loader.style.display = 'block';
+
+  // AI Delay
+  await new Promise(r => setTimeout(r, 1500));
+
+  try {
+    const response = await generateVisualUI(prompt);
+    shinyProject.html = response.html;
+    updateShinyPreview();
+    addChatMessage('ai', response.analysis, '✨');
+  } catch (error) {
+    addChatMessage('ai', 'Sorry, I encountered an error while generating your design.', '⚠️');
+  } finally {
+    wrapper.classList.remove('loading');
+    loader.style.display = 'none';
+  }
+}
+
+function addChatMessage(role, text, icon = null) {
+  const history = document.getElementById('shiny-chat-history');
+  const msg = document.createElement('div');
+  msg.className = `chat-message ${role}`;
+
+  const iconHtml = role === 'ai' ? `<div class="chat-icon">${icon || '✨'}</div>` : '';
+
+  msg.innerHTML = `
+    ${iconHtml}
+    <div class="chat-bubble">${text}</div>
+  `;
+
+  history.appendChild(msg);
+  history.scrollTop = history.scrollHeight;
+}
+
+function updateShinyPreview() {
+  const frame = document.getElementById('shiny-preview-frame');
+  if (frame && shinyProject) {
+    const blob = new Blob([shinyProject.html], { type: 'text/html' });
+    frame.src = URL.createObjectURL(blob);
+  }
+}
+
+function updateShinyTheme(theme) {
+  if (!shinyProject) return;
+  shinyProject.theme = theme;
+
+  // Patch HTML with theme
+  let bg = '#ffffff', fg = '#333333';
+  if (theme === 'dark') { bg = '#121212'; fg = '#f1f1f1'; }
+  else if (theme === 'glass') { bg = 'rgba(255,255,255,0.7)'; fg = '#111'; }
+
+  // Simple replacement or addition of styles
+  const stylePatch = `\n<style id="shiny-theme-patch">body { background: ${bg} !important; color: ${fg} !important; }</style>`;
+  if (shinyProject.html.includes('id="shiny-theme-patch"')) {
+    shinyProject.html = shinyProject.html.replace(/<style id="shiny-theme-patch">.*?<\/style>/s, stylePatch);
+  } else {
+    shinyProject.html = shinyProject.html.replace('</head>', `${stylePatch}\n</head>`);
+  }
+  updateShinyPreview();
+}
+
+function updateShinyAccent(color) {
+  if (!shinyProject) return;
+  shinyProject.accent = color;
+
+  const stylePatch = `\n<style id="shiny-accent-patch">.accent-bg { background-color: ${color} !important; } .accent-text { color: ${color} !important; } button, .btn-primary { background: ${color} !important; }</style>`;
+  if (shinyProject.html.includes('id="shiny-accent-patch"')) {
+    shinyProject.html = shinyProject.html.replace(/<style id="shiny-accent-patch">.*?<\/style>/s, stylePatch);
+  } else {
+    shinyProject.html = shinyProject.html.replace('</head>', `${stylePatch}\n</head>`);
+  }
+  updateShinyPreview();
+}
+
+async function generateVisualUI(prompt) {
+  // This uses the existing generation heuristics but returns a more visual template
+  const lowerPrompt = prompt.toLowerCase();
+  let themeColor = shinyProject?.accent || '#6366f1';
+
+  let html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        :root { --accent: ${themeColor}; --bg: #ffffff; --text: #1a1a1a; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; margin: 0; transition: all 0.3s ease; }
+        .container { max-width: 600px; margin: 0 auto; }
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        h1 { font-size: 1.5rem; font-weight: 700; margin: 0; }
+        .btn { padding: 10px 20px; border-radius: 8px; border: none; background: var(--accent); color: white; cursor: pointer; font-weight: 600; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; }
+        .card { background: rgba(0,0,0,0.05); padding: 1rem; border-radius: 12px; border: 1px solid rgba(0,0,0,0.1); }
+        .card h3 { margin-top: 0; font-size: 1rem; }
+        .input-group { margin-bottom: 1rem; }
+        input { width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #ddd; box-sizing: border-box; }
+        .footer { margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1rem; font-size: 0.8rem; color: #888; text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>${extractName(prompt) || 'My App'}</h1>
+            <button class="btn">Action</button>
+        </header>
+        
+        <div class="content">
+            ${generateContentHtml(prompt)}
+        </div>
+
+        <div class="footer">
+            Built with ReMixr Shiny
+        </div>
+    </div>
+</body>
+</html>`;
+
+  return {
+    html: html,
+    analysis: `I've designed a layout for "${extractName(prompt) || 'your app'}" with a clean, modern aesthetic. I added a responsive grid and matching components based on your request.`
+  };
+}
+
+function generateContentHtml(prompt) {
+  const p = prompt.toLowerCase();
+  if (p.includes('list') || p.includes('tasks')) {
+    return `
+            <div class="input-group">
+                <input type="text" placeholder="Add new item...">
+            </div>
+            <div class="card-grid">
+                <div class="card"><h3>Task 1</h3><p>Complete documentation</p></div>
+                <div class="card"><h3>Task 2</h3><p>Review design system</p></div>
+                <div class="card"><h3>Task 3</h3><p>Deploy to production</p></div>
+            </div>`;
+  } else if (p.includes('form') || p.includes('contact')) {
+    return `
+            <div class="card">
+                <div class="input-group"><label>Name</label><input type="text"></div>
+                <div class="input-group"><label>Email</label><input type="email"></div>
+                <div class="input-group"><label>Message</label><textarea style="width:100%; min-height:100px; padding:10px; border-radius:6px; border:1px solid #ddd;"></textarea></div>
+                <button class="btn" style="width:100%">Submit</button>
+            </div>`;
+  } else {
+    return `
+            <div class="card" style="text-align:center; padding: 3rem 1rem;">
+                <h2>Welcome to ${extractName(prompt) || 'App'}</h2>
+                <p>Start by describing more features you want to add.</p>
+                <div style="display:flex; gap:10px; justify-content:center; margin-top:1.5rem;">
+                    <button class="btn">Get Started</button>
+                    <button class="btn" style="background:#eee; color:#333;">Learn More</button>
+                </div>
+            </div>`;
+  }
+}
+
+function publishShinyProject() {
+  if (!shinyProject) return;
 
   currentProject = {
-    name: generated.name,
-    files: generated.files,
+    name: document.getElementById('shiny-project-title').textContent,
+    files: {
+      'manifest.json': JSON.stringify({
+        manifest_version: 3,
+        name: document.getElementById('shiny-project-title').textContent,
+        version: '1.0.0',
+        action: { default_popup: 'popup.html' }
+      }, null, 2),
+      'popup.html': shinyProject.html,
+      'popup.js': '// Generated by Shiny Designer\nconsole.log("Ready.");',
+      'styles.css': '/* Embedded in HTML */'
+    },
     created: Date.now(),
     modified: Date.now()
   };
 
-  switchTab('builder');
+  switchTab('code');
   updateFileTree();
-  loadFileIntoEditor('manifest.json');
-  document.getElementById('project-name').value = currentProject.name;
-  showStatus('Extension generated!', 'success');
+  loadFileIntoEditor('popup.html');
+  showStatus('Project published to Builder!', 'success');
 }
 
-// Simulate AI generation
-async function generateFromPrompt(prompt) {
-  const lowerPrompt = prompt.toLowerCase();
+// Builder AI logic removed as per user request to streamline Builder UI/UX
 
-  // Determine template based on keywords
-  if (lowerPrompt.includes('highlight') || lowerPrompt.includes('color') || lowerPrompt.includes('style')) {
-    return generateContentModifier(prompt);
-  } else if (lowerPrompt.includes('timer') || lowerPrompt.includes('track') || lowerPrompt.includes('time')) {
-    return generateTimer(prompt);
-  } else if (lowerPrompt.includes('extract') || lowerPrompt.includes('scrape') || lowerPrompt.includes('data')) {
-    return generateExtractor(prompt);
-  } else if (lowerPrompt.includes('monitor') || lowerPrompt.includes('watch') || lowerPrompt.includes('change')) {
-    return generatePageMonitor(prompt);
-  } else if (lowerPrompt.includes('tool') || lowerPrompt.includes('util') || lowerPrompt.includes('button')) {
-    return generatePopupTool(prompt);
-  } else {
-    return generateGeneric(prompt);
-  }
-}
 
 function generateContentModifier(prompt) {
   const template = TEMPLATES['content-modifier'];
