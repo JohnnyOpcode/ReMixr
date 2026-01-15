@@ -2,6 +2,8 @@
 
 **The Ultimate Meta-Extension Builder & Web Analysis Suite**
 
+![ReMixr UI Overview](screenshots/Screenshot-UI.png)
+
 ReMixr is a powerful browser extension that lets you **build other browser extensions** directly in your browser. It combines an AI-powered development environment (IDE) with a suite of sophisticated analysis and hacking ("MacGyver") tools, effectively giving you "Developer Superpowers" on any website.
 
 ## ✨ Features
@@ -12,6 +14,9 @@ ReMixr is a powerful browser extension that lets you **build other browser exten
   - Select from 10+ features (Background Worker, Storage, Tabs, Notifications, etc.)
   - Configure permissions and behaviors
   - Support for multiple UI frameworks (Vanilla JS, React, Vue, Svelte)
+
+![Templates and Wizard](screenshots/Screenshot-Templates.png)
+
 - **Feature Injector**: Add features to any project with one click
   - Inject 26 features from the wizard into any extension
   - **Core Features**: Storage, Tabs, Notifications, Context Menu, Background, Bookmarks, History, Downloads, Cookies, Web Request
@@ -26,11 +31,21 @@ ReMixr is a powerful browser extension that lets you **build other browser exten
   - 🔐 Password Generator, 📝 Quick Notes
 - **AI-Powered Generation**: Describe your idea ("Make all backgrounds pink", "Extract emails"), and ReMixr builds the code
 - **Professional Editor**: Integrated **CodeMirror** editor with Dracula theme, syntax highlighting, and live preview
+
+![Code Editor](screenshots/Screenshot-Code.png)
+
 - **One-Click Export**: Generates unique, ready-to-install `.zip` packages with custom icons
+- **Project Management**: Save, clone, and manage multiple extension projects in a dedicated dashboard
+
+![Project Dashboard](screenshots/Screenshot-Projects.png)
+
 
 ### 🔍 Deep Analysis Suite
 - **Interactive Inspector**: Point-and-click to identify unique CSS selectors
 - **Visualizer**: View the DOM as a stunning **D3.js Force-Directed Graph**
+
+![Deep Analysis & Inspector](screenshots/Screenshot-Inspector.png)
+
 - **Tech Stack Detector**: Identify frameworks (React, Vue, Next.js) used on the page
 - **Performance**: Metrics on load times, asset counts, and storage usage
 - **Psychological Analysis**: Detect dark patterns, persuasion techniques, and emotional design
@@ -40,6 +55,8 @@ ReMixr is a powerful browser extension that lets you **build other browser exten
 - **Reality Distortion**: Edit text on any page, Zap elements instantly, View Wireframes
 - **Lock Picking**: Unmask passwords, Force-enable disabled inputs, Remove sticky headers
 - **Exfiltration**: One-click export of all Links, Colors, or specialized Data
+
+![MacGyver Tools](screenshots/Screenshot-Tools.png)
 
 ## 🚀 Installation
 
