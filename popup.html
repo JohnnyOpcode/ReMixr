@@ -26,8 +26,16 @@
   <div class="container">
     <!-- Header -->
     <header>
-      <h1>ReMixr IDE</h1>
-      <p class="tagline">Meta-Extension Builder</p>
+      <div class="header-main">
+        <h1>ReMixr IDE</h1>
+        <p class="tagline">Meta-Extension Builder</p>
+      </div>
+      <div class="header-actions-main">
+        <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Dark/Light Mode">
+          <span class="moon-icon">🌙</span>
+          <span class="sun-icon">☀️</span>
+        </button>
+      </div>
     </header>
 
     <!-- Navigation -->
@@ -126,7 +134,7 @@
           </div>
         </div>
 
-        <div style="height: 32px;"></div>
+        <div class="spacer-32"></div>
 
         <h2>Extension Wizard</h2>
 
@@ -135,25 +143,25 @@
           <div class="wizard-header">
             <div class="wizard-icon">✨</div>
             <div>
-              <h3 style="margin: 0; font-size: 16px; font-weight: 600;">Scaffold Chrome Extension</h3>
-              <p style="margin: 4px 0 0 0; font-size: 13px; color: var(--text-secondary);">Configure features and
+              <h3 class="wizard-title">Scaffold Chrome Extension</h3>
+              <p class="wizard-subtitle">Configure features and
                 generate your extension structure</p>
             </div>
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">Extension Name</label>
+            <label class="wizard-label" for="wizard-name">Extension Name</label>
             <input type="text" id="wizard-name" class="wizard-input" placeholder="My Awesome Extension">
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">Description</label>
+            <label class="wizard-label" for="wizard-description">Description</label>
             <input type="text" id="wizard-description" class="wizard-input"
               placeholder="Enhance your browsing experience">
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">Extension Type</label>
+            <div class="wizard-label">Extension Type</div>
             <div class="wizard-radio-group">
               <label class="wizard-radio">
                 <input type="radio" name="ext-type" value="content-script" checked>
@@ -175,7 +183,7 @@
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">Features</label>
+            <div class="wizard-label">Features</div>
             <div class="wizard-checkbox-grid">
               <label class="wizard-checkbox">
                 <input type="checkbox" id="feat-background">
@@ -221,7 +229,7 @@
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">Host Permissions</label>
+            <div class="wizard-label">Host Permissions</div>
             <div class="wizard-radio-group">
               <label class="wizard-radio">
                 <input type="radio" name="host-perms" value="active-tab" checked>
@@ -236,13 +244,13 @@
                 <span>Custom Domains</span>
               </label>
             </div>
-            <input type="text" id="wizard-custom-hosts" class="wizard-input" placeholder="https://example.com/*"
-              style="display: none; margin-top: 12px;">
+            <input type="text" id="wizard-custom-hosts" class="wizard-input custom-host-input"
+              placeholder="https://example.com/*" title="Custom domain patterns" aria-label="Custom host patterns">
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">UI Framework (Optional)</label>
-            <select id="wizard-framework" class="wizard-select">
+            <label class="wizard-label" for="wizard-framework">UI Framework (Optional)</label>
+            <select id="wizard-framework" class="wizard-select" title="Select UI Framework">
               <option value="vanilla">Vanilla JavaScript</option>
               <option value="react">React</option>
               <option value="vue">Vue</option>
@@ -251,7 +259,7 @@
           </div>
 
           <div class="wizard-section">
-            <label class="wizard-label">Behaviors</label>
+            <div class="wizard-label">Behaviors</div>
             <div class="wizard-checkbox-grid">
               <label class="wizard-checkbox">
                 <input type="checkbox" id="behavior-match-site">
@@ -300,7 +308,7 @@
             </div>
           </div>
 
-          <button id="generate-extension-btn" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
+          <button id="generate-extension-btn" class="btn btn-primary generate-btn-full">
             Generate Extension
           </button>
         </div>
@@ -329,7 +337,7 @@
             <!-- File Explorer -->
             <div class="vscode-section">
               <div class="vscode-section-header">FILES</div>
-              <div class="vscode-section-content" style="padding: 0;">
+              <div class="vscode-section-content file-tree-padding-0">
                 <div class="file-tree" id="file-tree">
                   <!-- Dynamically populated -->
                 </div>
@@ -339,15 +347,16 @@
             <!-- Feature Injector -->
             <div class="vscode-section collapsed">
               <div class="vscode-section-header" id="feature-injector-toggle">FEATURE INJECTOR</div>
-              <div class="vscode-section-content" id="feature-injector-content" style="display: none;">
-                <p class="feature-injector-description" style="font-size: 10px; opacity: 0.7; margin-bottom: 12px;">
+              <div class="vscode-section-content feature-injector-hidden" id="feature-injector-content">
+                <p class="feature-injector-description feature-description">
                   Modify and enhance your project dynamically</p>
 
                 <h4 class="injector-category">Identity & Type</h4>
-                <input type="text" id="inject-name" class="vscode-input" placeholder="Update Name"
-                  style="margin-bottom: 4px !important;">
-                <input type="text" id="inject-description" class="vscode-input" placeholder="Update Description"
-                  style="margin-bottom: 8px !important;">
+                <input type="text" id="inject-name" class="vscode-input inject-input-mb4" placeholder="Update Name"
+                  title="Update extension name" aria-label="Extension name">
+                <input type="text" id="inject-description" class="vscode-input inject-input-mb8"
+                  placeholder="Update Description" title="Update extension description"
+                  aria-label="Extension description">
 
                 <div class="wizard-radio-group">
                   <label class="wizard-radio"><input type="radio" name="inject-ext-type" value="none" checked><span>Keep
@@ -405,12 +414,11 @@
                   <label class="wizard-radio"><input type="radio" name="inject-host-perms" value="custom"><span>Custom
                       Domains</span></label>
                 </div>
-                <input type="text" id="inject-custom-hosts" class="vscode-input" placeholder="https://example.com/*"
-                  style="display: none; margin-top: 4px !important;">
+                <input type="text" id="inject-custom-hosts" class="vscode-input inject-custom-host"
+                  placeholder="https://example.com/*" title="Custom domain patterns" aria-label="Custom host patterns">
 
                 <h4 class="injector-category">UI Framework</h4>
-                <select id="inject-framework" class="vscode-input"
-                  style="background: var(--bg-tertiary); cursor: pointer;">
+                <select id="inject-framework" class="vscode-input inject-framework-select" title="Select UI Framework">
                   <option value="none">Keep Original</option>
                   <option value="vanilla">Vanilla JS</option>
                   <option value="react">React</option>
@@ -438,7 +446,7 @@
                       Errors</span></label>
                 </div>
 
-                <button id="inject-features-btn" class="vscode-btn primary" style="width: 100%; margin-top: 16px;">⚡
+                <button id="inject-features-btn" class="vscode-btn primary inject-btn-full">⚡
                   Inject Features</button>
               </div>
             </div>
@@ -447,9 +455,9 @@
           <div class="sidebar-footer">
             <button id="save-project-btn" class="vscode-btn">💾 Save Project</button>
             <button id="test-extension-btn" class="vscode-btn primary">🚀 Load Extension</button>
-            <div style="display: flex; gap: 4px; width: 100%;">
-              <button id="export-extension-btn" class="vscode-btn" style="flex:1; margin: 0;">📦 ZIP</button>
-              <button id="preview-btn" class="vscode-btn" style="flex:1; margin: 0;">👁️ Preview</button>
+            <div class="footer-btn-group">
+              <button id="export-extension-btn" class="vscode-btn footer-btn-flex">📦 ZIP</button>
+              <button id="preview-btn" class="vscode-btn footer-btn-flex">👁️ Preview</button>
             </div>
           </div>
         </div>
@@ -463,19 +471,18 @@
           </div>
 
           <div class="editor-section">
-            <textarea id="code-editor"></textarea>
+            <textarea id="code-editor" title="Code Editor" aria-label="Source code editor"></textarea>
           </div>
 
 
           <!-- Preview Modal -->
-          <div id="preview-container"
-            style="display: none; padding: 12px; border-top: 1px solid #007acc; background: #1e1e1e;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-              <h3 style="font-size: 11px; color: var(--text-dim);">PREVIEW</h3>
+          <div id="preview-container" class="preview-container-hidden">
+            <div class="preview-header">
+              <h3 class="preview-title">PREVIEW</h3>
               <button id="close-preview" class="btn btn-secondary btn-small">Close</button>
             </div>
-            <div style="background:#fff; border-radius:4px; overflow: hidden;">
-              <iframe id="preview-frame" style="width:100%; height:250px; border:none;"></iframe>
+            <div class="preview-iframe-wrapper">
+              <iframe id="preview-frame" class="preview-iframe" title="Extension Preview"></iframe>
             </div>
           </div>
         </div>
@@ -541,9 +548,9 @@
                 <div class="chrome-address">re-mixr://preview</div>
               </div>
               <div class="iframe-container">
-                <iframe id="shiny-preview-frame"></iframe>
+                <iframe id="shiny-preview-frame" title="UI Preview Canvas"></iframe>
                 <div id="canvas-overlay" class="canvas-overlay">
-                  <div class="loader-container" style="display: none;">
+                  <div class="loader-container canvas-loader-hidden">
                     <div class="shiny-loader"></div>
                     <p>Brewing your UI...</p>
                   </div>
@@ -554,7 +561,7 @@
 
           <div class="shiny-quick-controls">
             <div class="control-group">
-              <label>Theme</label>
+              <div class="control-label">Theme</div>
               <div class="swatch-group">
                 <button class="swatch dark active" data-theme="dark" title="Dark Mode"></button>
                 <button class="swatch light" data-theme="light" title="Light Mode"></button>
@@ -563,9 +570,10 @@
             </div>
             <div class="control-divider"></div>
             <div class="control-group">
-              <label>Accent</label>
+              <div class="control-label">Accent</div>
               <div class="accent-wrapper">
-                <input type="color" id="shiny-accent-picker" value="#6366f1">
+                <input type="color" id="shiny-accent-picker" value="#6366f1" title="Accent color picker"
+                  aria-label="Accent color">
               </div>
             </div>
             <div class="control-divider"></div>
@@ -578,154 +586,313 @@
       </div>
     </div>
 
-    <!-- Analyzer/Inspector Tab -->
+    <!-- Analyzer/Inspector Tab - PROFESSIONAL REDESIGN -->
     <div id="analyzer-tab" class="tab-content">
-      <div class="section">
-        <div class="analyzer-controls">
-          <div class="analyzer-card">
-            <div class="card-header">
-              <h3>Diagnostic Suite</h3>
-              <label class="switch" title="Real-time element inspection overlay">
-                <input type="checkbox" id="inspector-toggle">
-                <span class="slider"></span>
-              </label>
-            </div>
-            <p style="font-size: 11px; color: var(--text-dim); margin-top: 6px;">
-              Toggle the Inspector to highlight elements directly on the page.
-            </p>
-          </div>
+      <div class="section inspector-workspace">
 
-          <div class="suite-header">
-            <h2>Scan Suite</h2>
-            <div class="suite-tag">Internal Engines</div>
+        <!-- Compact Mining Toolbar (Pinned to Top) -->
+        <div class="inspector-toolbar">
+          <div class="toolbar-switcher">
+            <button class="switcher-btn active" data-cluster="actions">Actions</button>
+            <button class="switcher-btn" data-cluster="architecture">Arch</button>
+            <button class="switcher-btn" data-cluster="design">Design</button>
+            <button class="switcher-btn" data-cluster="tech">Tech</button>
+            <button class="switcher-btn" data-cluster="data">Data</button>
+            <button class="switcher-btn" data-cluster="quality">Qual</button>
+            <button class="switcher-btn" data-cluster="psychology">Psych</button>
           </div>
-          <div class="tools-grid">
-            <button id="scan-visualize" class="tool-btn" title="Generate a DOM tree graph">
-              <span class="icon">🕸️</span> <span class="tool-btn-label">Graph</span>
-            </button>
-            <button id="scan-sequence" class="tool-btn" title="Generate a UML Sequence diagram of page logic">
-              <span class="icon">🧬</span> <span class="tool-btn-label">Sequence</span>
-            </button>
-            <button id="scan-structure" class="tool-btn" title="Analyze element counts and nesting">
-              <span class="icon">🏗️</span> <span class="tool-btn-label">Struct</span>
-            </button>
-            <button id="scan-palette" class="tool-btn" title="Extract page color palette">
-              <span class="icon">🎨</span> <span class="tool-btn-label">Palette</span>
-            </button>
-            <button id="scan-assets" class="tool-btn" title="Audit resources">
-              <span class="icon">📦</span> <span class="tool-btn-label">Assets</span>
-            </button>
-            <button id="scan-fonts" class="tool-btn" title="Identify fonts">
-              <span class="icon">🔤</span> <span class="tool-btn-label">Fonts</span>
-            </button>
-            <button id="scan-storage" class="tool-btn" title="Audit LocalStorage & Cookies">
-              <span class="icon">💾</span> <span class="tool-btn-label">Storage</span>
-            </button>
-            <button id="scan-workers" class="tool-btn" title="List service workers">
-              <span class="icon">⚙️</span> <span class="tool-btn-label">Worker</span>
-            </button>
-            <button id="scan-a11y" class="tool-btn" title="Accessibility health check (Alt text, Contrast, Labels)">
-              <span class="icon">♿</span> A11y
-            </button>
-            <button id="scan-seo" class="tool-btn" title="SEO health check (Meta tags, Headings, Links)">
-              <span class="icon">📈</span> SEO
-            </button>
-            <button id="scan-code" class="tool-btn" title="Code Visualizer: Analyze scripts and code distribution">
-              <span class="icon">📜</span> Code
-            </button>
-            <button id="scan-net" class="tool-btn" title="Network Visualizer: Analyze XHR/Fetch and API traffic">
-              <span class="icon">🌐</span> Network
-            </button>
-            <button id="scan-perf" class="tool-btn" title="Measure page load times">
-              <span class="icon">⚡</span> <span class="tool-btn-label">Perf</span>
-            </button>
-            <button id="scan-stack" class="tool-btn" title="Identify libraries">
-              <span class="icon">🧬</span> <span class="tool-btn-label">Stack</span>
-            </button>
-            <button id="scan-psyche" class="tool-btn"
-              title="Psychological Pattern Analysis - Dark patterns, persuasion, manipulation">
-              <span class="icon">🧠</span> <span class="tool-btn-label">Psyche</span>
-            </button>
-            <button id="scan-archetype" class="tool-btn" title="Brand Archetype & Symbolic Analysis">
-              <span class="icon">🎭</span> <span class="tool-btn-label">Archetype</span>
-            </button>
-            <button id="scan-soul" class="tool-btn" title="Soul Analysis - Authenticity, intention, coherence">
-              <span class="icon">✨</span> <span class="tool-btn-label">Soul</span>
-            </button>
-            <button id="scan-shadow" class="tool-btn"
-              title="Shadow Analysis - Hidden manipulations, deceptive patterns">
-              <span class="icon">🌑</span> <span class="tool-btn-label">Shadow</span>
-            </button>
-            <button id="scan-rhetoric" class="tool-btn"
-              title="Rhetorical Analysis - Linguistic patterns, persuasion techniques">
-              <span class="icon">📜</span> <span class="tool-btn-label">Rhetoric</span>
-            </button>
-            <button id="scan-emotion" class="tool-btn"
-              title="Emotional Design Analysis - Psychology of colors, typography, space">
-              <span class="icon">💭</span> <span class="tool-btn-label">Emotion</span>
-            </button>
+          <div class="toolbar-tray">
+            <!-- Actions Cluster -->
+            <div class="toolbar-cluster active" id="cluster-actions">
+              <button id="run-omniscience-btn" class="icon-only-btn" title="Complete Extraction">💎</button>
+              <button id="btn-extract-context" class="icon-only-btn" title="Transform Code">🔮</button>
+              <div class="icon-only-btn-toggle" title="Element Miner">
+                <input type="checkbox" id="inspector-toggle" class="toolbar-checkbox">
+                <label for="inspector-toggle" class="toolbar-checkbox-label">🎯</label>
+              </div>
+            </div>
+
+            <!-- Architecture Cluster -->
+            <div class="toolbar-cluster" id="cluster-architecture">
+              <button id="scan-structure" class="icon-only-btn" title="Structure Analysis">🏗️</button>
+              <button id="scan-visualize" class="icon-only-btn" title="DOM Map Visualization">🗺️</button>
+              <button id="scan-sequence" class="icon-only-btn" title="Flow & Sequence Analysis">🌊</button>
+              <button id="scan-code" class="icon-only-btn" title="Code Review">💻</button>
+            </div>
+
+            <!-- Design Cluster -->
+            <div class="toolbar-cluster" id="cluster-design">
+              <button id="scan-palette" class="icon-only-btn" title="Color Palette Extraction">🎨</button>
+              <button id="scan-fonts" class="icon-only-btn" title="Typography & Fonts">🅰️</button>
+              <button id="scan-emotion" class="icon-only-btn" title="Emotional Impact Analysis">😊</button>
+            </div>
+
+            <!-- Tech Stack Cluster -->
+            <div class="toolbar-cluster" id="cluster-tech">
+              <button id="scan-assets" class="icon-only-btn" title="Asset Inventory">📦</button>
+              <button id="scan-net" class="icon-only-btn" title="API & Network Sniffer">🔌</button>
+              <button id="scan-perf" class="icon-only-btn premium" title="Performance Audit">⚡</button>
+              <button id="scan-stack" class="icon-only-btn" title="Technology Stack Detection">🛠️</button>
+            </div>
+
+            <!-- Data Cluster -->
+            <div class="toolbar-cluster" id="cluster-data">
+              <button id="scan-storage" class="icon-only-btn" title="Storage & Cache Explorer">💾</button>
+              <button id="scan-workers" class="icon-only-btn" title="Service Workers & Threads">👷</button>
+            </div>
+
+            <!-- Quality Cluster -->
+            <div class="toolbar-cluster" id="cluster-quality">
+              <button id="scan-a11y" class="icon-only-btn" title="Accessibility Audit">♿</button>
+              <button id="scan-seo" class="icon-only-btn" title="SEO Optimization Check">🔍</button>
+            </div>
+
+            <!-- Psychology Cluster -->
+            <div class="toolbar-cluster" id="cluster-psychology">
+              <button id="scan-strategy" class="icon-only-btn premium" title="Conversion Strategy">📈</button>
+              <button id="scan-psyche" class="icon-only-btn premium" title="Psychological Profiling">🧠</button>
+              <button id="scan-rhetoric" class="icon-only-btn premium" title="Rhetorical Copy Analysis">📝</button>
+              <button id="scan-archetype" class="icon-only-btn premium" title="Brand Archetype">🎭</button>
+              <button id="scan-soul" class="icon-only-btn premium" title="Trust & Authority">🛡️</button>
+              <button id="scan-shadow" class="icon-only-btn premium" title="Dark Pattern Detection">🌑</button>
+            </div>
           </div>
         </div>
 
-        <div id="analysis-results" class="results-area" style="display: none;">
-          <div class="results-header">
-            <strong id="result-title">Analysis Results</strong>
-            <div class="results-header-actions">
-              <button id="fullscreen-toggle" class="fullscreen-btn" title="Toggle Fullscreen">⛶</button>
-              <span id="clear-results">Clear</span>
+        <!-- Results Display -->
+        <div id="analysis-results" class="results-display">
+          <div class="results-header-inline">
+            <h3 id="result-title" class="result-title-inline">Results</h3>
+            <div class="results-actions-inline">
+              <button id="fullscreen-toggle" class="btn-icon-inline" title="Toggle fullscreen">⛶</button>
+              <button id="clear-results" class="btn-text-inline" title="Clear results">Clear</button>
             </div>
           </div>
-          <div id="result-content"></div>
-          <div id="d3-container" style="display: none;"></div>
+          <div id="result-content" class="results-content">
+            <div class="empty-state">
+              Click any mining tool below to extract insights
+            </div>
+          </div>
+          <div id="d3-container" class="d3-container d3-container-hidden"></div>
         </div>
+
+
+
+        <!-- Element Inspector Panel -->
+        <div id="inspector-panel" class="inspector-panel inspector-panel-hidden">
+          <div class="panel-header">
+            <span id="inspector-element-tag">DIV</span>
+            <code id="inspector-element-selector">body > div.main</code>
+            <button id="close-inspector-panel" class="close-btn">×</button>
+          </div>
+          <div class="panel-content">
+            <div class="style-group">
+              <div class="style-group-label">Layout</div>
+              <div class="style-row">
+                <span>Display</span>
+                <select data-prop="display" class="style-select">
+                  <option value="block">block</option>
+                  <option value="flex">flex</option>
+                  <option value="grid">grid</option>
+                  <option value="inline-block">inline-block</option>
+                  <option value="none">none</option>
+                </select>
+              </div>
+              <div class="style-row">
+                <span>Width</span>
+                <input type="text" data-prop="width" class="style-input">
+              </div>
+              <div class="style-row">
+                <span>Height</span>
+                <input type="text" data-prop="height" class="style-input">
+              </div>
+            </div>
+
+            <div class="style-group">
+              <div class="style-group-label">Appearance</div>
+              <div class="style-row">
+                <span>Background</span>
+                <input type="color" data-prop="backgroundColor" class="style-color">
+              </div>
+              <div class="style-row">
+                <span>Color</span>
+                <input type="color" data-prop="color" class="style-color">
+              </div>
+              <div class="style-row">
+                <span>Opacity</span>
+                <input type="range" data-prop="opacity" min="0" max="1" step="0.1" class="style-range">
+              </div>
+              <div class="style-row">
+                <span>B-Radius</span>
+                <input type="text" data-prop="borderRadius" class="style-input">
+              </div>
+            </div>
+
+            <div class="style-group">
+              <div class="style-group-label">Typography</div>
+              <div class="style-row">
+                <span>Font Size</span>
+                <input type="text" data-prop="fontSize" class="style-input">
+              </div>
+              <div class="style-row">
+                <span>Weight</span>
+                <select data-prop="fontWeight" class="style-select">
+                  <option value="normal">Normal</option>
+                  <option value="bold">Bold</option>
+                  <option value="300">Light</option>
+                  <option value="500">Medium</option>
+                  <option value="700">Bold+</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="style-group">
+              <div class="style-group-label">Spacing</div>
+              <div class="style-row">
+                <span>Padding</span>
+                <input type="text" data-prop="padding" class="style-input">
+              </div>
+              <div class="style-row">
+                <span>Margin</span>
+                <input type="text" data-prop="margin" class="style-input">
+              </div>
+            </div>
+
+            <div class="style-group">
+              <div class="style-group-label">Shadow</div>
+              <div class="style-row full">
+                <input type="text" data-prop="boxShadow" class="style-input" placeholder="box-shadow value">
+              </div>
+            </div>
+
+            <div class="style-group">
+              <div class="style-group-label">System Variables</div>
+              <div id="inspector-variables-list" class="variables-list">
+                <div class="inspector-variables-empty">Select an element to view CSS variables</div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-footer">
+            <button id="copy-css-btn" class="btn btn-small btn-secondary">Copy CSS</button>
+            <button id="zap-element-btn" class="btn btn-small btn-danger">Zap</button>
+          </div>
+        </div>
+
       </div>
     </div>
 
 
     <!-- Tools Tab -->
     <div id="tools-tab" class="tab-content">
-      <div class="section">
-        <div class="suite-header">
-          <h2>Operation Suite</h2>
-          <div class="suite-tag">Quick Actions</div>
+      <div class="toolbar-container">
+
+        <!-- Group 1: Visual Forensics -->
+        <div class="toolbar-group">
+          <div class="toolbar-label">Visual Forensics</div>
+          <div class="toolbar-row">
+            <button id="tool-xray" class="tool-btn highlight" title="Explode DOM in 3D layers">
+              <span class="icon">🧊</span> <span class="tool-btn-label">X-Ray</span>
+            </button>
+            <button id="tool-heatmap" class="tool-btn highlight" title="Visualize visual weight and focus">
+              <span class="icon">🔥</span> <span class="tool-btn-label">Heatmap</span>
+            </button>
+            <button id="tool-contrast" class="tool-btn" title="Highlight low contrast elements">
+              <span class="icon">🌓</span> <span class="tool-btn-label">Contrast</span>
+            </button>
+            <button id="tool-wireframe" class="tool-btn" title="Toggle wireframe mode">
+              <span class="icon">🖼️</span> <span class="tool-btn-label">Wire</span>
+            </button>
+            <button id="tool-images" class="tool-btn" title="Toggle image visibility">
+              <span class="icon">👁️</span> <span class="tool-btn-label">Images</span>
+            </button>
+            <button id="tool-specimen" class="tool-btn" title="Generate Brand Style Guide">
+              <span class="icon">📋</span> <span class="tool-btn-label">Specimen</span>
+            </button>
+            <button id="tool-gravity" class="tool-btn highlight" title="Make elements fall with physics">
+              <span class="icon">🌌</span> <span class="tool-btn-label">Gravity</span>
+            </button>
+            <button id="tool-neural" class="tool-btn highlight" title="Visualize logical connections">
+              <span class="icon">🧠</span> <span class="tool-btn-label">Neural</span>
+            </button>
+            <button id="tool-ghost" class="tool-btn" title="Visualize recent interactions">
+              <span class="icon">👻</span> <span class="tool-btn-label">Ghost</span>
+            </button>
+          </div>
         </div>
-        <div class="tools-grid">
-          <button id="tool-edit" class="tool-btn" title="Toggle universal edit mode">
-            <span class="icon">✏️</span> <span class="tool-btn-label">Edit</span>
-          </button>
-          <button id="tool-zap" class="tool-btn" title="Remove element from DOM">
-            <span class="icon">⚡</span> <span class="tool-btn-label">Zap</span>
-          </button>
-          <button id="tool-wireframe" class="tool-btn" title="Toggle wireframe mode">
-            <span class="icon">🖼️</span> <span class="tool-btn-label">Wire</span>
-          </button>
-          <button id="tool-images" class="tool-btn" title="Toggle image visibility">
-            <span class="icon">👁️</span> <span class="tool-btn-label">Images</span>
-          </button>
-          <button id="tool-unmask" class="tool-btn" title="Show password fields">
-            <span class="icon">🔑</span> <span class="tool-btn-label">Unmask</span>
-          </button>
-          <button id="tool-enable" class="tool-btn" title="Enable disabled inputs">
-            <span class="icon">🔓</span> <span class="tool-btn-label">Inputs</span>
-          </button>
-          <button id="tool-kill-sticky" class="tool-btn" title="Remove sticky elements">
-            <span class="icon">🩹</span> <span class="tool-btn-label">Stickies</span>
-          </button>
-          <button id="tool-pii" class="tool-btn" title="Scan for emails">
-            <span class="icon">📧</span> <span class="tool-btn-label">Emails</span>
-          </button>
-          <button id="tool-export-links" class="tool-btn" title="Extract links">
-            <span class="icon">🔗</span> <span class="tool-btn-label">Links</span>
-          </button>
-          <button id="tool-export-colors" class="tool-btn" title="Extract colors">
-            <span class="icon">🎨</span> <span class="tool-btn-label">Colors</span>
-          </button>
-          <button id="tool-screenshot" class="tool-btn" title="Take screenshot">
-            <span class="icon">📸</span> <span class="tool-btn-label">Shot</span>
-          </button>
-          <button id="tool-console" class="tool-btn" title="Inject console">
-            <span class="icon">💻</span> <span class="tool-btn-label">Console</span>
-          </button>
+
+        <!-- Group 2: Interaction & Modification -->
+        <div class="toolbar-group">
+          <div class="toolbar-label">Interaction & Modification</div>
+          <div class="toolbar-row">
+            <button id="tool-god-mode" class="tool-btn super-highlight" title="Toggle Universal Edit Mode">
+              <span class="icon">⚡</span> <span class="tool-btn-label">God Mode</span>
+            </button>
+            <button id="tool-edit" class="tool-btn" title="Toggle universal edit mode">
+              <span class="icon">✏️</span> <span class="tool-btn-label">Edit</span>
+            </button>
+            <button id="tool-zap" class="tool-btn" title="Remove element from DOM">
+              <span class="icon">⚡</span> <span class="tool-btn-label">Zap</span>
+            </button>
+            <button id="tool-enable" class="tool-btn" title="Enable disabled inputs">
+              <span class="icon">🔓</span> <span class="tool-btn-label">Inputs</span>
+            </button>
+            <button id="tool-unmask" class="tool-btn" title="Show password fields">
+              <span class="icon">🔑</span> <span class="tool-btn-label">Unmask</span>
+            </button>
+            <button id="tool-kill-sticky" class="tool-btn" title="Remove sticky elements">
+              <span class="icon">🩹</span> <span class="tool-btn-label">Stickies</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Group 3: Data & Utility -->
+        <div class="toolbar-group">
+          <div class="toolbar-label">Data & Utility</div>
+          <div class="toolbar-row">
+            <button id="tool-sniffer" class="tool-btn" title="Live event sniffer">
+              <span class="icon">🐕</span> <span class="tool-btn-label">Sniffer</span>
+            </button>
+            <button id="tool-console" class="tool-btn" title="Inject console">
+              <span class="icon">💻</span> <span class="tool-btn-label">Console</span>
+            </button>
+            <button id="tool-pii" class="tool-btn" title="Scan for emails">
+              <span class="icon">📧</span> <span class="tool-btn-label">Emails</span>
+            </button>
+            <button id="tool-export-links" class="tool-btn" title="Extract links">
+              <span class="icon">🔗</span> <span class="tool-btn-label">Links</span>
+            </button>
+            <button id="tool-export-colors" class="tool-btn" title="Extract colors">
+              <span class="icon">🎨</span> <span class="tool-btn-label">Colors</span>
+            </button>
+            <button id="tool-screenshot" class="tool-btn" title="Take screenshot">
+              <span class="icon">📸</span> <span class="tool-btn-label">Shot</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Group 4: Reality Distortion -->
+        <div class="toolbar-group reality-group">
+          <div class="toolbar-label">Reality Distortion Engine</div>
+          <div class="toolbar-row">
+            <button id="warp-cyberdeck" class="tool-btn warp-btn" title="Apply Cyberdeck Theme">
+              <span class="icon">💾</span> <span class="tool-btn-label">Cyber</span>
+            </button>
+            <button id="warp-blueprint" class="tool-btn warp-btn" title="Apply Blueprint Theme">
+              <span class="icon">📐</span> <span class="tool-btn-label">Print</span>
+            </button>
+            <button id="warp-brutalist" class="tool-btn warp-btn" title="Apply Brutalist Theme">
+              <span class="icon">🕋</span> <span class="tool-btn-label">Brutal</span>
+            </button>
+            <button id="warp-vaporwave" class="tool-btn warp-btn" title="Apply Vaporwave Theme">
+              <span class="icon">🗿</span> <span class="tool-btn-label">Vapor</span>
+            </button>
+            <button id="warp-glitch" class="tool-btn warp-btn" title="Apply Glitch Theme">
+              <span class="icon">👾</span> <span class="tool-btn-label">Glitch</span>
+            </button>
+            <button id="warp-reset" class="tool-btn warp-btn" title="Reset Reality">
+              <span class="icon">↩️</span> <span class="tool-btn-label">Reset</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -747,6 +914,8 @@
   <script src="lib/codemirror/mode/xml.min.js"></script>
   <script src="lib/codemirror/mode/htmlmixed.min.js"></script>
 
+  <script src="lib/templates.js"></script>
+  <script src="utils.js"></script>
   <script src="popup.js"></script>
   <script src="export.js"></script>
 </body>

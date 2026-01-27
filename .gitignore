@@ -14,6 +14,10 @@ build/
 *.swo
 *~
 
+# AGENTS
+.context/
+.archive/
+
 # OS
 .DS_Store
 Thumbs.db

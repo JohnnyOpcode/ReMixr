@@ -18,7 +18,6 @@
 // Manages extension builder state and operations
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('ReMixr Extension Builder installed!');
   setupSidePanel();
 
   // Create context menu item
@@ -41,11 +40,20 @@ chrome.runtime.onStartup.addListener(() => {
   setupSidePanel();
 });
 
+/**
+ * Sets up the side panel behavior for the extension.
+ * Configures the panel to open when the extension action is clicked.
+ */
 function setupSidePanel() {
   // Set side panel to open on click
   // This persists across sessions
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
-    .catch((error) => console.error(error));
+    .catch((error) => {
+      // Silently handle error - older Chrome versions may not support this API
+      if (chrome.runtime.lastError) {
+        // Error is already logged by Chrome
+      }
+    });
 }
 
 // Fallback: If for some reason the above doesn't work, manual trigger

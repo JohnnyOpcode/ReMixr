@@ -23,1428 +23,330 @@ let projects = [];
 let cmEditor = null;
 
 // Extension Templates
-const TEMPLATES = {
-  'starter': {
-    name: 'Starter Extension',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Starter Extension',
-        version: '1.0.0',
-        description: 'A basic starter extension',
-        permissions: ['activeTab'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Starter Extension</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>Starter Project</h1>
-  <p>Modify this template to build your extension.</p>
-  <button id="click-me">Click Me!</button>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Initial logic
-document.getElementById('click-me').addEventListener('click', () => {
-  alert('Hello from your new extension!');
-});`,
-      'styles.css': `body {
-  width: 250px;
-  padding: 15px;
-  font-family: sans-serif;
-  text-align: center;
-}
-button {
-  padding: 8px 16px;
-  cursor: pointer;
-}`
-    }
-  },
-  'content-modifier': {
-    name: 'Content Modifier',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'My Content Modifier',
-        version: '1.0.0',
-        description: 'Modifies webpage content',
-        permissions: ['activeTab', 'scripting'],
-        content_scripts: [{
-          matches: ['<all_urls>'],
-          js: ['content.js'],
-          run_at: 'document_idle'
-        }],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'content.js': `// Content script - Runs on all pages
-console.log('Content modifier loaded!');
+// TEMPLATES moved to lib/templates.js
 
-// Example: Highlight all links
-document.querySelectorAll('a').forEach(link => {
-  link.style.backgroundColor = 'yellow';
-});`,
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Content Modifier</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>Content Modifier</h1>
-  <p>Extension is active!</p>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Popup logic
-console.log('Popup loaded!');`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-}
+// ============================================================================
+// VALIDATION & ERROR HANDLING UTILITIES (Phase 2 Feature)
+// ============================================================================
 
-h1 {
-  font-size: 18px;
-  color: #333;
-}`
-    }
-  },
-  'productivity': {
-    name: 'Productivity Timer',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Productivity Timer',
-        version: '1.0.0',
-        description: 'Track time spent on websites',
-        permissions: ['storage', 'tabs'],
-        background: {
-          service_worker: 'background.js'
-        },
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'background.js': `// Background service worker
-let activeTabId = null;
-let startTime = null;
+/**\n * Validates a manifest.json object for Manifest V3 compliance
+ * @param {Object} manifest - The manifest object to validate
+ * @returns {Object} - { valid: boolean, errors: string[], warnings: string[] }
+ */
+function validateManifest(manifest) {
+  const errors = [];
+  const warnings = [];
 
-chrome.tabs.onActivated.addListener((activeInfo) => {
-  saveTimeForCurrentTab();
-  activeTabId = activeInfo.tabId;
-  startTime = Date.now();
-});
-
-function saveTimeForCurrentTab() {
-  if (activeTabId && startTime) {
-    const timeSpent = Date.now() - startTime;
-    chrome.storage.local.get(['timeData'], (result) => {
-      const timeData = result.timeData || {};
-      timeData[activeTabId] = (timeData[activeTabId] || 0) + timeSpent;
-      chrome.storage.local.set({ timeData });
-    });
+  // Required fields
+  if (!manifest.manifest_version) {
+    errors.push('Missing required field: manifest_version');
+  } else if (manifest.manifest_version !== 3) {
+    errors.push('ReMixr only supports Manifest V3 (manifest_version: 3)');
   }
-}`,
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Productivity Timer</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>⏱️ Time Tracker</h1>
-  <div id="stats">Loading...</div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Display time statistics
-chrome.storage.local.get(['timeData'], (result) => {
-  const stats = document.getElementById('stats');
-  const timeData = result.timeData || {};
-  
-  if (Object.keys(timeData).length === 0) {
-    stats.textContent = 'No data yet';
-  } else {
-    const totalTime = Object.values(timeData).reduce((a, b) => a + b, 0);
-    const minutes = Math.floor(totalTime / 60000);
-    stats.textContent = \`Total: \${minutes} minutes\`;
+
+  if (!manifest.name || manifest.name.trim() === '') {
+    errors.push('Missing required field: name');
+  } else if (manifest.name.length > 45) {
+    warnings.push('Extension name exceeds recommended length (45 chars)');
   }
-});`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-}`
-    }
-  },
-  'data-extractor': {
-    name: 'Data Extractor',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Data Extractor',
-        version: '1.0.0',
-        description: 'Extract data from webpages',
-        permissions: ['activeTab', 'scripting'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Data Extractor</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>📊 Data Extractor</h1>
-  <button id="extract-links">Extract All Links</button>
-  <button id="extract-images">Extract All Images</button>
-  <div id="results"></div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `document.getElementById('extract-links').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => {
-      const links = Array.from(document.querySelectorAll('a'))
-        .map(a => a.href)
-        .filter(href => href);
-      return links;
-    }
-  }, (results) => {
-    displayResults(results[0].result);
-  });
-});
 
-document.getElementById('extract-images').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => {
-      const images = Array.from(document.querySelectorAll('img'))
-        .map(img => img.src)
-        .filter(src => src);
-      return images;
-    }
-  }, (results) => {
-    displayResults(results[0].result);
-  });
-});
-
-function displayResults(data) {
-  const resultsDiv = document.getElementById('results');
-  if (!data || data.length === 0) {
-      resultsDiv.innerHTML = '<div>No results found</div>';
-      return;
+  if (!manifest.version) {
+    errors.push('Missing required field: version');
+  } else if (!/^\d+(\.\d+){0,3}$/.test(manifest.version)) {
+    errors.push('Invalid version format (use X.Y.Z format)');
   }
-  resultsDiv.innerHTML = data.map(item => \`<div>\${item}</div>\`).join('');
-}`,
-      'styles.css': `body {
-  width: 400px;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-}
 
-button {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
+  if (!manifest.description || manifest.description.trim() === '') {
+    warnings.push('Missing recommended field: description');
+  } else if (manifest.description.length > 132) {
+    warnings.push('Description exceeds Chrome Web Store limit (132 chars)');
+  }
 
-#results {
-  margin-top: 10px;
-  max-height: 300px;
-  overflow-y: auto;
-  word-break: break-all;
-}`
+  // Icons validation
+  if (!manifest.icons) {
+    warnings.push('No icons specified - ReMixr will generate default icons');
+  }
+
+  // Permission auditing
+  if (manifest.permissions) {
+    const dangerousPermissions = ['<all_urls>', 'webRequest', 'webRequestBlocking', 'proxy', 'debugger', 'management'];
+    const sensitive = manifest.permissions.filter(p => dangerousPermissions.includes(p));
+    if (sensitive.length > 0) {
+      warnings.push(`Sensitive permissions detected: ${sensitive.join(', ')} - Users may be cautious`);
     }
-  },
-  'page-monitor': {
-    name: 'Page Monitor',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Page Monitor',
-        version: '1.0.0',
-        description: 'Track changes on websites',
-        permissions: ['activeTab', 'storage', 'notifications'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Page Monitor</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>👁️ Page Monitor</h1>
-  <div class="status-box">
-    <p id="monitor-status">Not monitoring</p>
-  </div>
-  <button id="save-snapshot">Save Snapshot</button>
-  <button id="check-change">Check for Changes</button>
-  <div id="result"></div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Simple Page Monitor
-document.getElementById('save-snapshot').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const url = tab.url;
-  
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: () => document.body.innerText.length
-  }, (results) => {
-    const length = results[0].result;
-    chrome.storage.local.set({ [url]: length }, () => {
-      document.getElementById('monitor-status').textContent = 'Snapshot saved! Size: ' + length;
-    });
-  });
-});
 
-document.getElementById('check-change').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const url = tab.url;
-  
-  chrome.storage.local.get([url], (result) => {
-    const savedLength = result[url];
-    if (!savedLength) {
-      document.getElementById('result').textContent = 'No snapshot found for this page.';
-      return;
+    if (manifest.permissions.includes('tabs') && !manifest.permissions.includes('activeTab')) {
+      warnings.push('Consider using "activeTab" instead of "tabs" for better privacy');
     }
-    
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => document.body.innerText.length
-    }, (results) => {
-      const currentLength = results[0].result;
-      const diff = Math.abs(currentLength - savedLength);
-      
-      if (diff === 0) {
-        document.getElementById('result').textContent = 'No changes detected.';
-        document.getElementById('result').className = 'no-change';
-      } else {
-        document.getElementById('result').textContent = \`Changes detected! Size difference: \${diff} chars\`;
-        document.getElementById('result').className = 'changed';
+  }
+
+  // Host permissions audit
+  if (manifest.host_permissions) {
+    if (manifest.host_permissions.includes('<all_urls>') ||
+      (manifest.host_permissions.includes('https://*/*') && manifest.host_permissions.includes('http://*/*'))) {
+      warnings.push('Extension requests access to ALL websites - consider limiting scope');
+    }
+  }
+
+  // Background service worker validation
+  if (manifest.background) {
+    if (!manifest.background.service_worker) {
+      errors.push('Manifest V3 requires background.service_worker (not background.scripts)');
+    }
+    if (manifest.background.persistent !== undefined) {
+      errors.push('Manifest V3 does not support background.persistent (service workers are non-persistent)');
+    }
+  }
+
+  // Content scripts validation
+  if (manifest.content_scripts) {
+    manifest.content_scripts.forEach((cs, idx) => {
+      if (!cs.matches || cs.matches.length === 0) {
+        errors.push(`content_scripts[${idx}]: Missing required field "matches"`);
+      }
+      if (!cs.js && !cs.css) {
+        warnings.push(`content_scripts[${idx}]: No js or css files specified`);
       }
     });
-  });
-});`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-}
-.status-box {
-  background: #f0f0f0;
-  padding: 10px;
-  border-radius: 4px;
-  margin-bottom: 10px;
-}
-button {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0;
-  background: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.changed { color: red; font-weight: bold; }
-.no-change { color: green; }`
-    }
-  },
-  'popup-tool': {
-    name: 'Popup Toolbox',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Popup Toolbox',
-        version: '1.0.0',
-        description: 'Useful browser utilities',
-        permissions: ['activeTab', 'scripting'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Toolbox</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>🔧 Toolbox</h1>
-  <div class="tool-grid">
-    <button id="dark-mode">Toggle Dark Mode</button>
-    <button id="remove-images">Hide Images</button>
-    <button id="outline">Outline Elements</button>
-    <button id="edit-mode">Edit Text</button>
-  </div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Toolbox Utilities
-function execute(func) {
-  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-    chrome.scripting.executeScript({
-      target: { tabId: tabs[0].id },
-      func: func
-    });
-  });
+  }
+
+  // Action validation (replaces browser_action/page_action)
+  if (manifest.browser_action || manifest.page_action) {
+    errors.push('Manifest V3 uses "action" instead of "browser_action" or "page_action"');
+  }
+
+  return { valid: errors.length === 0, errors, warnings };
 }
 
-document.getElementById('dark-mode').addEventListener('click', () => {
-  execute(() => {
-    document.querySelector('html').style.filter = 
-      document.querySelector('html').style.filter === 'invert(1) hue-rotate(180deg)' 
-        ? '' 
-        : 'invert(1) hue-rotate(180deg)';
-  });
-});
+/**
+ * Validates JavaScript code for common errors
+ * @param {string} code - JavaScript code to validate
+ * @returns {Object} - { valid: boolean, errors: string[] }
+ */
+function validateJavaScript(code) {
+  const errors = [];
 
-document.getElementById('remove-images').addEventListener('click', () => {
-  execute(() => {
-    document.querySelectorAll('img').forEach(img => {
-      img.style.display = img.style.display === 'none' ? '' : 'none';
-    });
-  });
-});
+  try {
+    // Basic syntax check using Function constructor
+    new Function(code);
+  } catch (e) {
+    errors.push(`Syntax Error: ${e.message}`);
+  }
 
-document.getElementById('outline').addEventListener('click', () => {
-  execute(() => {
-    document.querySelectorAll('*').forEach(el => {
-      el.style.outline = '1px solid red';
-    });
-  });
-});
+  // Check for common mistakes
+  if (code.includes('eval(')) {
+    errors.push('Security: eval() is not allowed in Chrome extensions (CSP violation)');
+  }
 
-document.getElementById('edit-mode').addEventListener('click', () => {
-  execute(() => {
-    document.body.contentEditable = 
-      document.body.contentEditable === 'true' ? 'false' : 'true';
-    alert('Edit mode: ' + document.body.contentEditable);
-  });
-});`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 15px;
-  font-family: 'Segoe UI', sans-serif;
-}
-h1 { margin-top: 0; }
-.tool-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-button {
-  padding: 15px 5px;
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-button:hover {
-  background: #e9ecef;
-  border-color: #adb5bd;
-}`
-    }
-  },
-  'blank': {
-    name: 'Blank Project',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'My Extension',
-        version: '1.0.0',
-        description: 'Description of my extension',
-        permissions: ['activeTab'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>My Extension</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>My Extension</h1>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Your code here
-console.log('Extension loaded!');`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-}`
-    }
-  },
-  'tab-manager': {
-    name: 'Tab Manager',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Tab Manager',
-        version: '1.0.0',
-        description: 'Organize and manage your browser tabs',
-        permissions: ['tabs', 'storage'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Tab Manager</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>📑 Tab Manager</h1>
-  <div class="actions">
-    <button id="close-duplicates">Close Duplicates</button>
-    <button id="group-by-domain">Group by Domain</button>
-    <button id="save-session">Save Session</button>
-  </div>
-  <div id="tab-list"></div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Tab Manager Logic
-async function loadTabs() {
-  const tabs = await chrome.tabs.query({});
-  const tabList = document.getElementById('tab-list');
-  
-  tabList.innerHTML = tabs.map(tab => \`
-    <div class="tab-item" data-id="\${tab.id}">
-      <img src="\${tab.favIconUrl || 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"/>'}" width="16" height="16">
-      <span>\${tab.title}</span>
-      <button class="close-tab" data-id="\${tab.id}">×</button>
-    </div>
-  \`).join('');
-  
-  // Add close handlers
-  document.querySelectorAll('.close-tab').forEach(btn => {
-    btn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      const tabId = parseInt(btn.dataset.id);
-      await chrome.tabs.remove(tabId);
-      loadTabs();
-    });
-  });
+  if (code.match(/innerHTML\s*=\s*[^"']/) && code.includes('document.write')) {
+    errors.push('Security: Unsafe HTML injection detected - use textContent or sanitize input');
+  }
+
+  // Check for Manifest V2 API usage
+  if (code.includes('chrome.browserAction')) {
+    errors.push('API: chrome.browserAction is deprecated - use chrome.action in Manifest V3');
+  }
+
+  if (code.includes('chrome.extension')) {
+    errors.push('API: chrome.extension is deprecated - use chrome.runtime');
+  }
+
+  return { valid: errors.length === 0, errors };
 }
 
-document.getElementById('close-duplicates').addEventListener('click', async () => {
-  const tabs = await chrome.tabs.query({});
-  const urls = new Set();
-  const toClose = [];
-  
-  tabs.forEach(tab => {
-    if (urls.has(tab.url)) {
-      toClose.push(tab.id);
+/**
+ * Audits permissions and provides recommendations
+ * @param {Object} manifest - The manifest object
+ * @returns {Object} - { score: number, recommendations: string[] }
+ */
+function auditPermissions(manifest) {
+  const recommendations = [];
+  let score = 100; // Start with perfect score
+
+  const permissions = manifest.permissions || [];
+  const hostPermissions = manifest.host_permissions || [];
+
+  // Overly broad permissions
+  if (hostPermissions.includes('<all_urls>')) {
+    score -= 30;
+    recommendations.push('🔴 Avoid <all_urls> - specify exact domains you need');
+  }
+
+  if (permissions.includes('tabs') && !permissions.includes('activeTab')) {
+    score -= 15;
+    recommendations.push('🟡 Consider activeTab instead of tabs for privacy');
+  }
+
+  if (permissions.includes('history')) {
+    score -= 10;
+    recommendations.push('🟡 History permission is sensitive - ensure users understand why');
+  }
+
+  if (permissions.includes('cookies')) {
+    score -= 10;
+    recommendations.push('🟡 Cookies permission can access authentication - handle securely');
+  }
+
+  // Good practices
+  if (permissions.includes('activeTab')) {
+    recommendations.push('🟢 Good: Using activeTab for on-demand access');
+  }
+
+  if (permissions.includes('storage') && !permissions.includes('unlimitedStorage')) {
+    recommendations.push('🟢 Good: Using storage with default quota limits');
+  }
+
+  if (permissions.length === 0 && hostPermissions.length === 0) {
+    score = 100;
+    recommendations.push('🟢 Excellent: Minimal permissions (most secure)');
+  }
+
+  return { score: Math.max(0, score), recommendations };
+}
+
+/**
+ * Handles keyboard shortcuts
+ * @param {KeyboardEvent} e - Keyboard event
+ */
+function handleKeyboardShortcuts(e) {
+  // Ignore shortcuts when typing in inputs/textareas (except CodeMirror)
+  const target = e.target;
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+    return;
+  }
+
+  // Ctrl/Cmd + S: Save project
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    saveCurrentProject();
+    return;
+  }
+
+  // Ctrl/Cmd + E: Export extension
+  if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+    e.preventDefault();
+    if (currentProject) {
+      exportExtension();
     } else {
-      urls.add(tab.url);
+      showStatus('No project to export', 'error');
     }
-  });
-  
-  if (toClose.length > 0) {
-    await chrome.tabs.remove(toClose);
-    loadTabs();
+    return;
   }
-});
 
-document.getElementById('group-by-domain').addEventListener('click', async () => {
-  const tabs = await chrome.tabs.query({});
-  const groups = {};
-  
-  tabs.forEach(tab => {
-    const domain = new URL(tab.url).hostname;
-    if (!groups[domain]) groups[domain] = [];
-    groups[domain].push(tab);
-  });
-  
-  console.log('Tab groups:', groups);
-  alert('Check console for grouped tabs');
-});
-
-document.getElementById('save-session').addEventListener('click', async () => {
-  const tabs = await chrome.tabs.query({});
-  const session = tabs.map(t => ({ url: t.url, title: t.title }));
-  
-  await chrome.storage.local.set({ 
-    savedSession: session,
-    savedAt: new Date().toISOString()
-  });
-  
-  alert('Session saved!');
-});
-
-loadTabs();`,
-      'styles.css': `body {
-  width: 400px;
-  max-height: 600px;
-  padding: 15px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
-
-h1 {
-  font-size: 18px;
-  margin: 0 0 15px 0;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 15px;
-}
-
-button {
-  flex: 1;
-  padding: 8px;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 11px;
-}
-
-button:hover {
-  background: #45a049;
-}
-
-#tab-list {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.tab-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-bottom: 1px solid #eee;
-  cursor: pointer;
-}
-
-.tab-item:hover {
-  background: #f5f5f5;
-}
-
-.tab-item span {
-  flex: 1;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.close-tab {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  background: #f44336;
-  font-size: 16px;
-  line-height: 1;
-}`
+  // Ctrl/Cmd + P: Preview
+  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+    e.preventDefault();
+    const previewBtn = document.getElementById('preview-btn');
+    if (previewBtn) {
+      previewBtn.click();
     }
-  },
-  'bookmark-organizer': {
-    name: 'Bookmark Organizer',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Bookmark Organizer',
-        version: '1.0.0',
-        description: 'Organize and search bookmarks efficiently',
-        permissions: ['bookmarks', 'storage'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Bookmark Organizer</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>🔖 Bookmarks</h1>
-  <input type="text" id="search" placeholder="Search bookmarks...">
-  <div id="bookmark-list"></div>
-  <button id="add-current">+ Add Current Page</button>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Bookmark Organizer
-let allBookmarks = [];
-
-async function loadBookmarks() {
-  const tree = await chrome.bookmarks.getTree();
-  allBookmarks = [];
-  
-  function traverse(nodes) {
-    nodes.forEach(node => {
-      if (node.url) {
-        allBookmarks.push(node);
-      }
-      if (node.children) {
-        traverse(node.children);
-      }
-    });
+    return;
   }
-  
-  traverse(tree);
-  displayBookmarks(allBookmarks);
+
+  // Ctrl/Cmd + N: New project
+  if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+    e.preventDefault();
+    const template = 'starter';
+    loadTemplate(template);
+    showStatus('New project created from starter template', 'success');
+    return;
+  }
+
+  // Ctrl/Cmd + /: Toggle help
+  if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+    e.preventDefault();
+    showKeyboardHelp();
+    return;
+  }
+
+  // Escape: Close modals/preview
+  if (e.key === 'Escape') {
+    const previewContainer = document.getElementById('preview-container');
+    if (previewContainer && previewContainer.style.display !== 'none') {
+      document.getElementById('close-preview')?.click();
+    }
+  }
 }
 
-function displayBookmarks(bookmarks) {
-  const list = document.getElementById('bookmark-list');
-  list.innerHTML = bookmarks.slice(0, 50).map(b => \`
-    <div class="bookmark-item">
-      <a href="\${b.url}" target="_blank">\${b.title || b.url}</a>
+/**
+ * Shows keyboard shortcuts help overlay
+ */
+function showKeyboardHelp() {
+  const help = `
+    <div style="padding: 20px; font-family: monospace;">
+      <h2 style="margin-top: 0;">⌨️ Keyboard Shortcuts</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="padding: 8px;"><kbd>Ctrl+S</kbd></td><td>Save Project</td></tr>
+        <tr><td style="padding: 8px;"><kbd>Ctrl+E</kbd></td><td>Export Extension</td></tr>
+        <tr><td style="padding: 8px;"><kbd>Ctrl+P</kbd></td><td>Preview</td></tr>
+        <tr><td style="padding: 8px;"><kbd>Ctrl+N</kbd></td><td>New Project</td></tr>
+        <tr><td style="padding: 8px;"><kbd>Ctrl+/</kbd></td><td>Show This Help</td></tr>
+        <tr><td style="padding: 8px;"><kbd>Esc</kbd></td><td>Close Preview/Modal</td></tr>
+      </table>
+      <p style="margin-top: 15px; color: #888; font-size: 12px;">Use Cmd instead of Ctrl on Mac</p>
+      <button onclick="document.getElementById('analysis-results').style.display='none'" 
+              style="margin-top: 15px; padding: 8px 16px; cursor: pointer;">Close</button>
     </div>
-  \`).join('');
-}
+  `;
 
-document.getElementById('search').addEventListener('input', (e) => {
-  const query = e.target.value.toLowerCase();
-  const filtered = allBookmarks.filter(b => 
-    (b.title && b.title.toLowerCase().includes(query)) ||
-    (b.url && b.url.toLowerCase().includes(query))
-  );
-  displayBookmarks(filtered);
-});
-
-document.getElementById('add-current').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  await chrome.bookmarks.create({
-    title: tab.title,
-    url: tab.url
-  });
-  alert('Bookmark added!');
-  loadBookmarks();
-});
-
-loadBookmarks();`,
-      'styles.css': `body {
-  width: 400px;
-  max-height: 500px;
-  padding: 15px;
-  font-family: Arial, sans-serif;
-}
-
-h1 {
-  font-size: 18px;
-  margin: 0 0 10px 0;
-}
-
-#search {
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-}
-
-#bookmark-list {
-  max-height: 350px;
-  overflow-y: auto;
-  margin-bottom: 10px;
-}
-
-.bookmark-item {
-  padding: 8px;
-  border-bottom: 1px solid #eee;
-}
-
-.bookmark-item a {
-  color: #1a73e8;
-  text-decoration: none;
-  font-size: 13px;
-}
-
-.bookmark-item a:hover {
-  text-decoration: underline;
-}
-
-#add-current {
-  width: 100%;
-  padding: 10px;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}`
-    }
-  },
-  'form-filler': {
-    name: 'Form Filler',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Smart Form Filler',
-        version: '1.0.0',
-        description: 'Auto-fill forms with saved data',
-        permissions: ['activeTab', 'scripting', 'storage'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Form Filler</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>📝 Form Filler</h1>
-  <div class="profile">
-    <input type="text" id="name" placeholder="Full Name">
-    <input type="email" id="email" placeholder="Email">
-    <input type="tel" id="phone" placeholder="Phone">
-    <button id="save-profile">Save Profile</button>
-    <button id="fill-form">Fill Current Form</button>
-  </div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `// Form Filler Logic
-async function loadProfile() {
-  const data = await chrome.storage.local.get(['profile']);
-  if (data.profile) {
-    document.getElementById('name').value = data.profile.name || '';
-    document.getElementById('email').value = data.profile.email || '';
-    document.getElementById('phone').value = data.profile.phone || '';
+  const resultsDiv = document.getElementById('analysis-results');
+  if (resultsDiv) {
+    resultsDiv.innerHTML = help;
+    resultsDiv.style.display = 'block';
   }
 }
 
-document.getElementById('save-profile').addEventListener('click', async () => {
-  const profile = {
-    name: document.getElementById('name').value,
-    email: document.getElementById('email').value,
-    phone: document.getElementById('phone').value
-  };
-  
-  await chrome.storage.local.set({ profile });
-  alert('Profile saved!');
-});
+// ============================================================================
+// END VALIDATION & ERROR HANDLING
+// ============================================================================
 
-document.getElementById('fill-form').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const data = await chrome.storage.local.get(['profile']);
-  
-  if (!data.profile) {
-    alert('Please save a profile first');
-    return;
-  }
-  
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: (profile) => {
-      // Fill name fields
-      document.querySelectorAll('input[name*="name"], input[id*="name"]').forEach(input => {
-        if (input.type === 'text') input.value = profile.name;
-      });
-      
-      // Fill email fields
-      document.querySelectorAll('input[type="email"], input[name*="email"]').forEach(input => {
-        input.value = profile.email;
-      });
-      
-      // Fill phone fields
-      document.querySelectorAll('input[type="tel"], input[name*="phone"]').forEach(input => {
-        input.value = profile.phone;
-      });
-    },
-    args: [data.profile]
-  });
-  
-  alert('Form filled!');
-});
+// ============================================================================
+// THEME MANAGEMENT
+// ============================================================================
 
-loadProfile();`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 15px;
-  font-family: Arial, sans-serif;
-}
-
-h1 {
-  font-size: 16px;
-  margin: 0 0 15px 0;
-}
-
-.profile input {
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 8px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  box-sizing: border-box;
-}
-
-.profile button {
-  width: 100%;
-  padding: 10px;
-  margin-top: 5px;
-  background: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.profile button:hover {
-  background: #0b7dda;
-}
-
-#fill-form {
-  background: #4CAF50;
-}
-
-#fill-form:hover {
-  background: #45a049;
-}`
-    }
-  },
-  'dark-mode': {
-    name: 'Universal Dark Mode',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Universal Dark Mode',
-        version: '1.0.0',
-        description: 'Apply dark mode to any website',
-        permissions: ['activeTab', 'scripting'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Dark Mode</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>🌙 Dark Mode</h1>
-  <button id="toggle-dark">Toggle Dark Mode</button>
-  <div class="intensity">
-    <label>Intensity:</label>
-    <input type="range" id="intensity" min="0" max="100" value="100">
-  </div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `document.getElementById('toggle-dark').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const intensity = document.getElementById('intensity').value / 100;
-  
-  await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: (intensity) => {
-      const existingFilter = document.querySelector('#dark-mode-filter');
-      
-      if (existingFilter) {
-        existingFilter.remove();
-      } else {
-        const style = document.createElement('style');
-        style.id = 'dark-mode-filter';
-        style.textContent = \`
-          html {
-            filter: invert(\${intensity}) hue-rotate(180deg) !important;
-          }
-          img, video, [style*="background-image"] {
-            filter: invert(\${intensity}) hue-rotate(180deg) !important;
-          }
-        \`;
-        document.head.appendChild(style);
-      }
-    },
-    args: [intensity]
-  });
-});`,
-      'styles.css': `body {
-  width: 250px;
-  padding: 15px;
-  font-family: Arial, sans-serif;
-  background: #1a1a1a;
-  color: #fff;
-}
-
-h1 {
-  font-size: 16px;
-  margin: 0 0 15px 0;
-}
-
-button {
-  width: 100%;
-  padding: 12px;
-  background: #6366f1;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-button:hover {
-  background: #4f46e5;
-}
-
-.intensity {
-  margin-top: 15px;
-}
-
-.intensity label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 12px;
-}
-
-.intensity input {
-  width: 100%;
-}`
-    }
-  },
-  'ad-blocker': {
-    name: 'Simple Ad Blocker',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Simple Ad Blocker',
-        version: '1.0.0',
-        description: 'Block common ads and trackers',
-        permissions: ['activeTab', 'scripting'],
-        content_scripts: [{
-          matches: ['<all_urls>'],
-          js: ['content.js'],
-          run_at: 'document_start'
-        }],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'content.js': `// Ad Blocker Content Script
-const adSelectors = [
-  '[class*="ad-"]',
-  '[id*="ad-"]',
-  '[class*="advertisement"]',
-  'iframe[src*="doubleclick"]',
-  'iframe[src*="googlesyndication"]',
-  '[class*="sponsored"]',
-  '[data-ad-slot]'
-];
-
-function blockAds() {
-  adSelectors.forEach(selector => {
-    document.querySelectorAll(selector).forEach(el => {
-      el.style.display = 'none';
-      el.remove();
-    });
+/**
+ * Initializes the theme from storage or system preference
+ */
+function initTheme() {
+  chrome.storage.local.get(['theme'], (result) => {
+    const theme = result.theme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    applyTheme(theme);
   });
 }
 
-// Run on load
-blockAds();
-
-// Run on DOM changes
-const observer = new MutationObserver(blockAds);
-observer.observe(document.body, { childList: true, subtree: true });`,
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Ad Blocker</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>🛡️ Ad Blocker</h1>
-  <div class="status">
-    <p>Blocking ads on this page</p>
-    <div class="indicator active"></div>
-  </div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `console.log('Ad Blocker active');`,
-      'styles.css': `body {
-  width: 250px;
-  padding: 20px;
-  font-family: Arial, sans-serif;
-  text-align: center;
-}
-
-h1 {
-  font-size: 18px;
-  margin: 0 0 15px 0;
-}
-
-.status {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-}
-
-.indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #ccc;
-}
-
-.indicator.active {
-  background: #4CAF50;
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}`
-    }
-  },
-  'screenshot-tool': {
-    name: 'Screenshot Tool',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Screenshot Tool',
-        version: '1.0.0',
-        description: 'Capture screenshots of web pages',
-        permissions: ['activeTab', 'downloads'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Screenshot</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>📸 Screenshot</h1>
-  <button id="capture-visible">Capture Visible Area</button>
-  <button id="capture-full">Capture Full Page</button>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `document.getElementById('capture-visible').addEventListener('click', async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, {
-    format: 'png'
-  });
-  
-  const link = document.createElement('a');
-  link.href = dataUrl;
-  link.download = \`screenshot-\${Date.now()}.png\`;
-  link.click();
-});
-
-document.getElementById('capture-full').addEventListener('click', () => {
-  alert('Full page capture requires additional permissions. Use "Capture Visible Area" for now.');
-});`,
-      'styles.css': `body {
-  width: 250px;
-  padding: 15px;
-  font-family: Arial, sans-serif;
-}
-
-h1 {
-  font-size: 16px;
-  margin: 0 0 15px 0;
-}
-
-button {
-  width: 100%;
-  padding: 12px;
-  margin-bottom: 8px;
-  background: #2196F3;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-button:hover {
-  background: #0b7dda;
-}`
-    }
-  },
-  'password-generator': {
-    name: 'Password Generator',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Password Generator',
-        version: '1.0.0',
-        description: 'Generate secure passwords',
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Password Generator</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>🔐 Password Generator</h1>
-  <div class="options">
-    <label><input type="checkbox" id="uppercase" checked> Uppercase</label>
-    <label><input type="checkbox" id="lowercase" checked> Lowercase</label>
-    <label><input type="checkbox" id="numbers" checked> Numbers</label>
-    <label><input type="checkbox" id="symbols"> Symbols</label>
-    <label>Length: <input type="number" id="length" value="16" min="8" max="64"></label>
-  </div>
-  <button id="generate">Generate Password</button>
-  <div id="password" class="password"></div>
-  <button id="copy" style="display:none;">Copy to Clipboard</button>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `function generatePassword() {
-  const length = parseInt(document.getElementById('length').value);
-  const useUpper = document.getElementById('uppercase').checked;
-  const useLower = document.getElementById('lowercase').checked;
-  const useNumbers = document.getElementById('numbers').checked;
-  const useSymbols = document.getElementById('symbols').checked;
-  
-  let chars = '';
-  if (useUpper) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  if (useLower) chars += 'abcdefghijklmnopqrstuvwxyz';
-  if (useNumbers) chars += '0123456789';
-  if (useSymbols) chars += '!@#$%^&*()_+-=[]{}|;:,.<>?';
-  
-  if (!chars) {
-    alert('Select at least one character type');
-    return;
+/**
+ * Applies the specified theme to the document
+ * @param {string} theme - 'dark' or 'light'
+ */
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  // Update CodeMirror theme if it exists
+  if (cmEditor) {
+    cmEditor.setOption('theme', theme === 'dark' ? 'dracula' : 'default');
   }
-  
-  let password = '';
-  for (let i = 0; i < length; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  
-  document.getElementById('password').textContent = password;
-  document.getElementById('copy').style.display = 'block';
 }
 
-document.getElementById('generate').addEventListener('click', generatePassword);
+/**
+ * Toggles between dark and light themes
+ */
+function toggleTheme() {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
 
-document.getElementById('copy').addEventListener('click', () => {
-  const password = document.getElementById('password').textContent;
-  navigator.clipboard.writeText(password);
-  alert('Password copied to clipboard!');
-});
-
-generatePassword();`,
-      'styles.css': `body {
-  width: 300px;
-  padding: 15px;
-  font-family: Arial, sans-serif;
+  applyTheme(newTheme);
+  chrome.storage.local.set({ theme: newTheme });
+  showStatus(`Switched to ${newTheme} mode`, 'info');
 }
 
-h1 {
-  font-size: 16px;
-  margin: 0 0 15px 0;
-}
-
-.options {
-  margin-bottom: 15px;
-}
-
-.options label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-
-.options input[type="number"] {
-  width: 60px;
-  padding: 4px;
-}
-
-button {
-  width: 100%;
-  padding: 10px;
-  background: #4CAF50;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  margin-bottom: 10px;
-}
-
-button:hover {
-  background: #45a049;
-}
-
-.password {
-  padding: 12px;
-  background: #f5f5f5;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  font-family: monospace;
-  word-break: break-all;
-  margin-bottom: 10px;
-  min-height: 20px;
-}
-
-#copy {
-  background: #2196F3;
-}
-
-#copy:hover {
-  background: #0b7dda;
-}`
-    }
-  },
-  'note-taker': {
-    name: 'Quick Notes',
-    files: {
-      'manifest.json': {
-        manifest_version: 3,
-        name: 'Quick Notes',
-        version: '1.0.0',
-        description: 'Take quick notes while browsing',
-        permissions: ['storage'],
-        action: {
-          default_popup: 'popup.html'
-        }
-      },
-      'popup.html': `<!DOCTYPE html>
-<html>
-<head>
-  <title>Quick Notes</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <h1>📝 Quick Notes</h1>
-  <textarea id="notes" placeholder="Type your notes here..."></textarea>
-  <div class="footer">
-    <span id="char-count">0 characters</span>
-    <button id="clear">Clear</button>
-  </div>
-  <script src="popup.js"></script>
-</body>
-</html>`,
-      'popup.js': `const textarea = document.getElementById('notes');
-const charCount = document.getElementById('char-count');
-
-// Load saved notes
-chrome.storage.local.get(['notes'], (result) => {
-  if (result.notes) {
-    textarea.value = result.notes;
-    updateCharCount();
-  }
-});
-
-// Auto-save on input
-textarea.addEventListener('input', () => {
-  chrome.storage.local.set({ notes: textarea.value });
-  updateCharCount();
-});
-
-function updateCharCount() {
-  charCount.textContent = \`\${textarea.value.length} characters\`;
-}
-
-document.getElementById('clear').addEventListener('click', () => {
-  if (confirm('Clear all notes?')) {
-    textarea.value = '';
-    chrome.storage.local.set({ notes: '' });
-    updateCharCount();
-  }
-});`,
-      'styles.css': `body {
-  width: 400px;
-  height: 500px;
-  padding: 15px;
-  font-family: Arial, sans-serif;
-  display: flex;
-  flex-direction: column;
-}
-
-h1 {
-  font-size: 16px;
-  margin: 0 0 10px 0;
-}
-
-#notes {
-  flex: 1;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 4px;
-  resize: none;
-  font-family: inherit;
-  font-size: 13px;
-}
-
-.footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 10px;
-}
-
-#char-count {
-  font-size: 11px;
-  color: #666;
-}
-
-#clear {
-  padding: 6px 12px;
-  background: #f44336;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-#clear:hover {
-  background: #da190b;
-}`
-    }
-  }
-};
+// ============================================================================
+// END THEME MANAGEMENT
+// ============================================================================
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
+  // Enable keyboard shortcuts
+  document.addEventListener('keydown', handleKeyboardShortcuts);
+
   // Init CodeMirror
   const textarea = document.getElementById('code-editor');
   if (textarea) {
@@ -1470,9 +372,13 @@ document.addEventListener('DOMContentLoaded', () => {
   loadProjects();
   setupEventListeners();
   switchTab('projects');
+  initTheme();
 });
 
-// Load projects from storage
+/**
+ * Loads extension projects from Chrome storage.
+ * Retrieves saved projects and renders them in the UI.
+ */
 async function loadProjects() {
   chrome.storage.local.get(['extensionProjects'], (result) => {
     projects = result.extensionProjects || [];
@@ -1480,12 +386,17 @@ async function loadProjects() {
   });
 }
 
-// Save projects to storage
+/**
+ * Saves the current projects array to Chrome local storage.
+ */
 function saveProjects() {
   chrome.storage.local.set({ extensionProjects: projects });
 }
 
-// Render projects list
+/**
+ * Renders the list of extension projects in the Projects tab.
+ * Displays project cards with name, icon, and modification date.
+ */
 function renderProjectsList() {
   const projectsList = document.getElementById('projects-list');
 
@@ -1541,7 +452,10 @@ document.getElementById('new-project-btn')?.addEventListener('click', () => {
   showStatus('New project created', 'success');
 });
 
-// Load project
+/**
+ * Loads a specific project by index and opens it in the builder.
+ * @param {number} index - The index of the project in the projects array
+ */
 function loadProject(index) {
   currentProject = projects[index];
   currentProject.index = index;
@@ -1553,7 +467,10 @@ function loadProject(index) {
   showStatus('Project loaded', 'success');
 }
 
-// Delete project
+/**
+ * Deletes a project after user confirmation.
+ * @param {number} index - The index of the project to delete
+ */
 function deleteProject(index) {
   if (confirm('Are you sure you want to delete this project?')) {
     projects.splice(index, 1);
@@ -1563,7 +480,10 @@ function deleteProject(index) {
   }
 }
 
-// Update file tree UI
+/**
+ * Updates the file tree UI to display all files in the current project.
+ * Files are sorted alphabetically and made clickable to load in editor.
+ */
 function updateFileTree() {
   const container = document.getElementById('file-tree');
   if (!container || !currentProject) return;
@@ -1587,8 +507,14 @@ function updateFileTree() {
   });
 }
 
-// Setup event listeners
+/**
+ * Sets up all event listeners for the extension builder UI.
+ * Handles tab switching, button clicks, and user interactions.
+ */
 function setupEventListeners() {
+  // Keyboard shortcuts
+  document.addEventListener('keydown', handleKeyboardShortcuts);
+
   // Tab switching
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1596,6 +522,9 @@ function setupEventListeners() {
       switchTab(tab);
     });
   });
+
+  // Theme Toggle
+  document.getElementById('theme-toggle')?.addEventListener('click', toggleTheme);
 
   // Generate button
   document.getElementById('generate-btn')?.addEventListener('click', generateExtension);
@@ -1650,6 +579,22 @@ function setupEventListeners() {
     toggleInspector(e.target.checked);
   });
 
+  // Inspector Toolbar Switcher
+  document.querySelectorAll('.switcher-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cluster = btn.dataset.cluster;
+      // Update buttons
+      document.querySelectorAll('.switcher-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      // Update clusters
+      document.querySelectorAll('.toolbar-cluster').forEach(c => c.classList.remove('active'));
+      document.getElementById(`cluster-${cluster}`)?.classList.add('active');
+    });
+  });
+
+  // SITE_CONTEXT Extraction (Phase 2B)
+  document.getElementById('btn-extract-context')?.addEventListener('click', extractSiteContext);
+
   document.getElementById('scan-visualize')?.addEventListener('click', () => runAnalysis('visualize'));
   document.getElementById('scan-sequence')?.addEventListener('click', () => runAnalysis('sequence'));
   document.getElementById('scan-structure')?.addEventListener('click', () => runAnalysis('structure'));
@@ -1671,6 +616,7 @@ function setupEventListeners() {
   document.getElementById('scan-shadow')?.addEventListener('click', () => runAnalysis('shadow'));
   document.getElementById('scan-rhetoric')?.addEventListener('click', () => runAnalysis('rhetoric'));
   document.getElementById('scan-emotion')?.addEventListener('click', () => runAnalysis('emotion'));
+  document.getElementById('scan-strategy')?.addEventListener('click', () => runAnalysis('strategy'));
 
   document.getElementById('clear-results')?.addEventListener('click', () => {
     document.getElementById('analysis-results').style.display = 'none';
@@ -1696,43 +642,302 @@ function setupEventListeners() {
   // MacGyver Tools
   document.getElementById('tool-edit')?.addEventListener('click', () => runMacGyver('toggleEditMode'));
   document.getElementById('tool-zap')?.addEventListener('click', () => runMacGyver('zapElement'));
-  document.getElementById('tool-wireframe')?.addEventListener('click', () => runMacGyver('toggleWireframe'));
-  document.getElementById('tool-images')?.addEventListener('click', () => runMacGyver('toggleImages'));
+  // Helper to toggle button state and send message
+  const toggleTool = async (btnId, action, successMsg, failMsg) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
 
-  // Extension Wizard
-  document.querySelectorAll('input[name="host-perms"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      const customInput = document.getElementById('wizard-custom-hosts');
-      if (e.target.value === 'custom') {
-        customInput.style.display = 'block';
-      } else {
-        customInput.style.display = 'none';
-      }
-    });
+    // Toggle visual state immediately for responsiveness
+    const isActive = btn.classList.contains('active');
+
+    // Only toggle class if it's a toggle-able tool (not one-shot)
+    const oneShotTools = ['tool-pii', 'tool-export-links', 'tool-export-colors', 'tool-screenshot', 'tool-specimen'];
+    if (!oneShotTools.includes(btnId)) {
+      btn.classList.toggle('active');
+    }
+
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { action: action }, response => {
+        if (chrome.runtime.lastError) {
+          showStatus('Error: Refresh page to use tools', 'error');
+          btn.classList.remove('active'); // Revert on error
+          return;
+        }
+
+        // Handle specific response data
+        if (response) {
+          if (response.active === true || response.status === 'active' || response.status === 'visible') {
+            if (successMsg) showStatus(successMsg, 'success');
+            if (!oneShotTools.includes(btnId)) btn.classList.add('active');
+          } else if (response.active === false || response.status === 'inactive' || response.status === 'hidden') {
+            if (failMsg) showStatus(failMsg, 'info');
+            btn.classList.remove('active');
+          } else if (response.count !== undefined) {
+            showStatus(`${successMsg}: ${response.count}`, 'success');
+            // One-shot tools often don't keep active state
+            setTimeout(() => btn.classList.remove('active'), 200);
+          }
+        }
+      });
+    }
+  };
+
+  // Wire up Visual Forensics
+  document.getElementById('tool-xray')?.addEventListener('click', () => toggleTool('tool-xray', 'toggleXRay', '3D X-Ray Active', 'X-Ray Disabled'));
+  document.getElementById('tool-heatmap')?.addEventListener('click', () => toggleTool('tool-heatmap', 'toggleHeatmap', 'Heatmap Active', 'Heatmap Disabled'));
+  document.getElementById('tool-contrast')?.addEventListener('click', () => toggleTool('tool-contrast', 'toggleContrastMap', 'Contrast Map Active', 'Contrast Map Disabled'));
+  document.getElementById('tool-wireframe')?.addEventListener('click', () => toggleTool('tool-wireframe', 'toggleWireframe', 'Wireframe Active', 'Wireframe Disabled'));
+  document.getElementById('tool-images')?.addEventListener('click', () => toggleTool('tool-images', 'toggleImages', 'Images Hidden', 'Images Visible'));
+  document.getElementById('tool-specimen')?.addEventListener('click', () => runAnalysis('specimen'));
+  document.getElementById('tool-gravity')?.addEventListener('click', () => toggleTool('tool-gravity', 'toggleGravity', 'Gravity Engaged', 'Gravity Reset'));
+  document.getElementById('tool-neural')?.addEventListener('click', () => toggleTool('tool-neural', 'toggleNeural', 'Neural Map Active', 'Neural Hidden'));
+  document.getElementById('tool-ghost')?.addEventListener('click', () => toggleTool('tool-ghost', 'toggleGhost', 'Ghost Trace Active', 'Ghost Trace Faded'));
+
+
+  // Wire up Interaction
+  document.getElementById('tool-god-mode')?.addEventListener('click', () => toggleTool('tool-god-mode', 'toggleGodMode', 'GOD MODE ENABLED', 'God Mode Disabled'));
+  document.getElementById('tool-edit')?.addEventListener('click', () => toggleTool('tool-edit', 'toggleEditMode', 'Edit Mode Active', 'Edit Mode Disabled'));
+  document.getElementById('tool-zap')?.addEventListener('click', () => toggleTool('tool-zap', 'zapElement', 'Zap Mode: Click to Delete', 'Zap Mode Disabled'));
+  document.getElementById('tool-enable')?.addEventListener('click', () => toggleTool('tool-enable', 'enableInputs', 'Inputs Enabled', null));
+  document.getElementById('tool-unmask')?.addEventListener('click', () => toggleTool('tool-unmask', 'showPasswords', 'Passwords Unmasked', null));
+  document.getElementById('tool-kill-sticky')?.addEventListener('click', () => toggleTool('tool-kill-sticky', 'killStickies', 'Sticky Elements Removed', null));
+  document.getElementById('run-omniscience-btn')?.addEventListener('click', async () => {
+    showStatus('Extracting complete object model...', 'info');
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) {
+      showStatus('No active tab found', 'error');
+      return;
+    }
+
+    try {
+      // Set timeout for extraction
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Extraction timeout')), 30000)
+      );
+
+      const extractionPromise = new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'extractCompleteModel' }, response => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (response && !response.error) {
+            resolve(response);
+          } else {
+            reject(new Error(response?.error || 'Unknown extraction error'));
+          }
+        });
+      });
+
+      const response = await Promise.race([extractionPromise, timeoutPromise]);
+      displayExtractionResults(response);
+      showStatus('Complete extraction successful!', 'success');
+    } catch (error) {
+      console.error('Extraction failed:', error);
+      showStatus(`Extraction failed: ${error.message}`, 'error');
+    }
   });
 
-  document.querySelectorAll('input[name="inject-host-perms"]').forEach(radio => {
-    radio.addEventListener('change', (e) => {
-      const customInput = document.getElementById('inject-custom-hosts');
-      if (e.target.value === 'custom') {
-        customInput.style.display = 'block';
-      } else {
-        customInput.style.display = 'none';
-      }
-    });
+  document.getElementById('btn-extract-context')?.addEventListener('click', async () => {
+    showStatus('Generating AI-ready context...', 'info');
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) {
+      showStatus('No active tab found', 'error');
+      return;
+    }
+
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Context generation timeout')), 30000)
+      );
+
+      const extractionPromise = new Promise((resolve, reject) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'extractCompleteModel' }, response => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else if (response && !response.error) {
+            resolve(response);
+          } else {
+            reject(new Error(response?.error || 'Unknown error'));
+          }
+        });
+      });
+
+      const response = await Promise.race([extractionPromise, timeoutPromise]);
+      const aiContext = generateAIContext(response);
+      downloadAsFile(aiContext, `${response.metadata.domain}_context.md`, 'text/markdown');
+      showStatus('AI context downloaded!', 'success');
+    } catch (error) {
+      console.error('Context generation failed:', error);
+      showStatus(`Context generation failed: ${error.message}`, 'error');
+    }
   });
 
-  document.getElementById('generate-extension-btn')?.addEventListener('click', generateExtensionFromWizard);
-
-  document.getElementById('tool-unmask')?.addEventListener('click', () => runMacGyver('showPasswords'));
-  document.getElementById('tool-enable')?.addEventListener('click', () => runMacGyver('enableInputs'));
-  document.getElementById('tool-kill-sticky')?.addEventListener('click', () => runMacGyver('killStickies'));
+  // Wire up Data
+  document.getElementById('tool-sniffer')?.addEventListener('click', () => toggleTool('tool-sniffer', 'toggleEventSniffer', 'Event Sniffer Attached', 'Event Sniffer Detached'));
+  document.getElementById('tool-console')?.addEventListener('click', () => runMacGyver('injectConsole')); // Kept as MacGyver for specific logic
   document.getElementById('tool-pii')?.addEventListener('click', () => runMacGyver('findEmails'));
-
   document.getElementById('tool-export-links')?.addEventListener('click', () => runMacGyver('exportLinks'));
   document.getElementById('tool-export-colors')?.addEventListener('click', () => runMacGyver('exportColors'));
   document.getElementById('tool-screenshot')?.addEventListener('click', () => runMacGyver('takeScreenshot'));
-  document.getElementById('tool-console')?.addEventListener('click', () => runMacGyver('injectConsole'));
+
+  // Reality Engine
+  const applyReality = async (style) => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, { action: 'applyReality', style }, response => {
+        if (response?.style) showStatus(response.style, 'success');
+      });
+    }
+  };
+
+  document.getElementById('warp-cyberdeck')?.addEventListener('click', () => applyReality('cyberdeck'));
+  document.getElementById('warp-blueprint')?.addEventListener('click', () => applyReality('blueprint'));
+  document.getElementById('warp-brutalist')?.addEventListener('click', () => applyReality('brutalist'));
+  document.getElementById('warp-vaporwave')?.addEventListener('click', () => applyReality('vaporwave'));
+  document.getElementById('warp-glitch')?.addEventListener('click', () => applyReality('glitch'));
+  document.getElementById('warp-reset')?.addEventListener('click', () => applyReality('none'));
+
+  // --- Element Inspector Panel Listeners ---
+  const inspectorPanel = document.getElementById('inspector-panel');
+  const closeInspectorBtn = document.getElementById('close-inspector-panel');
+  const copyCssBtn = document.getElementById('copy-css-btn');
+  const zapElementBtn = document.getElementById('zap-element-btn');
+
+  closeInspectorBtn?.addEventListener('click', () => {
+    inspectorPanel.style.display = 'none';
+  });
+
+  copyCssBtn?.addEventListener('click', () => {
+    const selector = document.getElementById('inspector-element-selector').textContent;
+    const inputs = inspectorPanel.querySelectorAll('[data-prop]');
+    let css = `${selector} {\n`;
+    inputs.forEach(input => {
+      const prop = input.dataset.prop;
+      const value = input.value;
+      if (value) {
+        // Convert camelCase to kebab-case
+        const kebabProp = prop.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        css += `  ${kebabProp}: ${value};\n`;
+      }
+    });
+    css += `}`;
+    navigator.clipboard.writeText(css).then(() => {
+      showStatus('CSS copied to clipboard!', 'success');
+    });
+  });
+
+  zapElementBtn?.addEventListener('click', async () => {
+    const selector = document.getElementById('inspector-element-selector').textContent;
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab) {
+      chrome.tabs.sendMessage(tab.id, {
+        action: 'updateStyle',
+        selector: selector,
+        property: 'display',
+        value: 'none'
+      });
+      inspectorPanel.style.display = 'none';
+      showStatus('Element zapped', 'info');
+    }
+  });
+
+  // Style change listeners
+  inspectorPanel?.querySelectorAll('[data-prop]').forEach(input => {
+    const eventType = input.type === 'range' || input.type === 'color' ? 'input' : 'change';
+    input.addEventListener(eventType, async () => {
+      const selector = document.getElementById('inspector-element-selector').textContent;
+      const property = input.dataset.prop;
+      const value = input.value;
+
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        chrome.tabs.sendMessage(tab.id, {
+          action: 'updateStyle',
+          selector: selector,
+          property: property,
+          value: value
+        });
+      }
+    });
+  });
+
+  // --- Global Message Listener for Content Script Communication ---
+  chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === 'elementSelected') {
+      const { selector, tagName, styles, variables } = request.data;
+
+      // Update UI
+      const panel = document.getElementById('inspector-panel');
+      const tagEl = document.getElementById('inspector-element-tag');
+      const selectorEl = document.getElementById('inspector-element-selector');
+      const varList = document.getElementById('inspector-variables-list');
+
+      if (panel && tagEl && selectorEl) {
+        panel.style.display = 'flex';
+        tagEl.textContent = tagName.toUpperCase();
+        selectorEl.textContent = selector;
+
+        // Populate styles
+        panel.querySelectorAll('[data-prop]').forEach(input => {
+          const prop = input.dataset.prop;
+          if (styles[prop]) {
+            let value = styles[prop];
+            if (input.type === 'color' && value.startsWith('rgb')) {
+              value = rgbToHex(value);
+            }
+            input.value = value;
+          }
+        });
+
+        // Populate Variables
+        if (varList) {
+          varList.innerHTML = '';
+          const entries = Object.entries(variables || {});
+          if (entries.length === 0) {
+            varList.innerHTML = '<div style="font-size: 9px; opacity: 0.5; text-align:center;">No CSS Variables detected</div>';
+          } else {
+            entries.forEach(([name, value]) => {
+              const row = document.createElement('div');
+              row.className = 'style-row';
+              row.innerHTML = `
+                <span title="${name}" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;">${name}</span>
+                <input type="text" value="${value}" class="style-input variable-input" data-var="${name}">
+              `;
+              varList.appendChild(row);
+
+              // Add change listener
+              row.querySelector('input').addEventListener('change', async (e) => {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab) {
+                  chrome.tabs.sendMessage(tab.id, {
+                    action: 'updateStyle',
+                    selector: selector,
+                    property: name,
+                    value: e.target.value
+                  });
+                }
+              });
+            });
+          }
+        }
+
+        showStatus(`Inspecting: ${tagName}`, 'info');
+      }
+    }
+    return true;
+  });
+
+  // Helper for color conversion
+  function rgbToHex(rgb) {
+    const match = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/);
+    if (!match) return '#000000';
+
+    const r = parseInt(match[1]);
+    const g = parseInt(match[2]);
+    const b = parseInt(match[3]);
+
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+  }
 
   // VS Code Section Toggles
   document.querySelectorAll('.vscode-section-header').forEach(header => {
@@ -1746,6 +951,9 @@ function setupEventListeners() {
       }
     });
   });
+
+  // Wizard generate extension button
+  document.getElementById('generate-extension-btn')?.addEventListener('click', generateExtensionFromWizard);
 
   // Feature Injector inject button
   document.getElementById('inject-features-btn')?.addEventListener('click', injectFeatures);
@@ -1794,6 +1002,10 @@ function setupEventListeners() {
 }
 
 // Switch tabs
+/**
+ * Switches between different tabs in the ReMixr IDE.
+ * @param {string} tabName - Name of the tab to switch to ('projects', 'templates', 'code', 'ui', 'analyzer', 'tools')
+ */
 function switchTab(tabName) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
@@ -1809,6 +1021,10 @@ function switchTab(tabName) {
 }
 
 // Load template
+/**
+ * Loads a predefined extension template into the current project.
+ * @param {string} templateName - Name of the template to load (e.g., 'starter', 'content-modifier')
+ */
 function loadTemplate(templateName) {
   const template = TEMPLATES[templateName];
   if (!template) return;
@@ -1838,6 +1054,10 @@ function loadTemplate(templateName) {
 }
 
 // Load file into editor
+/**
+ * Loads a file from the current project into the CodeMirror editor.
+ * @param {string} filename - Name of the file to load
+ */
 function loadFileIntoEditor(filename) {
   if (!currentProject) return;
 
@@ -2177,9 +1397,10 @@ function generateExtractor(prompt) {
     // Create custom extraction logic
     let extractionLogic = `
       // Extraction logic for ${type}
-      // This is a placeholder for ${type} regex
       const text = document.body.innerText;
-      return [text.length + ' chars scanned']; 
+      const results = [];
+      // Default fallback
+      if (!text) return ['No text content found'];
     `;
 
     if (type.includes('email')) {
@@ -2302,170 +1523,22 @@ function extractName(prompt) {
   return null;
 }
 
-// Generate Extension from Wizard
-function generateExtensionFromWizard() {
-  // Collect all wizard inputs
-  const name = document.getElementById('wizard-name').value.trim() || 'My Extension';
-  const description = document.getElementById('wizard-description').value.trim() || 'A custom Chrome extension';
+// ============================================
+// MANIFEST GENERATION HELPERS
+// ============================================
 
-  // Get extension type
-  const extType = document.querySelector('input[name="ext-type"]:checked')?.value || 'popup';
-
-  // Get selected features
-  const features = {
-    background: document.getElementById('feat-background')?.checked || false,
-    storage: document.getElementById('feat-storage')?.checked || false,
-    tabs: document.getElementById('feat-tabs')?.checked || false,
-    contextMenu: document.getElementById('feat-context-menu')?.checked || false,
-    notifications: document.getElementById('feat-notifications')?.checked || false,
-    bookmarks: document.getElementById('feat-bookmarks')?.checked || false,
-    history: document.getElementById('feat-history')?.checked || false,
-    downloads: document.getElementById('feat-downloads')?.checked || false,
-    cookies: document.getElementById('feat-cookies')?.checked || false,
-    webRequest: document.getElementById('feat-web-request')?.checked || false
-  };
-
-  // Get host permissions
-  const hostPerms = document.querySelector('input[name="host-perms"]:checked')?.value || 'active-tab';
-  const customHosts = document.getElementById('wizard-custom-hosts')?.value.trim();
-
-  // Get framework
-  const framework = document.getElementById('wizard-framework')?.value || 'vanilla';
-
-  // Get behaviors
-  const behaviors = {
-    matchSite: document.getElementById('behavior-match-site')?.checked || false,
-    autoOpen: document.getElementById('behavior-auto-open')?.checked || false,
-    persistState: document.getElementById('behavior-persist-state')?.checked || false,
-    keyboard: document.getElementById('behavior-keyboard')?.checked || false,
-    badge: document.getElementById('behavior-badge')?.checked || false,
-    autoRun: document.getElementById('behavior-auto-run')?.checked || false,
-    sync: document.getElementById('behavior-sync')?.checked || false,
-    theme: document.getElementById('behavior-theme')?.checked || false,
-    analytics: document.getElementById('behavior-analytics')?.checked || false,
-    hotreload: document.getElementById('behavior-hotreload')?.checked || false,
-    errorTracking: document.getElementById('behavior-error-tracking')?.checked || false
-  };
-
-  // Build permissions array
-  const permissions = [];
-  if (hostPerms === 'active-tab') permissions.push('activeTab');
-  if (features.storage || behaviors.persistState || behaviors.sync) permissions.push('storage');
-  if (features.tabs) permissions.push('tabs');
-  if (features.contextMenu) permissions.push('contextMenus');
-  if (features.notifications) permissions.push('notifications');
-  if (features.bookmarks) permissions.push('bookmarks');
-  if (features.history) permissions.push('history');
-  if (features.downloads) permissions.push('downloads');
-  if (features.cookies) permissions.push('cookies');
-  if (features.webRequest) permissions.push('webRequest', 'webRequestBlocking');
-  if (extType === 'content-script') permissions.push('scripting');
-
-  // Build host permissions
-  const host_permissions = [];
-  if (hostPerms === 'all-urls') {
-    host_permissions.push('<all_urls>');
-  } else if (hostPerms === 'custom' && customHosts) {
-    host_permissions.push(...customHosts.split(',').map(h => h.trim()).filter(Boolean));
-  }
-
-  // Build manifest
-  const manifest = {
+/**
+ * Generates a manifest file object for a Chrome extension.
+ * Note: The full generateExtensionFromWizard function is in the Extension Wizard section below.
+ */
+function generateManifestTemplate(name, description, permissions) {
+  return {
     manifest_version: 3,
     name: name,
     version: '1.0.0',
     description: description,
-    permissions: permissions
+    permissions: permissions || []
   };
-
-  if (host_permissions.length > 0) {
-    manifest.host_permissions = host_permissions;
-  }
-
-  // Add action or side panel based on type
-  if (extType === 'popup' || extType === 'page-action') {
-    manifest.action = {
-      default_popup: 'popup.html',
-      default_icon: {
-        '16': 'icon16.png',
-        '48': 'icon48.png',
-        '128': 'icon128.png'
-      }
-    };
-  } else if (extType === 'side-panel') {
-    manifest.side_panel = {
-      default_path: 'sidepanel.html'
-    };
-  }
-
-  // Add content scripts if needed
-  if (extType === 'content-script') {
-    manifest.content_scripts = [{
-      matches: host_permissions.length > 0 ? host_permissions : ['<all_urls>'],
-      js: ['content.js'],
-      run_at: behaviors.autoRun ? 'document_start' : 'document_idle'
-    }];
-  }
-
-  // Add background service worker if needed
-  if (features.background || features.contextMenu || behaviors.badge) {
-    manifest.background = {
-      service_worker: 'background.js'
-    };
-  }
-
-  // Add keyboard shortcuts if needed
-  if (behaviors.keyboard) {
-    manifest.commands = {
-      "_execute_action": {
-        "suggested_key": {
-          "default": "Ctrl+Shift+Y",
-          "mac": "Command+Shift+Y"
-        }
-      }
-    };
-  }
-
-  // Generate files
-  const files = {
-    'manifest.json': JSON.stringify(manifest, null, 2)
-  };
-
-  // Generate HTML based on type
-  const htmlFile = extType === 'side-panel' ? 'sidepanel.html' : 'popup.html';
-  files[htmlFile] = generateHTML(name, framework, behaviors);
-
-  // Generate JavaScript
-  const jsFile = extType === 'side-panel' ? 'sidepanel.js' : 'popup.js';
-  files[jsFile] = generateJS(features, behaviors, framework);
-
-  // Generate CSS
-  files['styles.css'] = generateCSS(behaviors);
-
-  // Generate content script if needed
-  if (extType === 'content-script') {
-    files['content.js'] = generateContentScript(behaviors);
-  }
-
-  // Generate background script if needed
-  if (features.background || features.contextMenu || behaviors.badge) {
-    files['background.js'] = generateBackgroundScript(features, behaviors);
-  }
-
-  // Create project
-  currentProject = {
-    name: name,
-    files: files,
-    created: Date.now(),
-    modified: Date.now()
-  };
-
-  // Switch to builder and load
-  switchTab('builder');
-  updateFileTree();
-  loadFileIntoEditor('manifest.json');
-  document.getElementById('project-name').value = currentProject.name;
-  showStatus('Extension generated from wizard!', 'success');
 }
 
 // Helper: Generate HTML
@@ -2973,6 +2046,41 @@ function saveCurrentProject() {
     return;
   }
 
+  // Update file content from editor if currently editing
+  if (cmEditor && currentFile) {
+    currentProject.files[currentFile] = cmEditor.getValue();
+  }
+
+  // Validate manifest.json before saving
+  if (currentProject.files['manifest.json']) {
+    try {
+      const manifestContent = currentProject.files['manifest.json'];
+      const manifest = typeof manifestContent === 'string'
+        ? JSON.parse(manifestContent)
+        : manifestContent;
+
+      const validation = validateManifest(manifest);
+
+      if (!validation.valid) {
+        showStatus(`Save warning: ${validation.errors.length} manifest errors detected`, 'error');
+        console.warn('Manifest validation errors:', validation.errors);
+
+        // Show errors in console but still save
+        validation.errors.forEach(err => console.error('  - ' + err));
+      } else if (validation.warnings.length > 0) {
+        showStatus(`Saved with ${validation.warnings.length} warnings`, 'success');
+        console.info('Manifest warnings:', validation.warnings);
+      } else {
+        showStatus('Project saved! ✓', 'success');
+      }
+    } catch (e) {
+      showStatus('Saved (manifest.json has JSON syntax errors)', 'error');
+      console.error('JSON parse error:', e.message);
+    }
+  } else {
+    showStatus('Project saved!', 'success');
+  }
+
   currentProject.modified = Date.now();
 
   if (currentProject.index !== undefined) {
@@ -2983,7 +2091,6 @@ function saveCurrentProject() {
 
   saveProjects();
   renderProjectsList();
-  showStatus('Project saved!', 'success');
 }
 
 // Test extension
@@ -3063,7 +2170,7 @@ async function runAnalysis(type) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   // New psychological analyses use message-based communication with content.js
-  const messageBasedAnalyses = ['psyche', 'archetype', 'soul', 'shadow', 'rhetoric', 'emotion'];
+  const messageBasedAnalyses = ['psyche', 'archetype', 'soul', 'shadow', 'rhetoric', 'emotion', 'strategy', 'specimen', 'omniscience'];
 
   if (messageBasedAnalyses.includes(type)) {
     const actionMap = {
@@ -3072,7 +2179,10 @@ async function runAnalysis(type) {
       'soul': 'analyzeSoul',
       'shadow': 'analyzeShadow',
       'rhetoric': 'analyzeRhetoric',
-      'emotion': 'analyzeEmotion'
+      'emotion': 'analyzeEmotion',
+      'strategy': 'analyzeStrategy',
+      'specimen': 'analyzeSpecimen',
+      'omniscience': 'analyzeOmniscience'
     };
 
     try {
@@ -3134,25 +2244,30 @@ async function runAnalysis(type) {
 
 // Analysis Functions (Injected)
 function analyzeStructure() {
-  const all = document.querySelectorAll('*');
-  const depth = (n) => n.parentNode ? depth(n.parentNode) + 1 : 0;
-  let maxDepth = 0;
-  all.forEach(el => maxDepth = Math.max(maxDepth, depth(el)));
+  const nodes = [];
+  const collect = (root) => {
+    const all = root.querySelectorAll('*');
+    all.forEach(el => {
+      nodes.push(el);
+      if (el.shadowRoot) collect(el.shadowRoot);
+    });
+  };
+  collect(document);
 
-  // Count tags
+  const depth = (n) => n.parentNode ? depth(n.parentNode) + 1 : (n.host ? depth(n.host) + 1 : 0);
+  let maxDepth = 0;
+  nodes.forEach(el => maxDepth = Math.max(maxDepth, depth(el)));
+
   const tags = {};
-  all.forEach(el => {
+  nodes.forEach(el => {
     const tag = el.tagName.toLowerCase();
     tags[tag] = (tags[tag] || 0) + 1;
   });
 
-  // Sort tags
-  const sortedTags = Object.entries(tags)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+  const sortedTags = Object.entries(tags).sort((a, b) => b[1] - a[1]);
 
   return {
-    totalElements: all.length,
+    totalElements: nodes.length,
     maxDepth,
     topTags: sortedTags,
     title: document.title,
@@ -3451,6 +2566,475 @@ function analyzeNetwork() {
     size: r.transferSize ? (r.transferSize / 1024).toFixed(1) + ' KB' : 'Cached',
     status: r.responseStatus || '200?'
   }));
+}
+
+// ============================================
+// SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
+// ============================================
+
+/**
+ * Aggregate all analysis results into unified SITE_CONTEXT object
+ * This is the foundation for LLM-augmented code generation
+ */
+async function extractSiteContext() {
+  showStatus('Extracting comprehensive site context...', 'info');
+
+  const startTime = Date.now();
+  const context = {
+    metadata: {
+      url: '',
+      timestamp: Date.now(),
+      extractionTime: 0,
+      qualityScore: 0
+    },
+    structure: null,
+    design: null,
+    tech: null,
+    code: null,
+    interactions: null,
+    psychology: null,
+    performance: null,
+    quality: null
+  };
+
+  try {
+    // Get current tab URL
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    context.metadata.url = tab.url;
+
+    // Run all analyses in parallel (except content.js ones)
+    const analyses = [
+      runAnalysis('structure'),
+      runAnalysis('palette'),
+      runAnalysis('stack'),
+      runAnalysis('code'),
+      runAnalysis('perf'),
+      runAnalysis('a11y'),
+      runAnalysis('seo')
+    ];
+
+    // Wait for completion (analyses will populate window.SITE_CONTEXT)
+    await Promise.all(analyses);
+
+    // Small delay to ensure all data is captured
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    // Aggregate from window.SITE_CONTEXT
+    const raw = window.SITE_CONTEXT || {};
+
+    // STRUCTURE: DOM analysis
+    if (raw.structure) {
+      context.structure = {
+        totalNodes: raw.structure.totalElements || 0,
+        maxDepth: raw.structure.maxDepth || 0,
+        tagDistribution: Object.fromEntries((raw.structure.topTags || []).slice(0, 20)),
+        title: raw.structure.title || '',
+        description: raw.structure.description || ''
+      };
+    }
+
+    // DESIGN: Visual design system
+    if (raw.palette) {
+      context.design = {
+        colorPalette: [...(raw.palette.text || []), ...(raw.palette.backgrounds || [])],
+        typography: {
+          fonts: [] // Will be populated from additional scans
+        }
+      };
+    }
+
+    // TECH STACK
+    if (raw.stack) {
+      context.tech = {
+        frameworks: Array.isArray(raw.stack) ? raw.stack : [],
+        libraries: []
+      };
+    }
+
+    // CODE PATTERNS
+    if (raw.code) {
+      context.code = {
+        totalScripts: raw.code.total || 0,
+        externalScripts: raw.code.external || 0,
+        inlineScripts: raw.code.inline || 0,
+        modules: raw.code.modules || 0,
+        async: raw.code.async || 0,
+        defer: raw.code.defer || 0,
+        sources: (raw.code.sources || []).map(s => s.host).slice(0, 20)
+      };
+    }
+
+    // INTERACTIONS: Forms, CTAs, Navigation (from SEO links)
+    if (raw.seo && raw.seo.links) {
+      context.interactions = {
+        totalLinks: raw.seo.links.total || 0,
+        internalLinks: raw.seo.links.internal || 0,
+        externalLinks: raw.seo.links.external || 0,
+        headingStructure: raw.seo.headings || {}
+      };
+    }
+
+    // PSYCHOLOGY: Dark patterns, persuasion (from psyche scan)
+    if (raw.psyche) {
+      context.psychology = {
+        darkPatterns: (raw.psyche.darkPatterns || []).map(p => p.type),
+        persuasionTechniques: raw.psyche.persuasionTechniques || [],
+        cognitiveLoad: raw.psyche.cognitiveLoad || 0,
+        urgencySignals: raw.psyche.urgencySignals || 0,
+        socialProof: raw.psyche.socialProof || 0,
+        scarcity: raw.psyche.scarcity || 0
+      };
+    }
+
+    // PERFORMANCE
+    if (raw.perf) {
+      context.performance = {
+        loadTime: raw.perf.loadTime || 0,
+        domReady: raw.perf.domReady || 0,
+        resources: raw.perf.resources || {}
+      };
+    }
+
+    // QUALITY: A11y & SEO
+    if (raw.a11y && raw.seo) {
+      context.quality = {
+        a11yIssues: {
+          missingAlt: (raw.a11y.missingAlt || []).length,
+          smallButtons: (raw.a11y.smallButtons || []).length,
+          unlabelledInputs: (raw.a11y.unlabelled || []).length
+        },
+        seoData: {
+          title: raw.seo.title || '',
+          description: raw.seo.description || '',
+          lang: raw.seo.lang || 'en'
+        }
+      };
+    }
+
+    // Calculate extraction time
+    context.metadata.extractionTime = Date.now() - startTime;
+
+    // Calculate quality score
+    context.metadata.qualityScore = calculateContextQuality(context);
+
+    // Cache to Chrome storage
+    await cacheContext(context);
+
+    // Display results
+    displayContextExtraction(context);
+
+    showStatus(`Context extracted (Quality: ${context.metadata.qualityScore}%)`, 'success');
+
+    return context;
+
+  } catch (error) {
+    console.error('Context extraction error:', error);
+    showStatus('Context extraction failed: ' + error.message, 'error');
+    return null;
+  }
+}
+
+/**
+ * Calculate context quality score (0-100)
+ * Based on completeness of extracted data
+ */
+function calculateContextQuality(context) {
+  let score = 0;
+  let maxScore = 0;
+
+  // Structure (20 points)
+  maxScore += 20;
+  if (context.structure) {
+    if (context.structure.totalNodes > 0) score += 10;
+    if (context.structure.maxDepth > 0) score += 5;
+    if (Object.keys(context.structure.tagDistribution || {}).length > 0) score += 5;
+  }
+
+  // Design (15 points)
+  maxScore += 15;
+  if (context.design) {
+    if ((context.design.colorPalette || []).length > 0) score += 10;
+    if ((context.design.typography?.fonts || []).length > 0) score += 5;
+  }
+
+  // Tech Stack (10 points)
+  maxScore += 10;
+  if (context.tech && (context.tech.frameworks || []).length > 0) {
+    score += 10;
+  }
+
+  // Code Patterns (15 points)
+  maxScore += 15;
+  if (context.code) {
+    if (context.code.totalScripts > 0) score += 10;
+    if ((context.code.sources || []).length > 0) score += 5;
+  }
+
+  // Interactions (10 points)
+  maxScore += 10;
+  if (context.interactions && context.interactions.totalLinks > 0) {
+    score += 10;
+  }
+
+  // Psychology (10 points)
+  maxScore += 10;
+  if (context.psychology) {
+    if ((context.psychology.darkPatterns || []).length > 0) score += 5;
+    if ((context.psychology.persuasionTechniques || []).length > 0) score += 5;
+  }
+
+  // Performance (10 points)
+  maxScore += 10;
+  if (context.performance && context.performance.loadTime > 0) {
+    score += 10;
+  }
+
+  // Quality (10 points)
+  maxScore += 10;
+  if (context.quality) {
+    if (context.quality.a11yIssues) score += 5;
+    if (context.quality.seoData) score += 5;
+  }
+
+  return Math.round((score / maxScore) * 100);
+}
+
+/**
+ * Compress context for LLM (target: <4000 tokens)
+ * Prioritizes most valuable data for code generation
+ */
+function compressContextForLLM(context) {
+  const compressed = {
+    url: context.metadata.url,
+    // Structure (essential)
+    structure: {
+      nodes: context.structure?.totalNodes || 0,
+      depth: context.structure?.maxDepth || 0,
+      topTags: Object.entries(context.structure?.tagDistribution || {}).slice(0, 10).map(([tag, count]) => `${tag}:${count}`)
+    },
+    // Design (essential)
+    colors: (context.design?.colorPalette || []).slice(0, 8),
+    // Tech (essential for context)
+    tech: (context.tech?.frameworks || []).join(', '),
+    // Code (important patterns)
+    scripts: {
+      total: context.code?.totalScripts || 0,
+      external: context.code?.externalScripts || 0,
+      hosts: (context.code?.sources || []).slice(0, 5)
+    },
+    // Psychology (key patterns only)
+    patterns: {
+      dark: (context.psychology?.darkPatterns || []).slice(0, 5),
+      persuasion: (context.psychology?.persuasionTechniques || []).slice(0, 5)
+    },
+    // Quality indicators
+    quality: context.metadata.qualityScore
+  };
+
+  return compressed;
+}
+
+/**
+ * Generate LLM system prompt with context injection
+ */
+function generateLLMPrompt(context, userRequest) {
+  const compressed = compressContextForLLM(context);
+
+  const prompt = `You are an expert Chrome Extension developer with deep knowledge of the target website.
+
+## SITE CONTEXT (Reverse-Engineered)
+URL: ${compressed.url}
+Quality Score: ${compressed.quality}%
+
+### Structure
+- DOM Nodes: ${compressed.structure.nodes}
+- Max Depth: ${compressed.structure.depth}
+- Top Elements: ${compressed.structure.topTags.join(', ')}
+
+### Visual Design
+- Color Palette: ${compressed.colors.join(', ')}
+
+### Technology Stack
+${compressed.tech || 'Unknown/Custom'}
+
+### Code Patterns
+- Total Scripts: ${compressed.scripts.total} (${compressed.scripts.external} external)
+- Script Hosts: ${compressed.scripts.hosts.join(', ')}
+
+### Psychological Patterns
+${compressed.patterns.dark.length > 0 ? `- Dark Patterns: ${compressed.patterns.dark.join(', ')}` : ''}
+${compressed.patterns.persuasion.length > 0 ? `- Persuasion: ${compressed.patterns.persuasion.join(', ')}` : ''}
+
+---
+
+## USER REQUEST
+${userRequest}
+
+## YOUR TASK
+Generate a Chrome Extension (Manifest V3) that addresses the user's request while respecting the site's structure and patterns identified above. Provide complete, production-ready code.`;
+
+  return prompt;
+}
+
+/**
+ * Cache context to Chrome storage for reuse
+ */
+async function cacheContext(context) {
+  try {
+    const cacheKey = `context_${new URL(context.metadata.url).hostname}`;
+    await chrome.storage.local.set({
+      [cacheKey]: {
+        data: context,
+        timestamp: Date.now()
+      }
+    });
+    console.log('Context cached:', cacheKey);
+  } catch (error) {
+    console.error('Context caching error:', error);
+  }
+}
+
+/**
+ * Retrieve cached context
+ */
+async function getCachedContext(url) {
+  try {
+    const cacheKey = `context_${new URL(url).hostname}`;
+    const result = await chrome.storage.local.get(cacheKey);
+
+    if (result[cacheKey]) {
+      const cached = result[cacheKey];
+      const age = Date.now() - cached.timestamp;
+
+      // Cache valid for 1 hour
+      if (age < 3600000) {
+        return cached.data;
+      }
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Context retrieval error:', error);
+    return null;
+  }
+}
+
+/**
+ * Display context extraction results
+ */
+function displayContextExtraction(context) {
+  const container = document.getElementById('analysis-results');
+  const content = document.getElementById('result-content');
+  const title = document.getElementById('result-title');
+
+  container.style.display = 'flex';
+  content.style.display = 'block';
+  title.textContent = 'SITE_CONTEXT Extraction';
+
+  const qualityClass = context.metadata.qualityScore >= 80 ? 'success' :
+    context.metadata.qualityScore >= 60 ? 'warning' : 'error';
+
+  const html = `
+    <div class="analysis-item">
+      <div class="analysis-header">
+        <div class="header-metrics">
+          <span>Quality Score: <strong style="color: ${qualityClass === 'success' ? '#10b981' : qualityClass === 'warning' ? '#f59e0b' : '#ef4444'}">${context.metadata.qualityScore}%</strong></span>
+          <span>Extraction Time: <strong>${(context.metadata.extractionTime / 1000).toFixed(2)}s</strong></span>
+        </div>
+        <div class="dive-actions">
+          <button class="dive-btn" data-action="copy-llm-prompt">Copy LLM Prompt</button>
+          <button class="dive-btn" data-action="export" data-dive="context">Export</button>
+        </div>
+      </div>
+
+      <div class="dive-content">
+        <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+          <div class="stat-card">
+            <span class="stat-value">${context.structure?.totalNodes || 0}</span>
+            <span class="stat-label">DOM Nodes</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${(context.design?.colorPalette || []).length}</span>
+            <span class="stat-label">Colors</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${(context.tech?.frameworks || []).length}</span>
+            <span class="stat-label">Frameworks</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${context.code?.totalScripts || 0}</span>
+            <span class="stat-label">Scripts</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${context.performance?.loadTime || 0}ms</span>
+            <span class="stat-label">Load Time</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-value">${(context.psychology?.darkPatterns || []).length}</span>
+            <span class="stat-label">Dark Patterns</span>
+          </div>
+        </div>
+
+        ${context.metadata.qualityScore < 80 ? `
+          <div class="dive-section" style="background: rgba(245, 158, 11, 0.1); border-left: 3px solid #f59e0b; padding: 12px; margin-top: 16px;">
+            <h5 style="color: #f59e0b; font-size: 11px; margin-bottom: 8px;">⚠️ Quality Warning</h5>
+            <p style="font-size: 10px; color: var(--text-secondary); margin: 0;">
+              Context quality is below optimal (${context.metadata.qualityScore}%). Run additional scans (Psyche, Network, Archetype) to improve context richness for LLM generation.
+            </p>
+          </div>
+        ` : ''}
+
+        <div class="dive-section" style="margin-top: 16px;">
+          <h5 style="color: var(--accent-color); font-size: 11px; margin-bottom: 10px;">📋 Extracted Context Summary</h5>
+          <table class="data-table" style="font-size: 10px;">
+            <tr>
+              <td><strong>Structure</strong></td>
+              <td>${context.structure?.totalNodes || 0} nodes, ${context.structure?.maxDepth || 0} depth</td>
+            </tr>
+            <tr>
+              <td><strong>Tech Stack</strong></td>
+              <td>${(context.tech?.frameworks || []).join(', ') || 'Unknown'}</td>
+            </tr>
+            <tr>
+              <td><strong>Code</strong></td>
+              <td>${context.code?.totalScripts || 0} scripts (${context.code?.externalScripts || 0} external)</td>
+            </tr>
+            <tr>
+              <td><strong>Performance</strong></td>
+              <td>${context.performance?.loadTime || 0}ms load, ${context.performance?.domReady || 0}ms DOM ready</td>
+            </tr>
+            <tr>
+              <td><strong>SEO</strong></td>
+              <td>${context.quality?.seoData?.title?.substring(0, 40) || 'N/A'}...</td>
+            </tr>
+          </table>
+        </div>
+
+        <div class="dive-section" style="margin-top: 16px; background: rgba(102, 126, 234, 0.05); padding: 12px; border-radius: 8px;">
+          <h5 style="color: #667eea; font-size: 11px; margin-bottom: 8px;">🤖 Ready for LLM Integration</h5>
+          <p style="font-size: 10px; color: var(--text-secondary); margin: 0;">
+            This context can be injected into LLM prompts (GPT-4, Claude) to generate site-specific Chrome Extensions. 
+            The compressed context is ~${Math.round(JSON.stringify(compressContextForLLM(context)).length / 4)} tokens.
+          </p>
+        </div>
+      </div>
+    </div>
+  `;
+
+  content.innerHTML = html;
+
+  // Store context globally for prompt generation
+  window.EXTRACTED_CONTEXT = context;
+
+  // Add event listener for LLM prompt copy
+  document.querySelector('[data-action="copy-llm-prompt"]')?.addEventListener('click', () => {
+    const userRequest = prompt('What extension feature do you want to build?', 'Block ads and distracting elements');
+    if (userRequest) {
+      const llmPrompt = generateLLMPrompt(context, userRequest);
+      navigator.clipboard.writeText(llmPrompt);
+      showStatus('LLM prompt copied! Paste into ChatGPT/Claude', 'success');
+    }
+  });
 }
 
 // Render Results
@@ -4400,6 +3984,269 @@ function displayAnalysisResults(type, data) {
       detailHtml,
       { title: 'Emotional Design Analysis', search: false, export: true }
     );
+  } else if (type === 'strategy') {
+    const detailHtml = `
+      <div class="stats-grid">
+        <div class="stat-card">
+          <span class="stat-value ${data.cognitiveBurden > 70 ? 'severity-high' : 'severity-low'}">${data.cognitiveBurden}</span>
+          <span class="stat-label">Cognitive Burden</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.designSystem ? data.designSystem.detected.split(' ')[0] : 'N/A'}</span>
+          <span class="stat-label">Design System</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.visualTension ? data.visualTension.balance : 'N/A'}</span>
+          <span class="stat-label">Visual Balance</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-value">${data.interactionFriction.score}</span>
+          <span class="stat-label">Friction Score</span>
+        </div>
+      </div>
+
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Strategic Briefing</h5>
+        </div>
+        <div class="report-box" style="background: rgba(99, 102, 241, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid var(--accent-color);">
+          <div style="font-weight: 700; color: var(--accent-color); margin-bottom: 12px; font-size: 13px;">⚡ Remix Opportunity Matrix</div>
+          ${data.remixOpportunities.length > 0 ? data.remixOpportunities.map(opp => `
+            <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);">
+              <div style="font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 4px;">${opp.target} <span style="font-weight:400; opacity: 0.6;">/// ${opp.type}</span></div>
+              <div style="font-size: 11px; opacity: 0.8; margin-bottom: 6px;">${opp.rationale}</div>
+              <div style="font-size: 11px; color: var(--accent-color); background: rgba(99, 102, 241, 0.1); padding: 6px 8px; border-radius: 4px; display: inline-block;">
+                <span style="font-weight: 700;">Action:</span> ${opp.action || 'Manual review required'}
+              </div>
+            </div>
+          `).join('') : '<div style="opacity: 0.5;">No critical optimization hooks detected.</div>'}
+        </div>
+      </div>
+
+      <div class="dive-section">
+        <div class="dive-section-header">
+          <h5>Deep Technical Forensics</h5>
+        </div>
+        <div class="data-row">
+            <span class="label">Design System</span>
+            <span class="value">${data.designSystem ? data.designSystem.detected : 'N/A'} (Cohesion: ${data.designSystem ? data.designSystem.cohesionScore : 0}%)</span>
+        </div>
+        ${data.visualTension ? `
+        <div class="data-row">
+            <span class="label">Visual Center of Gravity</span>
+            <span class="value">${data.visualTension.dominance}-Dominant</span>
+        </div>` : ''}
+        <div class="data-row">
+            <span class="label">Fitts's Law Compliance</span>
+            <span class="value">${data.neurodynamicFlow.fittsLawCompliance}%</span>
+        </div>
+        <div class="data-row">
+            <span class="label">Linguistic Anchors</span>
+            <span class="value">${data.linguisticAnchors.authorityAnchors} (Authority), ${data.linguisticAnchors.lossAversion} (Loss)</span>
+        </div>
+      </div>
+
+      ${data.competitorWeaknesses && data.competitorWeaknesses.length > 0 ? `
+      <div class="dive-section">
+         <div class="dive-section-header">
+           <h5 style="color: var(--danger-color);">Competitor Weaknesses (Exploit These)</h5>
+         </div>
+         <ul style="list-style: none; padding: 0; margin: 0;">
+           ${data.competitorWeaknesses.map(weakness => `
+             <li style="font-size: 11px; color: #ecaeb4; margin-bottom: 6px; padding-left: 12px; position: relative;">
+               <span style="position: absolute; left: 0; font-size: 8px; top: 3px;">🔴</span> ${weakness}
+             </li>
+           `).join('')}
+         </ul>
+      </div>` : ''}
+
+      <div class="dive-section" style="margin-top: 20px;">
+        <button id="visualize-strategy-btn" class="btn btn-primary btn-small" style="width: 100%;">
+          <span class="icon">👁️</span> Visualize On-Page Strategy
+        </button>
+      </div>
+    `;
+
+    html = createDeepDive('strategy-audit',
+      `<span>Burden: <strong class="${data.cognitiveBurden > 70 ? 'severity-high' : 'severity-low'}">${data.cognitiveBurden}</strong></span> · <span>Friction: <strong>${data.interactionFriction.score}</strong></span> · <span>Remix Hooks: <strong>${data.remixOpportunities.length}</strong></span>`,
+      detailHtml,
+      { title: 'Strategic Engineering Audit', search: false, export: true }
+    );
+  } else if (type === 'specimen') {
+    const detailHtml = `
+      <div class="specimen-container" style="background: var(--bg-secondary); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+        
+        <!-- Typography Section -->
+        <div class="specimen-section" style="margin-bottom: 30px;">
+          <h5 style="color: var(--accent-color); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">Typography Specimens</h5>
+          ${data.fonts.map(font => `
+            <div style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 15px;">
+              <div style="font-family: '${font}', sans-serif; font-size: 24px; color: var(--text-primary); margin-bottom: 4px;">
+                The quick brown fox jumps over the lazy dog.
+              </div>
+              <div style="font-size: 10px; color: var(--text-dim); font-family: var(--mono-font);">${font}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <!-- Color Palette Section -->
+        <div class="specimen-section" style="margin-bottom: 30px;">
+          <h5 style="color: var(--accent-color); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">Brand Palette</h5>
+          <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+            ${data.colors.brand.map(color => `
+              <div class="swatch-card" style="cursor: pointer;" data-color="${color}">
+                <div style="height: 40px; background: ${color}; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px;"></div>
+                <div style="font-size: 9px; color: var(--text-dim); text-align: center; font-family: var(--mono-font);">${color}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Component Specimens -->
+        <div class="specimen-section">
+          <h5 style="color: var(--accent-color); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">UI Components</h5>
+          <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+            ${data.buttons.map(btn => `
+              <div style="padding: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); flex: 1; min-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+                <button style="
+                  background: ${btn.bg};
+                  color: ${btn.color};
+                  border-radius: ${btn.radius};
+                  padding: ${btn.padding};
+                  border: none;
+                  font-family: '${btn.font}', sans-serif;
+                  font-size: 12px;
+                  margin-bottom: 10px;
+                  cursor: pointer;
+                ">${btn.text}</button>
+                <div style="font-size: 8px; color: var(--text-dim); text-align: center;">
+                  R: ${btn.radius} | P: ${btn.padding}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+      </div>
+    `;
+
+    html = createDeepDive('brand-specimen',
+      `<span>Fonts: <strong>${data.fonts.length}</strong></span> · <span>Colors: <strong>${data.colors.brand.length}</strong></span> · <span>Btns: <strong>${data.buttons.length}</strong></span>`,
+      detailHtml,
+      { title: 'Brand Style Guide Specimen', search: false, export: true }
+    );
+  }
+
+  else if (type === 'omniscience') {
+    const detailHtml = `
+      <div style="background: linear-gradient(180deg, rgba(20,20,30,0.8) 0%, rgba(20,20,30,0.95) 100%); border-radius: 12px; padding: 20px; border: 1px solid rgba(99, 102, 241, 0.2);">
+        
+        <!-- Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
+           <div>
+             <h4 style="margin: 0; font-size: 18px; color: #fff;">🧿 Omniscient Blueprint</h4>
+             <span style="font-size: 10px; color: var(--text-dim); font-family: var(--mono-font);">TARGET: ${data.domain.toUpperCase()}</span>
+           </div>
+           <div style="text-align: right;">
+             <div style="font-size: 24px; font-weight: 800; color: var(--accent-color);">${data.strategy.cognitiveBurden}</div>
+             <div style="font-size: 9px; text-transform: uppercase;">Cognitive Burden</div>
+           </div>
+        </div>
+
+        <!-- The 3 Pillars Grid -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; margin-bottom: 24px;">
+           
+           <!-- Pillar 1: Strategic (The Mind) -->
+           <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.05);">
+             <h5 style="color: #60a5fa; font-size: 11px; margin-bottom: 10px; text-transform: uppercase;">🧠 Strategic Mind</h5>
+             <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
+               <span>Design System</span>
+               <span style="color: #fff;">${data.strategy.designSystem ? data.strategy.designSystem.detected : 'N/A'}</span>
+             </div>
+             <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
+               <span>Friction</span>
+               <span style="color: ${data.strategy.interactionFriction.score > 50 ? '#f87171' : '#4ade80'}">${data.strategy.interactionFriction.score}/100</span>
+             </div>
+             <div style="font-size: 10px; display: flex; justify-content: space-between;">
+               <span>Opportunities</span>
+               <span style="color: #fff;">${data.strategy.remixOpportunities.length} Detected</span>
+             </div>
+           </div>
+
+           <!-- Pillar 2: Psyche (The Soul) -->
+           <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.05);">
+             <h5 style="color: #c084fc; font-size: 11px; margin-bottom: 10px; text-transform: uppercase;">👻 Psyche & Soul</h5>
+             <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
+               <span>Archetype</span>
+               <span style="color: #fff;">${data.archetype && data.archetype.primary ? data.archetype.primary.type : 'Unknown'}</span>
+             </div>
+             <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
+               <span>Tone</span>
+               <span style="color: #fff;">${data.rhetoric.tone}</span>
+             </div>
+             <div style="font-size: 10px; display: flex; justify-content: space-between;">
+               <span>Dark Patterns</span>
+               <span style="color: ${data.psyche.darkPatterns.length > 0 ? '#f87171' : '#4ade80'}">${data.psyche.darkPatterns.length}</span>
+             </div>
+           </div>
+
+           <!-- Pillar 3: Visual (The Body) -->
+           <div style="background: rgba(255,255,255,0.03); border-radius: 8px; padding: 12px; border: 1px solid rgba(255,255,255,0.05);">
+             <h5 style="color: #34d399; font-size: 11px; margin-bottom: 10px; text-transform: uppercase;">👁️ Visual Body</h5>
+             <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
+               <span>Palette</span>
+               <span style="display:flex; gap:2px;">
+                  ${data.specimen.colors.brand.slice(0, 3).map(c => `<span style="width:8px; height:8px; background:${c}; display:inline-block; border-radius:50%;"></span>`).join('')}
+               </span>
+             </div>
+             <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
+               <span>Balance</span>
+               <span style="color: #fff;">${data.strategy.visualTension ? data.strategy.visualTension.balance : 'N/A'}</span>
+             </div>
+             <div style="font-size: 10px; display: flex; justify-content: space-between;">
+               <span>Components</span>
+               <span style="color: #fff;">${data.specimen.buttons.length} Extracted</span>
+             </div>
+           </div>
+        </div>
+
+        <!-- Remix Matrix (The Action Plan) -->
+        <div style="margin-bottom: 20px;">
+          <h5 style="font-size: 10px; color: var(--text-dim); margin-bottom: 10px; text-transform: uppercase;">⚡ Remix Action Matrix</h5>
+          ${data.strategy.remixOpportunities.length > 0 ? data.strategy.remixOpportunities.map(opp => `
+             <div style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid var(--accent-color); padding: 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                   <strong style="color: #fff; font-size: 11px;">${opp.target}</strong>
+                   <span style="font-size: 9px; opacity: 0.7; border: 1px solid rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px;">${opp.type}</span>
+                </div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">${opp.rationale}</div>
+                <div style="font-size: 10px; color: var(--accent-color); font-weight: 700;">👉 ${opp.action || 'Remix this element.'}</div>
+             </div>
+          `).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-dim); font-size: 11px;">No critical remix opportunities detected. The canvas is blank.</div>'}
+        </div>
+
+        <!-- Specimen Strip -->
+        ${data.specimen ? `
+        <div>
+          <h5 style="font-size: 10px; color: var(--text-dim); margin-bottom: 10px; text-transform: uppercase;">🧬 DNA Specimen</h5>
+          <div style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px;">
+             ${data.specimen.fonts.slice(0, 3).map(f => `
+                <div style="background: #000; padding: 6px 10px; border-radius: 4px; border: 1px solid #333; font-size: 10px; white-space: nowrap;">Aa ${f}</div>
+             `).join('')}
+             ${data.specimen.colors.brand.slice(0, 5).map(c => `
+                <div style="background: ${c}; width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);"></div>
+             `).join('')}
+          </div>
+        </div>` : ''}
+
+      </div>
+    `;
+
+    html = createDeepDive('omniscience-blueprint',
+      `<span>Burden: <strong>${data.strategy.cognitiveBurden}</strong></span> · <span>Actions: <strong>${data.strategy.remixOpportunities.length}</strong></span> · <span>Dark Patterns: <strong>${data.psyche.darkPatterns.length}</strong></span>`,
+      detailHtml,
+      { title: 'The Omniscient Blueprint', search: false, export: true }
+    );
   }
 
   content.innerHTML = html;
@@ -4490,6 +4337,18 @@ function displayAnalysisResults(type, data) {
       showStatus('Table sorted', 'info');
     });
   });
+
+  // Add Strategy Visualization button listener
+  const vizBtn = content.querySelector('#visualize-strategy-btn');
+  if (vizBtn) {
+    vizBtn.addEventListener('click', async () => {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab) {
+        chrome.tabs.sendMessage(tab.id, { action: 'visualizeStrategy' });
+        showStatus('Strategic highlights active on page', 'info');
+      }
+    });
+  }
 }
 
 function renderD3Graph(rootData) {
@@ -4761,25 +4620,239 @@ function renderSequenceDiagram(data) {
 }
 
 // Show status message in the professional status bar
-function showStatus(message, type = 'info') {
-  const statusEl = document.getElementById('status-message');
-  if (!statusEl) return;
+// Status message handled by utils.js via showStatus()
 
-  const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  statusEl.textContent = `[${timestamp}] ${message.toUpperCase()} `;
+// ============================================
+// EXTRACTION RESULTS DISPLAY
+// ============================================
 
-  // Color the text based on type for instant recognition
-  if (type === 'error') statusEl.style.color = 'var(--danger-color)';
-  else if (type === 'success') statusEl.style.color = 'var(--success-color)';
-  else if (type === 'info') statusEl.style.color = 'var(--accent-color)';
-  else statusEl.style.color = 'var(--text-dim)';
+function displayExtractionResults(extraction) {
+  const resultContent = document.getElementById('result-content');
+  if (!resultContent) return;
 
-  // Reset after 4s
-  setTimeout(() => {
-    statusEl.textContent = `ReMixr IDE // Build 1.0.4 Ready`;
-    statusEl.style.color = 'var(--text-dim)';
-  }, 4000);
+  // Store globally for other actions
+  window.lastExtraction = extraction;
+
+  const html = `
+    <div class="extraction-results">
+      <div class="extraction-section">
+        <h4>🌐 Website Metadata</h4>
+        <div class="metadata-grid">
+          <div><strong>URL:</strong> ${extraction.metadata.url}</div>
+          <div><strong>Domain:</strong> ${extraction.metadata.domain}</div>
+          <div><strong>Viewport:</strong> ${extraction.metadata.viewport.width}x${extraction.metadata.viewport.height}</div>
+          <div><strong>Extracted:</strong> ${new Date(extraction.metadata.timestamp).toLocaleString()}</div>
+        </div>
+      </div>
+
+      <div class="extraction-section">
+        <h4>⚛️ Frameworks Detected</h4>
+        ${extraction.frameworks.detected.length > 0 ? `
+          <ul class="framework-list">
+            ${extraction.frameworks.detected.map(fw => `
+              <li><strong>${fw}</strong> ${extraction.frameworks.versions[fw] ? `v${extraction.frameworks.versions[fw]}` : ''}</li>
+            `).join('')}
+          </ul>
+        ` : '<p class="empty">No frameworks detected</p>'}
+      </div>
+
+      <div class="extraction-section">
+        <h4>🗄️ State Management</h4>
+        <div class="state-info">
+          ${extraction.stateManagement.redux ? '<div>✓ Redux detected</div>' : ''}
+          ${extraction.stateManagement.vuex ? '<div>✓ Vuex detected</div>' : ''}
+          ${extraction.stateManagement.mobx ? '<div>✓ MobX detected</div>' : ''}
+          ${!extraction.stateManagement.redux && !extraction.stateManagement.vuex && !extraction.stateManagement.mobx ?
+      '<p class="empty">No state management detected</p>' : ''}
+        </div>
+      </div>
+
+      <div class="extraction-section">
+        <h4>🌍 Global Variables</h4>
+        <div class="globals-count">
+          Found ${Object.keys(extraction.globalVariables).length} custom global variables
+        </div>
+        <button id="copy-globals-btn" class="btn btn-small btn-secondary">
+          Copy Globals JSON
+        </button>
+      </div>
+
+      <div class="extraction-section">
+        <h4>💾 Storage</h4>
+        <div class="storage-grid">
+          <div><strong>localStorage:</strong> ${Object.keys(extraction.storage.localStorage).length} items</div>
+          <div><strong>sessionStorage:</strong> ${Object.keys(extraction.storage.sessionStorage).length} items</div>
+          <div><strong>Cookies:</strong> ${Object.keys(extraction.storage.cookies).length} cookies</div>
+        </div>
+      </div>
+
+      <div class="extraction-section">
+        <h4>🎯 Custom Elements</h4>
+        ${extraction.customElements.length > 0 ? `
+          <div class="custom-elements-count">${extraction.customElements.length} Web Components found</div>
+        ` : '<p class="empty">No custom elements detected</p>'}
+      </div>
+
+      <div class="extraction-actions">
+        <button id="download-json-btn" class="btn btn-primary">
+          📥 Download Complete Extraction (JSON)
+        </button>
+        <button id="download-ai-btn" class="btn btn-secondary">
+          🤖 Download AI Context (Markdown)
+        </button>
+        <button id="copy-all-btn" class="btn btn-secondary">
+          📋 Copy to Clipboard
+        </button>
+      </div>
+    </div>
+  `;
+
+  resultContent.innerHTML = html;
+
+  // Add Event Listeners (Safe approach)
+  document.getElementById('copy-globals-btn')?.addEventListener('click', () => {
+    copyToClipboard(JSON.stringify(extraction.globalVariables, null, 2));
+  });
+
+  document.getElementById('download-json-btn')?.addEventListener('click', () => {
+    downloadExtraction();
+  });
+
+  document.getElementById('download-ai-btn')?.addEventListener('click', () => {
+    downloadAIContext();
+  });
+
+  document.getElementById('copy-all-btn')?.addEventListener('click', () => {
+    copyToClipboard(JSON.stringify(extraction, null, 2));
+  });
 }
+
+
+function generateAIContext(extraction) {
+  const md = `# Website Analysis Context
+**Generated by ReMixr** | ${new Date().toLocaleString()}
+
+## Overview
+- **URL:** ${extraction.metadata.url}
+- **Domain:** ${extraction.metadata.domain}
+- **User Agent:** ${extraction.metadata.userAgent}
+- **Viewport:** ${extraction.metadata.viewport.width}x${extraction.metadata.viewport.height}
+
+## Frameworks & Libraries
+${extraction.frameworks.detected.length > 0 ? extraction.frameworks.detected.map(fw =>
+    `- **${fw}** ${extraction.frameworks.versions[fw] ? `(v${extraction.frameworks.versions[fw]})` : ''}`
+  ).join('\n') : '_No frameworks detected_'}
+
+## State Management
+${extraction.stateManagement.redux ? '- Redux: Detected\n' : ''}${extraction.stateManagement.vuex ? '- Vuex: Detected\n' : ''}${extraction.stateManagement.mobx ? '- MobX: Detected\n' : ''}${!extraction.stateManagement.redux && !extraction.stateManagement.vuex && !extraction.stateManagement.mobx ? '_No state management detected_' : ''}
+
+## Global Variables
+Found ${Object.keys(extraction.globalVariables).length} custom global variables:
+
+\`\`\`javascript
+${Object.keys(extraction.globalVariables).slice(0, 20).map(key =>
+    `window.${key} // ${extraction.globalVariables[key].type}`
+  ).join('\n')}
+\`\`\`
+
+## Storage
+- **localStorage:** ${Object.keys(extraction.storage.localStorage).length} items
+- **sessionStorage:** ${Object.keys(extraction.storage.sessionStorage).length} items
+- **Cookies:** ${Object.keys(extraction.storage.cookies).length} cookies
+
+## API Endpoints
+${extraction.apiEndpoints.detected.length > 0 ?
+      extraction.apiEndpoints.detected.slice(0, 10).map(url => `- ${url}`).join('\n') :
+      '_No API endpoints detected_'}
+
+${extraction.apiEndpoints.baseUrl ? `\n**Base URL:** ${extraction.apiEndpoints.baseUrl}\n` : ''}${extraction.apiEndpoints.graphql ? '**GraphQL:** Detected\n' : ''}
+
+## DOM Structure
+- **Total Elements:** ${countDOMElements(extraction.domTree)}
+- **Custom Elements:** ${extraction.customElements.length}
+
+## Computed Styles (Key Elements)
+\`\`\`css
+${Object.entries(extraction.computedStyles).map(([selector, styles]) =>
+        `${selector} {\n${Object.entries(styles).map(([prop, value]) => `  ${prop}: ${value};`).join('\n')}\n}`
+      ).join('\n\n')}
+\`\`\`
+
+## Data Attributes
+Found ${Object.keys(extraction.dataAttributes).length} elements with data attributes.
+
+## Prototype Chain
+${Object.entries(extraction.prototypes).map(([name, methods]) =>
+        `### ${name}\nMethods: ${methods.length}`
+      ).join('\n\n')}
+
+---
+
+## Complete Extraction Data
+
+For the full extraction data including component trees, event listeners, and deep object introspection, see the accompanying JSON file.
+
+### Usage with AI Assistants
+
+This context provides a comprehensive overview of the website's architecture, frameworks, and object model. Use this information to:
+
+1. **Understand the tech stack** and make informed decisions about integration
+2. **Identify state management patterns** for data flow analysis
+3. **Discover available APIs** and global objects for extension development
+4. **Analyze the DOM structure** for scraping or automation
+5. **Extract design tokens** from computed styles
+
+### Next Steps
+
+1. Review the frameworks and versions to ensure compatibility
+2. Examine the global variables for potential integration points
+3. Analyze the API endpoints for data access patterns
+4. Study the component trees (if available) for architecture insights
+5. Use the complete JSON extraction for deep analysis
+
+---
+
+*Generated by ReMixr - The Meta-Extension Builder*
+`;
+
+  return md;
+}
+
+function countDOMElements(node) {
+  if (!node) return 0;
+  let count = 1;
+  if (node.children) {
+    for (const child of node.children) {
+      count += countDOMElements(child);
+    }
+  }
+  return count;
+}
+
+function downloadExtraction() {
+  if (window.lastExtraction) {
+    downloadAsFile(
+      JSON.stringify(window.lastExtraction, null, 2),
+      `${window.lastExtraction.metadata.domain}_extraction.json`,
+      'application/json'
+    );
+  }
+}
+
+function downloadAIContext() {
+  if (window.lastExtraction) {
+    const context = generateAIContext(window.lastExtraction);
+    downloadAsFile(
+      context,
+      `${window.lastExtraction.metadata.domain}_context.md`,
+      'text/markdown'
+    );
+  }
+}
+
+// copyToClipboard handled by utils.js
+
+// downloadAsFile handled by utils.js
 
 // ============================================
 // EXTENSION WIZARD
@@ -4864,7 +4937,8 @@ function generateManifest(name, description, extType, features, hostPerms, custo
     permissions: []
   };
 
-  // Add icon placeholders
+  // Add icon references
+  // Icons will be generated during export
   manifest.icons = {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -5503,11 +5577,15 @@ function generateBackgroundScript(features, behaviors) {
 
   if (behaviors.hotReload) {
     code += `\n// Hot reload for development\n`;
-    code += `const filesInDirectory = dir => new Promise(resolve => {\n`;
-    code += `  // Watch for file changes and reload extension\n`;
-    code += `  // Note: This is a placeholder - full implementation requires file watching\n`;
-    code += `  console.log('Hot reload enabled for development');\n`;
-    code += `});\n`;
+    code += `// Note: Chrome extensions can use chrome.runtime.reload() for development\n`;
+    code += `if (typeof chrome !== 'undefined' && chrome.runtime) {\n`;
+    code += `  // Listen for keyboard shortcut (Ctrl+R) to reload extension\n`;
+    code += `  chrome.commands?.onCommand?.addListener((command) => {\n`;
+    code += `    if (command === 'reload-extension') {\n`;
+    code += `      chrome.runtime.reload();\n`;
+    code += `    }\n`;
+    code += `  });\n`;
+    code += `}\n`;
   }
 
   return code;

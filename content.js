@@ -110,11 +110,48 @@ function handleClick(e) {
     e.preventDefault();
     e.stopPropagation();
 
-    const selector = getSelector(e.target);
+    const target = e.target;
+    const selector = getSelector(target);
+    const styles = window.getComputedStyle(target);
+
+    // Collect specific styles for editing
+    const styleData = {
+        selector: selector,
+        tagName: target.tagName.toLowerCase(),
+        attributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value })),
+        styles: {
+            color: styles.color,
+            backgroundColor: styles.backgroundColor,
+            fontSize: styles.fontSize,
+            padding: styles.padding,
+            margin: styles.margin,
+            border: styles.border,
+            borderRadius: styles.borderRadius,
+            display: styles.display,
+            flexDirection: styles.flexDirection,
+            justifyContent: styles.justifyContent,
+            alignItems: styles.alignItems,
+            gap: styles.gap,
+            width: styles.width,
+            height: styles.height,
+            opacity: styles.opacity,
+            boxShadow: styles.boxShadow,
+            fontFamily: styles.fontFamily,
+            fontWeight: styles.fontWeight,
+            visibility: styles.visibility
+        }
+    };
+
+    chrome.runtime.sendMessage({
+        action: 'elementSelected',
+        data: styleData
+    });
+
+    // Still copy to clipboard for convenience
     navigator.clipboard.writeText(selector).then(() => {
         // Visual feedback
         const originalText = overlay.innerHTML;
-        overlay.innerHTML = `<div style="color:#4ade80; text-align:center; padding: 10px;">Selector Copied!</div>`;
+        overlay.innerHTML = `<div style="color:#4ade80; text-align:center; padding: 10px;">Inspector Tracking Element...</div>`;
         setTimeout(() => {
             overlay.innerHTML = originalText;
         }, 1000);
@@ -146,7 +183,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const newState = request.state !== undefined ? request.state : !inspectorActive;
         toggleInspector(newState);
         sendResponse({ active: newState });
-        return true;
     } else if (request.action === 'analyzePsyche') {
         try {
             const result = analyzePsychologicalPatterns();
@@ -155,7 +191,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('analyzePsyche error:', error);
             sendResponse(null);
         }
-        return true;
     } else if (request.action === 'analyzeArchetype') {
         try {
             const result = analyzeBrandArchetype();
@@ -164,7 +199,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('analyzeArchetype error:', error);
             sendResponse(null);
         }
-        return true;
     } else if (request.action === 'analyzeSoul') {
         try {
             const result = analyzeSoul();
@@ -173,7 +207,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('analyzeSoul error:', error);
             sendResponse(null);
         }
-        return true;
     } else if (request.action === 'analyzeShadow') {
         try {
             const result = analyzeShadow();
@@ -182,7 +215,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('analyzeShadow error:', error);
             sendResponse(null);
         }
-        return true;
     } else if (request.action === 'analyzeRhetoric') {
         try {
             const result = analyzeRhetoric();
@@ -191,7 +223,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('analyzeRhetoric error:', error);
             sendResponse(null);
         }
-        return true;
     } else if (request.action === 'analyzeEmotion') {
         try {
             const result = analyzeEmotionalDesign();
@@ -200,616 +231,914 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             console.error('analyzeEmotion error:', error);
             sendResponse(null);
         }
-        return true;
+    } else if (request.action === 'updateStyle') {
+        try {
+            const el = document.querySelector(request.selector);
+            if (el) {
+                el.style[request.property] = request.value;
+                sendResponse({ success: true });
+            } else {
+                sendResponse({ success: false, error: 'Element not found' });
+            }
+        } catch (error) {
+            sendResponse({ success: false, error: error.message });
+        }
+    } else if (request.action === 'analyzeStrategy') {
+        try {
+            const result = analyzeStrategicArchitecture();
+            sendResponse(result);
+        } catch (error) {
+            console.error('analyzeStrategy error:', error);
+            sendResponse(null);
+        }
+    } else if (request.action === 'visualizeStrategy') {
+        try {
+            visualizeStrategicMapping();
+            sendResponse({ success: true });
+        } catch (error) {
+            sendResponse({ success: false, error: error.message });
+        }
+    } else if (request.action === 'analyzeOmniscience') {
+        // THE OMNISCIENT BLUEPRINT: Aggregates ALL intelligence layers
+        const intelligence = {
+            strategy: analyzeStrategicArchitecture(),
+            psyche: analyzePsychologicalPatterns(),
+            specimen: analyzeSpecimen(),
+            soul: analyzeSoul(),
+            archetype: analyzeBrandArchetype(),
+            rhetoric: analyzeRhetoric(),
+            domain: window.location.hostname,
+            timestamp: new Date().toISOString()
+        };
+        sendResponse(intelligence);
+    } else if (request.action === 'toggleXRay') {
+        try {
+            const active = toggleXRayMode();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleHeatmap') {
+        try {
+            const active = toggleHeatmap();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'analyzeSpecimen') {
+        try {
+            const result = analyzeSpecimen();
+            sendResponse(result);
+        } catch (error) {
+            sendResponse(null);
+        }
+    } else if (request.action === 'extractCompleteModel') {
+        // NEW: Complete object model extraction
+        try {
+            const result = extractCompleteObjectModel();
+            sendResponse(result);
+        } catch (error) {
+            console.error('extractCompleteModel error:', error);
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'extractFrameworkState') {
+        // NEW: Framework-specific state extraction
+        try {
+            const result = extractFrameworkState();
+            sendResponse(result);
+        } catch (error) {
+            console.error('extractFrameworkState error:', error);
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'extractAPISurface') {
+        // NEW: API surface mapping
+        try {
+            const result = extractAPISurface();
+            sendResponse(result);
+        } catch (error) {
+            console.error('extractAPISurface error:', error);
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleContrastMap') {
+        try {
+            const active = toggleContrastMap();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleEventSniffer') {
+        try {
+            const active = toggleEventSniffer();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'applyReality') {
+        try {
+            const result = applyReality(request.style);
+            sendResponse({ success: true, style: result });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleGodMode') {
+        try {
+            const active = toggleGodMode();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleWireframe') {
+        document.body.classList.toggle('remixr-wireframe');
+        if (!document.getElementById('remixr-wireframe-style')) {
+            const style = document.createElement('style');
+            style.id = 'remixr-wireframe-style';
+            style.textContent = `
+                 .remixr-wireframe * {
+                     background: none !important;
+                     color: #0f0 !important;
+                     border: 1px solid #0f0 !important;
+                     box-shadow: none !important;
+                 }
+                 .remixr-wireframe img, .remixr-wireframe video {
+                     display: none !important;
+                 }
+                 .remixr-wireframe {
+                     background-color: #000 !important;
+                 }
+             `;
+            document.head.appendChild(style);
+            sendResponse({ status: 'active' });
+        } else {
+            document.getElementById('remixr-wireframe-style').remove();
+            sendResponse({ status: 'inactive' });
+        }
+    } else if (request.action === 'toggleImages') {
+        const images = document.querySelectorAll('img');
+        if (document.body.getAttribute('data-remixr-images') === 'hidden') {
+            images.forEach(img => img.style.opacity = '1');
+            document.body.removeAttribute('data-remixr-images');
+            sendResponse({ status: 'visible' });
+        } else {
+            images.forEach(img => img.style.opacity = '0');
+            document.body.setAttribute('data-remixr-images', 'hidden');
+            sendResponse({ status: 'hidden' });
+        }
+    } else if (request.action === 'enableInputs') {
+        const disabled = document.querySelectorAll('input[disabled], button[disabled], textarea[disabled]');
+        disabled.forEach(el => {
+            el.removeAttribute('disabled');
+            el.style.border = '2px solid #4ade80';
+        });
+        sendResponse({ count: disabled.length });
+    } else if (request.action === 'showPasswords') {
+        const pwds = document.querySelectorAll('input[type="password"]');
+        pwds.forEach(el => {
+            el.type = 'text';
+            el.style.border = '2px solid #ef4444';
+        });
+        sendResponse({ count: pwds.length });
+    } else if (request.action === 'killStickies') {
+        const stickies = document.querySelectorAll('*');
+        let count = 0;
+        stickies.forEach(el => {
+            const style = window.getComputedStyle(el);
+            if (style.position === 'fixed' || style.position === 'sticky') {
+                el.style.position = 'static';
+                count++;
+            }
+        });
+        sendResponse({ count });
+    } else if (request.action === 'toggleEditMode') {
+        document.designMode = document.designMode === 'on' ? 'off' : 'on';
+        sendResponse({ active: document.designMode === 'on' });
+    } else if (request.action === 'toggleGravity') {
+        try {
+            const active = toggleGravityMode();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleNeural') {
+        try {
+            const active = toggleNeuralLink();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'toggleGhost') {
+        try {
+            const active = toggleGhostTrace();
+            sendResponse({ active });
+        } catch (error) {
+            sendResponse({ error: error.message });
+        }
+    } else if (request.action === 'zapElement') {
+
+
+        // Enable Zap Mode (click to delete)
+        if (window.remixrZapHandler) {
+            document.removeEventListener('click', window.remixrZapHandler, true);
+            window.remixrZapHandler = null;
+            document.body.style.cursor = 'default';
+            sendResponse({ active: false });
+        } else {
+            window.remixrZapHandler = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.target.remove();
+            };
+            document.addEventListener('click', window.remixrZapHandler, true);
+            document.body.style.cursor = 'crosshair';
+            sendResponse({ active: true });
+        }
     }
+    return true;
 });
 
 // ============================================
-// PSYCHOLOGICAL PATTERN ANALYSIS
+// BRAND SPECIMEN ANALYSIS
 // ============================================
 
-function analyzePsychologicalPatterns() {
-    const patterns = {
-        darkPatterns: [],
-        persuasionTechniques: [],
-        cognitiveLoad: 0,
-        attentionEngineering: [],
-        urgencySignals: 0,
-        socialProof: 0,
-        scarcity: 0,
-        authority: 0
+function analyzeSpecimen() {
+    const specimen = {
+        fonts: [],
+        colors: {
+            brand: [],
+            text: [],
+            bg: []
+        },
+        buttons: [],
+        spacing: new Set()
     };
 
-    const bodyText = document.body.innerText.toLowerCase();
-    const allElements = Array.from(document.querySelectorAll('*'));
-
-    // Dark Pattern Detection
-    const darkPatternKeywords = {
-        'forced-continuity': ['trial ends', 'auto-renew', 'automatic renewal', 'will be charged'],
-        'confirmshaming': ['no thanks', 'no, i don\'t want', 'maybe later', 'skip this'],
-        'hidden-costs': ['additional fees', 'service charge', 'processing fee', 'hidden'],
-        'bait-and-switch': ['limited time', 'exclusive', 'members only', 'special offer'],
-        'disguised-ads': ['sponsored', 'promoted', 'recommended for you'],
-        'roach-motel': ['easy to subscribe', 'cancel anytime', 'no commitment'],
-        'privacy-zuckering': ['accept all', 'agree to all', 'allow cookies']
-    };
-
-    for (const [pattern, keywords] of Object.entries(darkPatternKeywords)) {
-        keywords.forEach(keyword => {
-            if (bodyText.includes(keyword)) {
-                patterns.darkPatterns.push({
-                    type: pattern,
-                    trigger: keyword,
-                    severity: getSeverity(pattern)
-                });
-            }
-        });
-    }
-
-    // Persuasion Techniques
-    // Scarcity Detection
-    const scarcityPatterns = ['only \\d+ left', 'limited stock', 'almost gone', 'selling fast', 'low stock', 'hurry'];
-    scarcityPatterns.forEach(pattern => {
-        const regex = new RegExp(pattern, 'gi');
-        const matches = bodyText.match(regex);
-        if (matches) {
-            patterns.scarcity += matches.length;
-            patterns.persuasionTechniques.push({ type: 'scarcity', instances: matches.length });
-        }
-    });
-
-    // Urgency Detection
-    const urgencyPatterns = ['today only', 'ends soon', 'last chance', 'now or never', 'don\\'t miss', 'expires'];
-    urgencyPatterns.forEach(pattern => {
-        const regex = new RegExp(pattern, 'gi');
-        const matches = bodyText.match(regex);
-        if (matches) {
-            patterns.urgencySignals += matches.length;
-            patterns.persuasionTechniques.push({ type: 'urgency', instances: matches.length });
-        }
-    });
-
-    // Social Proof Detection
-    const socialProofElements = document.querySelectorAll('[class*=\"review\"], [class*=\"rating\"], [class*=\"testimonial\"], [class*=\"customer\"]');
-    patterns.socialProof = socialProofElements.length;
-    if (socialProofElements.length > 0) {
-        patterns.persuasionTechniques.push({ type: 'social-proof', instances: socialProofElements.length });
-    }
-
-    // Authority Detection
-    const authorityKeywords = ['expert', 'certified', 'approved', 'official', 'verified', 'trusted', 'award'];
-    authorityKeywords.forEach(keyword => {
-        const regex = new RegExp(keyword, 'gi');
-        const matches = bodyText.match(regex);
-        if (matches) {
-            patterns.authority += matches.length;
-        }
-    });
-    if (patterns.authority > 0) {
-        patterns.persuasionTechniques.push({ type: 'authority', instances: patterns.authority });
-    }
-
-    // Cognitive Load Analysis
-    const visibleElements = allElements.filter(el => {
+    // Fonts
+    const fontSet = new Set();
+    document.querySelectorAll('h1, h2, h3, p, span, a, button').forEach(el => {
         const style = window.getComputedStyle(el);
-        return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+        const font = style.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
+        if (font) fontSet.add(font);
+
+        // Spacing
+        specimen.spacing.add(style.paddingTop);
+        specimen.spacing.add(style.gap);
     });
-    
-    const interactiveElements = document.querySelectorAll('button, a, input, select, textarea, [onclick], [role=\"button\"]');
-    const animations = Array.from(document.styleSheets).reduce((count, sheet) => {
-        try {
-            const rules = Array.from(sheet.cssRules || []);
-            return count + rules.filter(rule => rule.cssText && rule.cssText.includes('animation')).length;
-        } catch (e) {
-            return count;
-        }
-    }, 0);
+    specimen.fonts = Array.from(fontSet).slice(0, 10);
+    specimen.spacing = Array.from(specimen.spacing).filter(s => s !== '0px' && s !== 'normal').slice(0, 10);
 
-    patterns.cognitiveLoad = Math.round(
-        (visibleElements.length * 0.1) + 
-        (interactiveElements.length * 2) + 
-        (animations * 5) +
-        (patterns.darkPatterns.length * 10)
-    );
+    // Colors
+    const colors = extractDominantColors();
+    specimen.colors.brand = colors.slice(0, 12);
 
-    // Attention Engineering
-    const popups = document.querySelectorAll('[class*=\"modal\"], [class*=\"popup\"], [class*=\"overlay\"]');
-    const autoplay = document.querySelectorAll('video[autoplay], audio[autoplay]');
-    const notifications = document.querySelectorAll('[class*=\"notification\"], [class*=\"alert\"], [class*=\"banner\"]');
-    
-    if (popups.length > 0) patterns.attentionEngineering.push({ type: 'modals', count: popups.length });
-    if (autoplay.length > 0) patterns.attentionEngineering.push({ type: 'autoplay-media', count: autoplay.length });
-    if (notifications.length > 0) patterns.attentionEngineering.push({ type: 'notifications', count: notifications.length });
+    // UI Specimens
+    const mainButtons = Array.from(document.querySelectorAll('button, .btn, .button')).slice(0, 5);
+    specimen.buttons = mainButtons.map(btn => {
+        const style = window.getComputedStyle(btn);
+        return {
+            text: btn.innerText.trim().slice(0, 20) || 'Action',
+            bg: style.backgroundColor,
+            color: style.color,
+            radius: style.borderRadius,
+            padding: style.padding,
+            font: style.fontFamily.split(',')[0]
+        };
+    });
 
-    return patterns;
-}
-
-function getSeverity(pattern) {
-    const severityMap = {
-        'forced-continuity': 'high',
-        'confirmshaming': 'medium',
-        'hidden-costs': 'high',
-        'bait-and-switch': 'medium',
-        'disguised-ads': 'low',
-        'roach-motel': 'high',
-        'privacy-zuckering': 'medium'
-    };
-    return severityMap[pattern] || 'low';
+    return specimen;
 }
 
 // ============================================
-// BRAND ARCHETYPE ANALYSIS
+// VISUAL WEALTH: 3D X-RAY (DOM EXPLODER)
 // ============================================
 
-function analyzeBrandArchetype() {
-    const bodyText = document.body.innerText.toLowerCase();
-    const archetypes = {
-        innocent: 0, explorer: 0, sage: 0, hero: 0, outlaw: 0, magician: 0,
-        regular: 0, lover: 0, jester: 0, caregiver: 0, creator: 0, ruler: 0
-    };
+let xrayActive = false;
+function toggleXRayMode() {
+    xrayActive = !xrayActive;
+    const body = document.body;
 
-    // Archetype keyword mapping
-    const archetypeKeywords = {
-        innocent: ['pure', 'simple', 'honest', 'trust', 'optimistic', 'happy', 'natural', 'authentic'],
-        explorer: ['adventure', 'freedom', 'discover', 'explore', 'journey', 'experience', 'independent', 'pioneer'],
-        sage: ['wisdom', 'knowledge', 'expert', 'truth', 'insight', 'understand', 'intelligence', 'learn'],
-        hero: ['courage', 'brave', 'strong', 'power', 'achieve', 'win', 'conquer', 'champion'],
-        outlaw: ['rebel', 'revolution', 'break', 'disrupt', 'challenge', 'wild', 'radical', 'liberate'],
-        magician: ['transform', 'magic', 'dream', 'imagine', 'create', 'vision', 'inspire', 'wonder'],
-        regular: ['friend', 'belong', 'community', 'everyday', 'reliable', 'down-to-earth', 'comfortable'],
-        lover: ['passion', 'intimate', 'sensual', 'pleasure', 'indulge', 'desire', 'romance', 'beautiful'],
-        jester: ['fun', 'enjoy', 'play', 'laugh', 'humor', 'entertaining', 'lighthearted', 'spontaneous'],
-        caregiver: ['care', 'nurture', 'protect', 'compassion', 'support', 'help', 'service', 'generous'],
-        creator: ['innovate', 'design', 'craft', 'build', 'artistic', 'original', 'express', 'unique'],
-        ruler: ['leader', 'control', 'power', 'prestige', 'exclusive', 'premium', 'luxury', 'sophisticated']
-    };
+    if (xrayActive) {
+        body.style.transition = 'transform 1s ease-in-out';
+        body.style.transformStyle = 'preserve-3d';
+        body.style.perspective = '2000px';
+        body.style.transform = 'rotateY(20deg) rotateX(10deg) scale(0.8)';
 
-    // Score each archetype
-    for (const [archetype, keywords] of Object.entries(archetypeKeywords)) {
-        keywords.forEach(keyword => {
-            const regex = new RegExp(`\\b${keyword}\\w*\\b`, 'gi');
-            const matches = bodyText.match(regex);
-            if (matches) archetypes[archetype] += matches.length;
+        const all = document.querySelectorAll('*');
+        all.forEach((el, i) => {
+            if (el.tagName === 'BODY' || el.tagName === 'HTML' || el.id?.startsWith('remixr')) return;
+            const depth = getDepth(el) * 20;
+            el.style.transition = 'transform 0.5s ease-out';
+            el.style.transform = `translateZ(${depth}px)`;
+            el.style.boxShadow = '0 0 10px rgba(99, 102, 241, 0.2)';
+            el.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+        });
+    } else {
+        body.style.transform = '';
+        const all = document.querySelectorAll('*');
+        all.forEach(el => {
+            el.style.transform = '';
+            el.style.boxShadow = '';
+            el.style.backgroundColor = '';
         });
     }
-
-    // Color psychology analysis
-    const dominantColors = extractDominantColors();
-    const colorArchetypes = analyzeColorArchetype(dominantColors);
-    
-    // Combine scores
-    for (const [archetype, score] of Object.entries(colorArchetypes)) {
-        archetypes[archetype] += score;
-    }
-
-    // Get top 3 archetypes
-    const sorted = Object.entries(archetypes)
-        .sort(([, a], [, b]) => b - a)
-        .slice(0, 3);
-
-    return {
-        primary: sorted[0] ? { type: sorted[0][0], score: sorted[0][1] } : null,
-        secondary: sorted[1] ? { type: sorted[1][0], score: sorted[1][1] } : null,
-        tertiary: sorted[2] ? { type: sorted[2][0], score: sorted[2][1] } : null,
-        allScores: archetypes,
-        dominantColors: dominantColors,
-        personality: determinePersonality(sorted)
-    };
+    return xrayActive;
 }
 
-function extractDominantColors() {
-    const elements = Array.from(document.querySelectorAll('*')).slice(0, 200);
-    const colors = { backgrounds: {}, text: {} };
+function getDepth(el) {
+    let d = 0;
+    while (el.parentElement) {
+        el = el.parentElement;
+        d++;
+    }
+    return d;
+}
+
+// ============================================
+// VISUAL WEALTH: ATTENTION HEATMAP
+// ============================================
+
+let heatmapActive = false;
+let heatmapCanvas = null;
+
+function toggleHeatmap() {
+    heatmapActive = !heatmapActive;
+    if (heatmapActive) {
+        heatmapCanvas = document.createElement('canvas');
+        heatmapCanvas.id = 'remixr-heatmap';
+        heatmapCanvas.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999997;
+            opacity: 0.6;
+            mix-blend-mode: multiply;
+        `;
+        document.body.appendChild(heatmapCanvas);
+        renderHeatmap();
+    } else {
+        if (heatmapCanvas) heatmapCanvas.remove();
+    }
+    return heatmapActive;
+}
+
+function renderHeatmap() {
+    if (!heatmapCanvas) return;
+    const ctx = heatmapCanvas.getContext('2d');
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    heatmapCanvas.width = w;
+    heatmapCanvas.height = h;
+
+    const elements = Array.from(document.querySelectorAll('h1, h2, h3, button, img, a, [role="button"]'));
+
+    // Draw base
+    ctx.fillStyle = 'rgba(0, 50, 100, 0.1)';
+    ctx.fillRect(0, 0, w, h);
 
     elements.forEach(el => {
-        const style = window.getComputedStyle(el);
-        const bg = style.backgroundColor;
-        const color = style.color;
+        const rect = el.getBoundingClientRect();
+        if (rect.top > h || rect.bottom < 0) return;
 
-        if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-            colors.backgrounds[bg] = (colors.backgrounds[bg] || 0) + 1;
-        }
-        if (color) {
-            colors.text[color] = (colors.text[color] || 0) + 1;
-        }
+        const weight = (rect.width * rect.height) / 1000 + 20;
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, weight * 3);
+        gradient.addColorStop(0, 'rgba(255, 0, 0, 0.5)');
+        gradient.addColorStop(0.5, 'rgba(255, 255, 0, 0.2)');
+        gradient.addColorStop(1, 'transparent');
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, weight * 3, 0, Math.PI * 2);
+        ctx.fill();
     });
-
-    const topBg = Object.entries(colors.backgrounds).sort((a, b) => b[1] - a[1]).slice(0, 5);
-    const topText = Object.entries(colors.text).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
-    return { backgrounds: topBg, text: topText };
 }
 
-function analyzeColorArchetype(colors) {
-    const scores = {
-        innocent: 0, explorer: 0, sage: 0, hero: 0, outlaw: 0, magician: 0,
-        regular: 0, lover: 0, jester: 0, caregiver: 0, creator: 0, ruler: 0
-    };
+// ============================================
+// ENHANCED ELEMENT DATA (CSS VARIABLES)
+// ============================================
 
-    // Simplified color to archetype mapping
-    colors.backgrounds.forEach(([color]) => {
-        if (color.includes('255, 255, 255') || color.includes('white')) scores.innocent += 5;
-        if (color.includes('0, 0, 0') || color.includes('black')) scores.ruler += 5;
-        if (color.match(/rgb.*255.*0.*0/)) scores.hero += 5; // Red
-        if (color.match(/rgb.*0.*0.*255/)) scores.sage += 5; // Blue
-        if (color.match(/rgb.*0.*255.*0/)) scores.caregiver += 5; // Green
-        if (color.match(/rgb.*255.*192.*203/)) scores.lover += 5; // Pink
-        if (color.match(/rgb.*255.*255.*0/)) scores.jester += 5; // Yellow
-        if (color.match(/rgb.*128.*0.*128/)) scores.magician += 5; // Purple
-    });
-
-    return scores;
-}
-
-function determinePersonality(topArchetypes) {
-    const descriptions = {
-        innocent: 'Pure, optimistic, seeking simplicity and happiness',
-        explorer: 'Adventurous, independent, seeking freedom and discovery',
-        sage: 'Knowledgeable, thoughtful, seeking truth and wisdom',
-        hero: 'Courageous, bold, seeking to prove worth through achievement',
-        outlaw: 'Revolutionary, disruptive, challenging the status quo',
-        magician: 'Transformative, visionary, turning dreams into reality',
-        regular: 'Relatable, down-to-earth, seeking connection and belonging',
-        lover: 'Passionate, intimate, seeking pleasure and connection',
-        jester: 'Playful, entertaining, bringing joy and spontaneity',
-        caregiver: 'Nurturing, compassionate, protecting and caring for others',
-        creator: 'Innovative, artistic, expressing imagination and originality',
-        ruler: 'Authoritative, prestigious, seeking control and leadership'
-    };
-
-    if (topArchetypes[0]) {
-        return descriptions[topArchetypes[0][0]] || 'Undefined personality';
+function getCssVariables(el) {
+    const vars = {};
+    const styles = window.getComputedStyle(el);
+    for (const prop of styles) {
+        if (prop.startsWith('--')) {
+            vars[prop] = styles.getPropertyValue(prop);
+        }
     }
-    return 'Undefined personality';
-}
-
-// ============================================
-// SOUL ANALYSIS
-// ============================================
-
-function analyzeSoul() {
-    const soul = {
-        authenticity: 0,
-        intention: '',
-        coherence: 0,
-        trustSignals: 0,
-        corporateness: 0,
-        humanCentered: 0,
-        transparencyScore: 0,
-        purpose: ''
-    };
-
-    const bodyText = document.body.innerText.toLowerCase();
-    
-    // Authenticity detection
-    const authenticityKeywords = ['we', 'our story', 'our mission', 'founded', 'believe', 'values', 'about us'];
-    const corporateJargon = ['synergy', 'leverage', 'paradigm', 'ecosystem', 'disruptive', 'optimize', 'stakeholder'];
-    
-    authenticityKeywords.forEach(keyword => {
-        if (bodyText.includes(keyword)) soul.authenticity += 10;
-    });
-    
-    corporateJargon.forEach(keyword => {
-        if (bodyText.includes(keyword)) {
-            soul.corporateness += 10;
-            soul.authenticity -= 5;
+    // Also check parent variables that might be inherited
+    let parent = el.parentElement;
+    while (parent && Object.keys(vars).length < 20) {
+        const pStyles = window.getComputedStyle(parent);
+        for (const prop of pStyles) {
+            if (prop.startsWith('--') && !vars[prop]) {
+                vars[prop] = pStyles.getPropertyValue(prop);
+            }
         }
+        parent = parent.parentElement;
+    }
+    return vars;
+}
+
+// Redefine handleClick to include variables
+const originalHandleClick = handleClick;
+function handleClick(e) {
+    if (!inspectorActive) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const target = e.target;
+    const selector = getSelector(target);
+    const styles = window.getComputedStyle(target);
+    const cssVars = getCssVariables(target);
+
+    const styleData = {
+        selector: selector,
+        tagName: target.tagName.toLowerCase(),
+        attributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value })),
+        variables: cssVars,
+        styles: {
+            color: styles.color,
+            backgroundColor: styles.backgroundColor,
+            fontSize: styles.fontSize,
+            padding: styles.padding,
+            margin: styles.margin,
+            border: styles.border,
+            borderRadius: styles.borderRadius,
+            display: styles.display,
+            flexDirection: styles.flexDirection,
+            justifyContent: styles.justifyContent,
+            alignItems: styles.alignItems,
+            gap: styles.gap,
+            width: styles.width,
+            height: styles.height,
+            opacity: styles.opacity,
+            boxShadow: styles.boxShadow,
+            fontFamily: styles.fontFamily,
+            fontWeight: styles.fontWeight,
+            visibility: styles.visibility
+        }
+    };
+
+    chrome.runtime.sendMessage({
+        action: 'elementSelected',
+        data: styleData
     });
 
-    // Trust signals
-    const trustElements = document.querySelectorAll('[class*=\"secure\"], [class*=\"verified\"], [class*=\"guarantee\"], [class*=\"trust\"]');
-    soul.trustSignals = trustElements.length;
-
-    // Transparency
-    const transparencyElements = document.querySelectorAll('a[href*=\"privacy\"], a[href*=\"terms\"], a[href*=\"about\"]');
-    soul.transparencyScore = Math.min(transparencyElements.length * 20, 100);
-
-    // Human-centered vs corporate
-    const humanWords = bodyText.match(/\\b(you|your|people|community|together|help|care)\\b/g) || [];
-    const corporateWords = bodyText.match(/\\b(company|business|enterprise|corporation|organization|firm)\\b/g) || [];
-    
-    soul.humanCentered = humanWords.length;
-    soul.corporateness += corporateWords.length;
-
-    // Determine intention
-    if (bodyText.includes('buy') || bodyText.includes('purchase') || bodyText.includes('shop')) {
-        soul.intention = 'Commercial';
-    } else if (bodyText.includes('learn') || bodyText.includes('read') || bodyText.includes('discover')) {
-        soul.intention = 'Educational';
-    } else if (bodyText.includes('connect') || bodyText.includes('share') || bodyText.includes('community')) {
-        soul.intention = 'Social';
-    } else {
-        soul.intention = 'Informational';
+    // Provide visual feedback
+    const overlay = document.getElementById('remixr-inspector-overlay');
+    if (overlay) {
+        const originalText = overlay.innerHTML;
+        overlay.innerHTML = `<div style="color:#4ade80; text-align:center; padding: 10px;">Deep Trace Complete...</div>`;
+        setTimeout(() => {
+            overlay.innerHTML = originalText;
+        }, 1000);
     }
-
-    // Coherence - do visual and textual elements align?
-    soul.coherence = Math.max(0, 100 - (soul.corporateness - soul.humanCentered));
-
-    // Purpose detection
-    const title = document.title.toLowerCase();
-    const h1 = document.querySelector('h1')?.innerText.toLowerCase() || '';
-    
-    if (title.includes('blog') || h1.includes('blog')) soul.purpose = 'Content & Publishing';
-    else if (title.includes('shop') || h1.includes('shop')) soul.purpose = 'E-commerce';
-    else if (title.includes('learn') || h1.includes('course')) soul.purpose = 'Education';
-    else if (title.includes('app') || h1.includes('software')) soul.purpose = 'Software/SaaS';
-    else soul.purpose = 'General Website';
-
-    return soul;
 }
 
 // ============================================
-// SHADOW ANALYSIS (Hidden Manipulations)
+// VISUAL WEALTH: GRAVITY MODE (DOM PHYSICS)
 // ============================================
 
-function analyzeShadow() {
-    const shadow = {
-        hiddenElements: [],
-        invisibleTrackers: 0,
-        a11yViolations: 0,
-        deceptivePatterns: [],
-        hiddenCosts: false,
-        dataCollection: [],
-        manipulativeDesign: []
-    };
+let gravityActive = false;
+let gravityInterval = null;
+let physicsElements = [];
 
-    // Hidden elements
-    const allElements = Array.from(document.querySelectorAll('*'));
-    allElements.forEach(el => {
-        const style = window.getComputedStyle(el);
-        if ((style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') && 
-            (el.innerText.includes('price') || el.innerText.includes('fee') || el.innerText.includes('charge'))) {
-            shadow.hiddenElements.push({
-                tag: el.tagName,
-                text: el.innerText.substring(0, 50)
+function toggleGravityMode() {
+    gravityActive = !gravityActive;
+    if (gravityActive) {
+        const all = document.querySelectorAll('div, p, span, h1, h2, h3, button, img, a');
+        physicsElements = Array.from(all).filter(el => {
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0 &&
+                window.getComputedStyle(el).position !== 'fixed' &&
+                !el.id?.startsWith('remixr');
+        }).map(el => {
+            const rect = el.getBoundingClientRect();
+            el.style.position = 'fixed';
+            el.style.top = rect.top + 'px';
+            el.style.left = rect.left + 'px';
+            el.style.width = rect.width + 'px';
+            el.style.height = rect.height + 'px';
+            el.style.margin = '0';
+            el.style.zIndex = '999990';
+
+            return {
+                el,
+                y: rect.top,
+                x: rect.left,
+                vy: 0,
+                vx: (Math.random() - 0.5) * 5,
+                w: rect.width,
+                h: rect.height
+            };
+        });
+
+        const gravity = 0.5;
+        const friction = 0.98;
+        const bounce = 0.7;
+
+        gravityInterval = setInterval(() => {
+            const floor = window.innerHeight;
+            const wall = window.innerWidth;
+
+            physicsElements.forEach(p => {
+                p.vy += gravity;
+                p.y += p.vy;
+                p.x += p.vx;
+
+                if (p.y + p.h > floor) {
+                    p.y = floor - p.h;
+                    p.vy *= -bounce;
+                    p.vx *= friction;
+                }
+
+                if (p.x + p.w > wall || p.x < 0) {
+                    p.vx *= -bounce;
+                }
+
+                p.el.style.top = p.y + 'px';
+                p.el.style.left = p.x + 'px';
             });
-            shadow.hiddenCosts = true;
-        }
-    });
-
-    // Invisible trackers
-    const scripts = Array.from(document.querySelectorAll('script[src]'));
-    const trackers = ['analytics', 'tracking', 'pixel', 'tag', 'gtag', 'fbq', 'ga'];
-    shadow.invisibleTrackers = scripts.filter(script => 
-        trackers.some(tracker => script.src.includes(tracker))
-    ).length;
-
-    // Data collection indicators
-    const inputs = Array.from(document.querySelectorAll('input'));
-    inputs.forEach(input => {
-        if (input.type === 'email' || input.type === 'tel' || input.name.includes('phone')) {
-            shadow.dataCollection.push(input.type || input.name);
-        }
-    });
-
-    // Accessibility violations (shadow in terms of excluding users)
-    const images = Array.from(document.querySelectorAll('img'));
-    shadow.a11yViolations = images.filter(img => !img.alt || img.alt.trim() === '').length;
-
-    // Manipulative design patterns
-    const bodyText = document.body.innerText.toLowerCase();
-    if (bodyText.includes('no thanks') || bodyText.includes('maybe later')) {
-        shadow.manipulativeDesign.push('Confirmshaming');
+        }, 16);
+    } else {
+        clearInterval(gravityInterval);
+        physicsElements.forEach(p => {
+            p.el.style.position = '';
+            p.el.style.top = '';
+            p.el.style.left = '';
+            p.el.style.width = '';
+            p.el.style.height = '';
+        });
+        physicsElements = [];
     }
-    if (bodyText.includes('other people are viewing') || bodyText.includes('people bought')) {
-        shadow.manipulativeDesign.push('Fake Social Proof');
-    }
-    if (bodyText.includes('limited time') && bodyText.includes('only')) {
-        shadow.manipulativeDesign.push('Artificial Scarcity');
-    }
-
-    // Deceptive patterns
-    const buttons = Array.from(document.querySelectorAll('button'));
-    buttons.forEach(btn => {
-        const text = btn.innerText.toLowerCase();
-        if (text.includes('accept all') || text.includes('agree to all')) {
-            shadow.deceptivePatterns.push({ type: 'Privacy Zuckering', element: 'button' });
-        }
-        if (text.includes('maybe later') || text.includes('no thanks')) {
-            shadow.deceptivePatterns.push({ type: 'Confirmshaming', element: 'button' });
-        }
-    });
-
-    return shadow;
+    return gravityActive;
 }
 
 // ============================================
-// RHETORICAL ANALYSIS
+// VISUAL WEALTH: NEURAL LINK (LOGIC CONNECTIONS)
 // ============================================
 
-function analyzeRhetoric() {
-    const bodyText = document.body.innerText;
-    const rhetoric = {
-        tone: '',
-        readingLevel: 0,
-        persuasiveTechniques: [],
-        emotionalWords: 0,
-        imperatives: 0,
-        questions: 0,
-        metaphors: [],
-        wordCount: 0,
-        avgSentenceLength: 0,
-        rhetoricalDevices: []
-    };
+let neuralActive = false;
+let neuralCanvas = null;
 
-    const sentences = bodyText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-    const words = bodyText.split(/\\s+/).filter(w => w.length > 0);
-    
-    rhetoric.wordCount = words.length;
-    rhetoric.avgSentenceLength = words.length / Math.max(sentences.length, 1);
-
-    // Tone detection
-    const positiveWords = words.filter(w => 
-        ['great', 'amazing', 'wonderful', 'excellent', 'best', 'love', 'perfect', 'happy'].includes(w.toLowerCase())
-    ).length;
-    const negativeWords = words.filter(w => 
-        ['bad', 'worst', 'terrible', 'hate', 'problem', 'issue', 'difficult', 'hard'].includes(w.toLowerCase())
-    ).length;
-    
-    if (positiveWords > negativeWords * 2) rhetoric.tone = 'Highly Positive';
-    else if (positiveWords > negativeWords) rhetoric.tone = 'Positive';
-    else if (negativeWords > positiveWords) rhetoric.tone = 'Negative';
-    else rhetoric.tone = 'Neutral';
-
-    // Imperatives (commands)
-    const imperativeVerbs = ['buy', 'get', 'try', 'start', 'join', 'sign', 'click', 'download', 'learn', 'discover'];
-    rhetoric.imperatives = imperativeVerbs.reduce((count, verb) => {
-        const regex = new RegExp(`\\b${verb}\\b`, 'gi');
-        return count + (bodyText.match(regex) || []).length;
-    }, 0);
-
-    // Questions
-    rhetoric.questions = (bodyText.match(/\\?/g) || []).length;
-
-    // Emotional words
-    const emotionalKeywords = ['love', 'hate', 'fear', 'joy', 'sad', 'angry', 'excited', 'worried', 'happy', 'anxious'];
-    rhetoric.emotionalWords = emotionalKeywords.reduce((count, word) => {
-        const regex = new RegExp(`\\b${word}\\w*\\b`, 'gi');
-        return count + (bodyText.match(regex) || []).length;
-    }, 0);
-
-    // Rhetorical devices
-    if (bodyText.toLowerCase().includes('imagine if')) rhetoric.rhetoricalDevices.push('Hypothetical');
-    if ((bodyText.match(/\\bwe\\b/gi) || []).length > 10) rhetoric.rhetoricalDevices.push('Inclusive Language');
-    if ((bodyText.match(/\\byou\\b/gi) || []).length > 20) rhetoric.rhetoricalDevices.push('Direct Address');
-    if ((bodyText.match(/\\d+%|\\d+ times/gi) || []).length > 3) rhetoric.rhetoricalDevices.push('Statistics/Numbers');
-    
-    // Reading level (simplified Flesch formula)
-    const syllables = estimateSyllables(bodyText);
-    rhetoric.readingLevel = Math.max(0, Math.round(
-        206.835 - 1.015 * (words.length / Math.max(sentences.length, 1)) - 84.6 * (syllables / Math.max(words.length, 1))
-    ));
-
-    return rhetoric;
+function toggleNeuralLink() {
+    neuralActive = !neuralActive;
+    if (neuralActive) {
+        neuralCanvas = document.createElement('canvas');
+        neuralCanvas.id = 'remixr-neural-canvas';
+        neuralCanvas.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 999995;
+            opacity: 0.8;
+        `;
+        document.body.appendChild(neuralCanvas);
+        renderNeuralLink();
+        window.addEventListener('resize', renderNeuralLink);
+    } else {
+        if (neuralCanvas) neuralCanvas.remove();
+        window.removeEventListener('resize', renderNeuralLink);
+    }
+    return neuralActive;
 }
 
-function estimateSyllables(text) {
-    // Simplified syllable estimation
-    const words = text.toLowerCase().match(/\\b[a-z]+\\b/g) || [];
-    return words.reduce((count, word) => {
-        return count + Math.max(1, word.match(/[aeiouy]+/g)?.length || 1);
-    }, 0);
-}
+function renderNeuralLink() {
+    if (!neuralCanvas) return;
+    const ctx = neuralCanvas.getContext('2d');
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    neuralCanvas.width = w;
+    neuralCanvas.height = h;
 
-// ============================================
-// EMOTIONAL DESIGN ANALYSIS
-// ============================================
+    ctx.strokeStyle = '#6366f1';
+    ctx.lineWidth = 1;
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = '#6366f1';
 
-function analyzeEmotionalDesign() {
-    const emotion = {
-        colorPsychology: {},
-        spacingAnalysis: {},
-        typographyMood: '',
-        visualWeight: '',
-        emotionalIntent: '',
-        designPersonality: []
-    };
-
-    // Color Psychology
-    const colors = extractDominantColors();
-    emotion.colorPsychology = analyzeColorEmotions(colors);
-
-    // Spacing analysis
-    const body = document.body;
-    const bodyStyle = window.getComputedStyle(body);
-    const containers = Array.from(document.querySelectorAll('div, section, article')).slice(0, 50);
-    
-    let totalPadding = 0;
-    let totalMargin = 0;
-    containers.forEach(el => {
-        const style = window.getComputedStyle(el);
-        totalPadding += parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-        totalMargin += parseFloat(style.marginTop) + parseFloat(style.marginBottom);
+    // Link interactive elements to their conceptual targets
+    const anchors = document.querySelectorAll('a[href^="#"]');
+    anchors.forEach(a => {
+        const targetId = a.getAttribute('href').substring(1);
+        const target = document.getElementById(targetId);
+        if (target) {
+            drawLine(ctx, a, target, '#6366f1');
+        }
     });
 
-    const avgPadding = totalPadding / containers.length;
-    const avgMargin = totalMargin / containers.length;
-
-    emotion.spacingAnalysis = {
-        avgPadding: Math.round(avgPadding),
-        avgMargin: Math.round(avgMargin),
-        feeling: avgPadding > 40 ? 'Spacious & Calm' : avgPadding > 20 ? 'Balanced' : 'Dense & Urgent'
-    };
-
-    // Typography mood
-    const headings = document.querySelectorAll('h1, h2, h3');
-    if (headings.length > 0) {
-        const h1Style = window.getComputedStyle(headings[0]);
-        const fontFamily = h1Style.fontFamily.toLowerCase();
-        const fontWeight = parseInt(h1Style.fontWeight);
-        const fontSize = parseFloat(h1Style.fontSize);
-
-        if (fontFamily.includes('serif')) {
-            emotion.typographyMood = 'Traditional & Trustworthy';
-        } else if (fontFamily.includes('mono')) {
-            emotion.typographyMood = 'Technical & Modern';
-        } else if (fontWeight >= 700) {
-            emotion.typographyMood = 'Bold & Confident';
-        } else if (fontWeight <= 300) {
-            emotion.typographyMood = 'Elegant & Refined';
-        } else {
-            emotion.typographyMood = 'Clean & Professional';
+    // Link labels to inputs
+    const labels = document.querySelectorAll('label[for]');
+    labels.forEach(l => {
+        const target = document.getElementById(l.getAttribute('for'));
+        if (target) {
+            drawLine(ctx, l, target, '#4ade80');
         }
+    });
+
+    // Link buttons to forms
+    const buttons = document.querySelectorAll('button[type="submit"], input[type="submit"]');
+    buttons.forEach(b => {
+        const form = b.closest('form');
+        if (form) {
+            drawLine(ctx, b, form, '#f87171');
+        }
+    });
+}
+
+function drawLine(ctx, el1, el2, color) {
+    const r1 = el1.getBoundingClientRect();
+    const r2 = el2.getBoundingClientRect();
+
+    if (r1.width === 0 || r2.width === 0) return;
+
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.moveTo(r1.left + r1.width / 2, r1.top + r1.height / 2);
+
+    // Curved line
+    const cp1x = r1.left + r1.width / 2;
+    const cp1y = r2.top + r2.height / 2;
+    ctx.quadraticCurveTo(cp1x, cp1y, r2.left + r2.width / 2, r2.top + r2.height / 2);
+
+    ctx.stroke();
+
+    // Draw particles along line
+    const dotPos = (Date.now() / 1000) % 1;
+    const px = Math.pow(1 - dotPos, 2) * (r1.left + r1.width / 2) + 2 * (1 - dotPos) * dotPos * cp1x + Math.pow(dotPos, 2) * (r2.left + r2.width / 2);
+    const py = Math.pow(1 - dotPos, 2) * (r1.top + r1.height / 2) + 2 * (1 - dotPos) * dotPos * cp1y + Math.pow(dotPos, 2) * (r2.top + r2.height / 2);
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(px, py, 3, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+// ============================================
+// VISUAL WEALTH: GHOST TRACE (INTERACTION REPLAY)
+// ============================================
+
+let ghostActive = false;
+let mouseTrace = [];
+const MAX_TRACE = 100;
+
+function toggleGhostTrace() {
+    ghostActive = !ghostActive;
+    if (ghostActive) {
+        document.addEventListener('mousemove', recordTrace);
+        document.addEventListener('click', recordClick);
+        animateGhost();
+    } else {
+        document.removeEventListener('mousemove', recordTrace);
+        document.removeEventListener('click', recordClick);
+    }
+    return ghostActive;
+}
+
+function recordTrace(e) {
+    mouseTrace.push({ x: e.clientX, y: e.clientY, type: 'move', time: Date.now() });
+    if (mouseTrace.length > MAX_TRACE) mouseTrace.shift();
+}
+
+function recordClick(e) {
+    mouseTrace.push({ x: e.clientX, y: e.clientY, type: 'click', time: Date.now() });
+    if (mouseTrace.length > MAX_TRACE) mouseTrace.shift();
+}
+
+function animateGhost() {
+    if (!ghostActive) {
+        const existing = document.querySelectorAll('.remixr-ghost-dot');
+        existing.forEach(d => d.remove());
+        return;
     }
 
-    // Visual weight
-    const images = document.querySelectorAll('img').length;
-    const text = document.body.innerText.length;
-    const ratio = images / Math.max(text / 1000, 1);
+    const existing = document.querySelectorAll('.remixr-ghost-dot');
+    existing.forEach(d => d.remove());
 
-    if (ratio > 0.5) emotion.visualWeight = 'Image-Heavy (Visual-First)';
-    else if (ratio > 0.2) emotion.visualWeight = 'Balanced (Visual-Text Mix)';
-    else emotion.visualWeight = 'Text-Heavy (Content-First)';
+    const now = Date.now();
+    mouseTrace.forEach((point, i) => {
+        const age = now - point.time;
+        if (age > 5000) return; // Only show last 5 seconds
 
-    // Design personality traits
-    if (avgPadding > 40) emotion.designPersonality.push('Minimalist');
-    if (images > 20) emotion.designPersonality.push('Visual');
-    if (document.querySelectorAll('button, a').length > 50) emotion.designPersonality.push('Interactive');
-    if (avgMargin < 10) emotion.designPersonality.push('Dense');
-    
-    // Emotional intent
-    const buttons = Array.from(document.querySelectorAll('button, .btn, [role=\"button\"]'));
-    const ctaText = buttons.map(b => b.innerText.toLowerCase()).join(' ');
-    
-    if (ctaText.includes('buy') || ctaText.includes('shop')) emotion.emotionalIntent = 'Conversion-Focused';
-    else if (ctaText.includes('learn') || ctaText.includes('explore')) emotion.emotionalIntent = 'Discovery-Focused';
-    else if (ctaText.includes('join') || ctaText.includes('sign up')) emotion.emotionalIntent = 'Community-Focused';
-    else emotion.emotionalIntent = 'Information-Focused';
-
-    return emotion;
-}
-
-function analyzeColorEmotions(colors) {
-    const emotions = {};
-    
-    const colorEmotionMap = {
-        red: 'Passion, Urgency, Energy',
-        blue: 'Trust, Calm, Professional',
-        green: 'Growth, Health, Harmony',
-        yellow: 'Optimism, Warmth, Attention',
-        purple: 'Luxury, Creativity, Wisdom',
-        orange: 'Enthusiasm, Confidence, Friendly',
-        black: 'Sophistication, Power, Elegance',
-        white: 'Purity, Simplicity, Cleanliness',
-        gray: 'Neutral, Professional, Balanced'
-    };
-
-    // Simplified color detection
-    colors.backgrounds.forEach(([color]) => {
-        if (color.match(/rgb\\(2[45]\\d|255/)) { // High red
-            emotions['red'] = colorEmotionMap.red;
-        }
-        if (color.match(/rgb\\(\\d+,\\s*\\d+,\\s*2[45]\\d|255/)) { // High blue
-            emotions['blue'] = colorEmotionMap.blue;
-        }
-        if (color.includes('0, 0, 0') || color.includes('black')) {
-            emotions['black'] = colorEmotionMap.black;
-        }
-        if (color.includes('255, 255, 255') || color.includes('white')) {
-            emotions['white'] = colorEmotionMap.white;
-        }
+        const dot = document.createElement('div');
+        dot.className = 'remixr-ghost-dot';
+        dot.style.cssText = `
+            position: fixed;
+            top: ${point.y}px;
+            left: ${point.x}px;
+            width: ${point.type === 'click' ? '20px' : '4px'}px;
+            height: ${point.type === 'click' ? '20px' : '4px'}px;
+            background: ${point.type === 'click' ? '#f87171' : '#6366f1'};
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 999999;
+            opacity: ${1 - age / 5000};
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px ${point.type === 'click' ? '#f87171' : '#6366f1'};
+        `;
+        document.body.appendChild(dot);
     });
 
-    return Object.keys(emotions).length > 0 ? emotions : { neutral: 'Undefined color emotion' };
+    requestAnimationFrame(animateGhost);
 }
 
+// ============================================
+// COMPLETE OBJECT MODEL EXTRACTION
+// ============================================
+
+function extractCompleteObjectModel() {
+    return {
+        metadata: {
+            url: window.location.href,
+            domain: window.location.hostname,
+            timestamp: Date.now(),
+            userAgent: navigator.userAgent,
+            viewport: {
+                width: window.innerWidth,
+                height: window.innerHeight
+            }
+        },
+        frameworks: extractFrameworks(),
+        stateManagement: extractStateInfo(),
+        globalVariables: extractGlobals(),
+        storage: {
+            localStorage: { ...localStorage },
+            sessionStorage: { ...sessionStorage },
+            cookies: extractCookies()
+        },
+        customElements: Array.from(new Set(
+            Array.from(document.querySelectorAll('*'))
+                .map(el => el.tagName.toLowerCase())
+                .filter(tag => tag.includes('-'))
+        )),
+        apiEndpoints: extractAPIHints(),
+        domTree: buildDOMSummary(document.body, 3), // Depth current limited to 3
+        computedStyles: extractKeyStyles(),
+        prototypes: extractPrototypeChain()
+    };
+}
+
+function extractFrameworks() {
+    const detected = [];
+    const versions = {};
+
+    if (window.React || document.querySelector('[data-reactroot], [data-reactid]')) detected.push('React');
+    if (window.angular || document.querySelector('.ng-app, [ng-app]')) detected.push('Angular');
+    if (window.Vue) detected.push('Vue');
+    if (window.jQuery) {
+        detected.push('jQuery');
+        versions['jQuery'] = window.jQuery.fn.jquery;
+    }
+    if (window.bootstrap) detected.push('Bootstrap');
+    if (document.querySelector('meta[name="next-head-count"]')) detected.push('Next.js');
+
+    return { detected, versions };
+}
+
+function extractStateInfo() {
+    return {
+        redux: !!(window.__REDUX_DEVTOOLS_EXTENSION__ || window.__REDUX_STORE__),
+        vuex: !!window.__VUE_DEVTOOLS_GLOBAL_HOOK__,
+        mobx: !!window.__mobxGlobal && !!window.__mobxGlobal.version
+    };
+}
+
+function extractGlobals() {
+    const globals = {};
+    const skip = ['window', 'self', 'document', 'name', 'location', 'history', 'customElements', 'history', 'location', 'top', 'parent', 'frames'];
+
+    // Simple heuristic for "custom" globals
+    for (const key in window) {
+        if (!skip.includes(key) && isNaN(key) && window[key] !== null) {
+            try {
+                const type = typeof window[key];
+                if (type !== 'function') {
+                    globals[key] = { type, value: String(window[key]).slice(0, 100) };
+                }
+            } catch (e) { }
+        }
+    }
+    return globals;
+}
+
+function extractCookies() {
+    const cookies = {};
+    if (document.cookie) {
+        document.cookie.split(';').forEach(c => {
+            const [key, val] = c.trim().split('=');
+            cookies[key] = val;
+        });
+    }
+    return cookies;
+}
+
+function extractAPIHints() {
+    const detected = [];
+    // Catch API URLs from links and scripts
+    const attrSelectors = ['a[href*="/api/"]', 'script[src*="/api/"]', 'link[href*="/api/"]'];
+    document.querySelectorAll(attrSelectors.join(',')).forEach(el => {
+        const url = el.href || el.src;
+        if (url) detected.push(url);
+    });
+
+    return {
+        detected: [...new Set(detected)],
+        baseUrl: window.location.origin,
+        graphql: !!document.querySelector('link[rel*="graphql"]') || document.body.innerText.includes('graphql')
+    };
+}
+
+function buildDOMSummary(el, maxDepth, currentDepth = 0) {
+    if (!el || currentDepth > maxDepth) return null;
+
+    return {
+        name: el.tagName.toLowerCase(),
+        class: el.className,
+        id: el.id,
+        value: el.children.length, // use length as a proxy for value/weight
+        children: Array.from(el.children)
+            .map(child => buildDOMSummary(child, maxDepth, currentDepth + 1))
+            .filter(Boolean)
+    };
+}
+
+function extractKeyStyles() {
+    const styles = {};
+    const keySelectors = ['body', 'header', 'footer', 'main', 'h1', 'button.primary'];
+    keySelectors.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el) {
+            const comp = window.getComputedStyle(el);
+            styles[sel] = {
+                color: comp.color,
+                bg: comp.backgroundColor,
+                font: comp.fontFamily,
+                spacing: comp.padding
+            };
+        }
+    });
+    return styles;
+}
+
+function extractPrototypeChain() {
+    // Introspect common prototypes if modified
+    const chains = {};
+    const targets = ['Array', 'Object', 'Function', 'String'];
+    targets.forEach(t => {
+        const proto = window[t].prototype;
+        const methods = Object.getOwnPropertyNames(proto).filter(p => !['constructor', 'toString', 'valueOf'].includes(p));
+        chains[t] = methods.slice(0, 10);
+    });
+    return chains;
+}
+
+// ============================================
+// UI FORENSICS & REALITY DISTORTION
+// ============================================
+
+let contrastActive = false;
+function toggleContrastMap() {
+    contrastActive = !contrastActive;
+    if (contrastActive) {
+        const style = document.createElement('style');
+        style.id = 'remixr-contrast-style';
+        style.textContent = `
+            * { background: #000 !important; color: #fff !important; outline: 1px solid #333 !important; }
+            img, video, iframe { filter: grayscale(1) contrast(200%) !important; }
+        `;
+        document.head.appendChild(style);
+    } else {
+        document.getElementById('remixr-contrast-style')?.remove();
+    }
+    return contrastActive;
+}
+
+let snifferActive = false;
+function toggleEventSniffer() {
+    snifferActive = !snifferActive;
+    const events = ['click', 'mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change'];
+
+    const handler = (e) => {
+        console.log(`%c[ReMixr Sniffer] %c${e.type} on %o`, 'color:#6366f1; font-weight:bold', 'color:white', e.target);
+    };
+
+    if (snifferActive) {
+        events.forEach(type => document.addEventListener(type, handler, true));
+        console.log('ReMixr event sniffer active. Watch console for interaction live-feed.');
+    } else {
+        events.forEach(type => document.removeEventListener(type, handler, true));
+    }
+    return snifferActive;
+}
+
+function applyReality(style) {
+    if (!style) return 'Reseting reality...';
+    document.body.style.filter = style.filter || '';
+    document.body.style.transform = style.transform || '';
+    return 'Reality Shifted.';
+}

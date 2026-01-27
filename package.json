@@ -12,8 +12,12 @@
         "ai",
         "remixr"
     ],
-    "author": "John Kost (c) 2026, All rights reserved.",
-    "license": "Apache 2.0",
+    "author": "John Kost",
+    "license": "Apache-2.0",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/JohnnyOpcode/ReMixr.git"
+    },
     "dependencies": {},
     "devDependencies": {}
 }
