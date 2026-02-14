@@ -17,6 +17,12 @@
 // ReMixr Extension Builder - Background Service Worker
 // Manages extension builder state and operations
 
+try {
+  importScripts('lib/core-utils.js');
+} catch (e) {
+  console.error("Failed to import core-utils:", e);
+}
+
 chrome.runtime.onInstalled.addListener(() => {
   setupSidePanel();
 
@@ -66,15 +72,27 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 // Handle context menu clicks
-chrome.contextMenus.onClicked.addListener((info, tab) => {
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (info.menuItemId === "remixr-toggle") {
-    // Open the side panel first
-    chrome.sidePanel.open({ windowId: tab.windowId });
+    try {
+      // Open the side panel
+      await chrome.sidePanel.open({ windowId: tab.windowId });
 
-    // Then toggle the inspector in the current tab
-    chrome.tabs.sendMessage(tab.id, { action: "toggleInspector" });
+      // Ensure content script is there before messaging
+      const ready = await ensureContentScriptReady(tab.id);
+      if (ready) {
+        await sendMessageWithTimeout(tab.id, { action: "toggleInspector" });
+      } else {
+        warn("[ReMixr Background] Failed to ensure content script was ready.");
+      }
+    } catch (e) {
+      console.error("[ReMixr Background] Context menu action failed:", e);
+    }
   }
 });
+
+
+
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

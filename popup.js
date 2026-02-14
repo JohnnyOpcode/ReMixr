@@ -17,10 +17,15 @@
 // ReMixr Extension Builder - Main Logic
 
 // State Management
+// Link to ProjectManager for persistence
+let projects = [];
 let currentProject = null;
 let currentFile = 'manifest.json';
-let projects = [];
 let cmEditor = null;
+
+// Convenience aliases (can be removed later)
+const getProjects = () => ProjectManager.projects;
+const getCurrentProject = () => ProjectManager.currentProject;
 
 // Extension Templates
 // TEMPLATES moved to lib/templates.js
@@ -307,11 +312,9 @@ function showKeyboardHelp() {
 /**
  * Initializes the theme from storage or system preference
  */
-function initTheme() {
-  chrome.storage.local.get(['theme'], (result) => {
-    const theme = result.theme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-    applyTheme(theme);
-  });
+async function initTheme() {
+  const theme = await ProjectManager.getTheme();
+  applyTheme(theme);
 }
 
 /**
@@ -329,12 +332,12 @@ function applyTheme(theme) {
 /**
  * Toggles between dark and light themes
  */
-function toggleTheme() {
+async function toggleTheme() {
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
   const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
 
   applyTheme(newTheme);
-  chrome.storage.local.set({ theme: newTheme });
+  await ProjectManager.setTheme(newTheme);
   showStatus(`Switched to ${newTheme} mode`, 'info');
 }
 
@@ -369,7 +372,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  loadProjects();
+  ProjectManager.init().then(() => {
+    projects = ProjectManager.projects; // Local sync for legacy code
+    renderProjectsList();
+  });
   setupEventListeners();
   switchTab('projects');
   initTheme();
@@ -380,17 +386,17 @@ document.addEventListener('DOMContentLoaded', () => {
  * Retrieves saved projects and renders them in the UI.
  */
 async function loadProjects() {
-  chrome.storage.local.get(['extensionProjects'], (result) => {
-    projects = result.extensionProjects || [];
-    renderProjectsList();
-  });
+  await ProjectManager.init();
+  projects = ProjectManager.projects;
+  renderProjectsList();
 }
 
 /**
  * Saves the current projects array to Chrome local storage.
  */
 function saveProjects() {
-  chrome.storage.local.set({ extensionProjects: projects });
+  ProjectManager.projects = projects;
+  ProjectManager.saveToStorage();
 }
 
 /**
@@ -592,8 +598,9 @@ function setupEventListeners() {
     });
   });
 
-  // SITE_CONTEXT Extraction (Phase 2B)
-  document.getElementById('btn-extract-context')?.addEventListener('click', extractSiteContext);
+  // SITE_CONTEXT Extraction (Unified)
+  document.getElementById('btn-extract-context')?.addEventListener('click', handleContextExtraction);
+
 
   document.getElementById('scan-visualize')?.addEventListener('click', () => runAnalysis('visualize'));
   document.getElementById('scan-sequence')?.addEventListener('click', () => runAnalysis('sequence'));
@@ -610,13 +617,11 @@ function setupEventListeners() {
   document.getElementById('scan-seo')?.addEventListener('click', () => runAnalysis('seo'));
   document.getElementById('scan-code')?.addEventListener('click', () => runAnalysis('code'));
   document.getElementById('scan-net')?.addEventListener('click', () => runAnalysis('net'));
-  document.getElementById('scan-psyche')?.addEventListener('click', () => runAnalysis('psyche'));
-  document.getElementById('scan-archetype')?.addEventListener('click', () => runAnalysis('archetype'));
-  document.getElementById('scan-soul')?.addEventListener('click', () => runAnalysis('soul'));
-  document.getElementById('scan-shadow')?.addEventListener('click', () => runAnalysis('shadow'));
-  document.getElementById('scan-rhetoric')?.addEventListener('click', () => runAnalysis('rhetoric'));
-  document.getElementById('scan-emotion')?.addEventListener('click', () => runAnalysis('emotion'));
+  // Analysis Triggers (Unified)
   document.getElementById('scan-strategy')?.addEventListener('click', () => runAnalysis('strategy'));
+  document.getElementById('scan-psyche')?.addEventListener('click', () => runAnalysis('psyche'));
+  document.getElementById('run-omniscience-btn')?.addEventListener('click', handleOmniscienceExtraction);
+
 
   document.getElementById('clear-results')?.addEventListener('click', () => {
     document.getElementById('analysis-results').style.display = 'none';
@@ -658,29 +663,37 @@ function setupEventListeners() {
 
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
-      chrome.tabs.sendMessage(tab.id, { action: action }, response => {
-        if (chrome.runtime.lastError) {
-          showStatus('Error: Refresh page to use tools', 'error');
-          btn.classList.remove('active'); // Revert on error
-          return;
-        }
-
-        // Handle specific response data
-        if (response) {
-          if (response.active === true || response.status === 'active' || response.status === 'visible') {
-            if (successMsg) showStatus(successMsg, 'success');
-            if (!oneShotTools.includes(btnId)) btn.classList.add('active');
-          } else if (response.active === false || response.status === 'inactive' || response.status === 'hidden') {
-            if (failMsg) showStatus(failMsg, 'info');
-            btn.classList.remove('active');
-          } else if (response.count !== undefined) {
-            showStatus(`${successMsg}: ${response.count}`, 'success');
-            // One-shot tools often don't keep active state
-            setTimeout(() => btn.classList.remove('active'), 200);
+      try {
+        await ensureContentScript(tab.id);
+        chrome.tabs.sendMessage(tab.id, { action: action }, response => {
+          if (chrome.runtime.lastError) {
+            showStatus('Error: Refresh page to use tools', 'error');
+            btn.classList.remove('active'); // Revert on error
+            return;
           }
-        }
-      });
+
+          // Handle specific response data
+          if (response) {
+            if (response.active === true || response.status === 'active' || response.status === 'visible') {
+              if (successMsg) showStatus(successMsg, 'success');
+              if (!oneShotTools.includes(btnId)) btn.classList.add('active');
+            } else if (response.active === false || response.status === 'inactive' || response.status === 'hidden') {
+              if (failMsg) showStatus(failMsg, 'info');
+              btn.classList.remove('active');
+            } else if (response.count !== undefined) {
+              showStatus(`${successMsg}: ${response.count}`, 'success');
+              // One-shot tools often don't keep active state
+              setTimeout(() => btn.classList.remove('active'), 200);
+            }
+          }
+        });
+      } catch (error) {
+        console.error(`[ReMixr] Tool toggle error [${btnId}]:`, error);
+        showStatus(error.message, 'error');
+        btn.classList.remove('active');
+      }
     }
+
   };
 
   // Wire up Visual Forensics
@@ -702,75 +715,53 @@ function setupEventListeners() {
   document.getElementById('tool-enable')?.addEventListener('click', () => toggleTool('tool-enable', 'enableInputs', 'Inputs Enabled', null));
   document.getElementById('tool-unmask')?.addEventListener('click', () => toggleTool('tool-unmask', 'showPasswords', 'Passwords Unmasked', null));
   document.getElementById('tool-kill-sticky')?.addEventListener('click', () => toggleTool('tool-kill-sticky', 'killStickies', 'Sticky Elements Removed', null));
-  document.getElementById('run-omniscience-btn')?.addEventListener('click', async () => {
-    showStatus('Extracting complete object model...', 'info');
+  // --- Unified Extraction Handlers ---
+
+  async function handleOmniscienceExtraction() {
+    showStatus('Aggregating Intelligence Blueprint...', 'info');
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) {
-      showStatus('No active tab found', 'error');
-      return;
-    }
-
+    if (!tab) return;
     try {
-      // Set timeout for extraction
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Extraction timeout')), 30000)
-      );
-
-      const extractionPromise = new Promise((resolve, reject) => {
-        chrome.tabs.sendMessage(tab.id, { action: 'extractCompleteModel' }, response => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (response && !response.error) {
-            resolve(response);
-          } else {
-            reject(new Error(response?.error || 'Unknown extraction error'));
-          }
-        });
-      });
-
-      const response = await Promise.race([extractionPromise, timeoutPromise]);
+      const ready = await ensureContentScriptReady(tab.id);
+      if (!ready) throw new Error("Content script injection failed");
+      const response = await sendMessageWithTimeout(tab.id, { action: 'analyzeOmniscience' }, 30000);
       displayExtractionResults(response);
-      showStatus('Complete extraction successful!', 'success');
+      showStatus('Omniscient Blueprint ready!', 'success');
     } catch (error) {
-      console.error('Extraction failed:', error);
-      showStatus(`Extraction failed: ${error.message}`, 'error');
+      console.error('[ReMixr] Omniscience extraction failed:', error);
+      showStatus(`Blueprint failed: ${error.message}`, 'error');
     }
-  });
+  }
 
-  document.getElementById('btn-extract-context')?.addEventListener('click', async () => {
-    showStatus('Generating AI-ready context...', 'info');
+
+
+  async function handleContextExtraction() {
+    showStatus('Extracting Site DNA...', 'info');
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) {
-      showStatus('No active tab found', 'error');
-      return;
-    }
-
+    if (!tab) return;
+    const btn = document.getElementById('btn-extract-context');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '🔮 Extracting...';
+    btn.classList.add('loading');
     try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Context generation timeout')), 30000)
-      );
-
-      const extractionPromise = new Promise((resolve, reject) => {
-        chrome.tabs.sendMessage(tab.id, { action: 'extractCompleteModel' }, response => {
-          if (chrome.runtime.lastError) {
-            reject(new Error(chrome.runtime.lastError.message));
-          } else if (response && !response.error) {
-            resolve(response);
-          } else {
-            reject(new Error(response?.error || 'Unknown error'));
-          }
-        });
-      });
-
-      const response = await Promise.race([extractionPromise, timeoutPromise]);
-      const aiContext = generateAIContext(response);
-      downloadAsFile(aiContext, `${response.metadata.domain}_context.md`, 'text/markdown');
-      showStatus('AI context downloaded!', 'success');
+      const ready = await ensureContentScriptReady(tab.id);
+      if (!ready) throw new Error("Content script injection failed");
+      const response = await sendMessageWithTimeout(tab.id, { action: 'generateLLMContext' }, 30000);
+      if (response && response.markdown) {
+        displayMetamodel(response.markdown);
+        showStatus('Metamodel ready!', 'success');
+        window.LAST_SITE_DNA = response.markdown;
+      } else { throw new Error(response?.error || 'Empty response'); }
     } catch (error) {
-      console.error('Context generation failed:', error);
-      showStatus(`Context generation failed: ${error.message}`, 'error');
+      console.error('[ReMixr] Context extraction failed:', error);
+      showStatus(`Extraction error: ${error.message}`, 'error');
+    } finally {
+
+      btn.innerHTML = originalText;
+      btn.classList.remove('loading');
     }
-  });
+  }
+
 
   // Wire up Data
   document.getElementById('tool-sniffer')?.addEventListener('click', () => toggleTool('tool-sniffer', 'toggleEventSniffer', 'Event Sniffer Attached', 'Event Sniffer Detached'));
@@ -784,11 +775,17 @@ function setupEventListeners() {
   const applyReality = async (style) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
-      chrome.tabs.sendMessage(tab.id, { action: 'applyReality', style }, response => {
-        if (response?.style) showStatus(response.style, 'success');
-      });
+      try {
+        await ensureContentScript(tab.id);
+        chrome.tabs.sendMessage(tab.id, { action: 'applyReality', style }, response => {
+          if (response?.style) showStatus(response.style, 'success');
+        });
+      } catch (error) {
+        showStatus(error.message, 'error');
+      }
     }
   };
+
 
   document.getElementById('warp-cyberdeck')?.addEventListener('click', () => applyReality('cyberdeck'));
   document.getElementById('warp-blueprint')?.addEventListener('click', () => applyReality('blueprint'));
@@ -928,16 +925,6 @@ function setupEventListeners() {
   });
 
   // Helper for color conversion
-  function rgbToHex(rgb) {
-    const match = rgb.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)$/);
-    if (!match) return '#000000';
-
-    const r = parseInt(match[1]);
-    const g = parseInt(match[2]);
-    const b = parseInt(match[3]);
-
-    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
-  }
 
   // VS Code Section Toggles
   document.querySelectorAll('.vscode-section-header').forEach(header => {
@@ -1944,7 +1931,19 @@ function injectFeatures() {
     }
 
     if (selectedFeatures.matchSite && !popupJs.includes('matchSiteStyles')) {
-      popupJs += `\n// Match site styles\nfunction matchSiteStyles() {\n  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {\n    chrome.scripting.executeScript({\n      target: { tabId: tab.id },\n      func: () => {\n        const styles = window.getComputedStyle(document.body);\n        return {\n          bg: styles.backgroundColor,\n          color: styles.color,\n          font: styles.fontFamily\n        };\n      }\n    }, (results) => {\n      if (results && results[0]) {\n        const { bg, color, font } = results[0].result;\n        document.body.style.backgroundColor = bg;\n        document.body.style.color = color;\n        document.body.style.fontFamily = font;\n      }\n    });\n  });\n}\n`;
+      popupJs += `\n// Match site styles\nfunction matchSiteStyles() {\n  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {\n    chrome.scripting.executeScript({\n      target: { tabId: tab.id },\n      func: () => {\n        const styles = window.getComputedStyle(document.body);\n        return {\n          bg: styles.backgroundColor,\n          color: styles.color,\n          font: styles.fontFamily
+        };
+      }
+    }, (results) => {
+      if (results && results[0]) {
+        const { bg, color, font } = results[0].result;
+        document.body.style.backgroundColor = bg;
+        document.body.style.color = color;
+        document.body.style.fontFamily = font;
+      }
+    });
+  });
+}\n`;
     }
 
     if (selectedFeatures.analytics && !popupJs.includes('trackEvent')) {
@@ -2159,413 +2158,115 @@ async function toggleInspector(active) {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return;
 
-  chrome.tabs.sendMessage(tab.id, {
-    action: 'toggleInspector',
-    state: active
-  });
+  try {
+    await ensureContentScript(tab.id);
+    chrome.tabs.sendMessage(tab.id, {
+      action: 'toggleInspector',
+      state: active
+    });
+  } catch (error) {
+    showStatus(error.message, 'error');
+  }
 }
+
+
+
+// Ensure content script is running before messaging
+/**
+ * Unified bridge to the content script.
+ */
+async function ensureContentScript(tabId) {
+  try {
+    return await ensureContentScriptReady(tabId);
+  } catch (err) {
+    error('Setup/Injection failed:', err);
+    throw err;
+  }
+}
+
+
 
 async function runAnalysis(type) {
   showStatus(`Running ${type} scan...`, 'info');
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-  // New psychological analyses use message-based communication with content.js
-  const messageBasedAnalyses = ['psyche', 'archetype', 'soul', 'shadow', 'rhetoric', 'emotion', 'strategy', 'specimen', 'omniscience'];
+  const actionMap = {
+    'structure': 'analyzeStructure',
+    'palette': 'analyzePalette',
+    'assets': 'analyzeAssets',
+    'fonts': 'analyzeFonts',
+    'storage': 'analyzeStorage',
+    'perf': 'analyzePerf',
+    'stack': 'analyzeStack',
+    'visualize': 'analyzeDomTree',
+    'sequence': 'analyzeSequence',
+    'a11y': 'analyzeA11y',
+    'seo': 'analyzeSEO',
+    'psyche': 'analyzePsyche',
+    'archetype': 'analyzeArchetype',
+    'soul': 'analyzeSoul',
+    'shadow': 'analyzeShadow',
+    'rhetoric': 'analyzeRhetoric',
+    'emotion': 'analyzeEmotion',
+    'strategy': 'analyzeStrategy',
+    'specimen': 'analyzeSpecimen',
+    'omniscience': 'analyzeOmniscience'
+  };
 
-  if (messageBasedAnalyses.includes(type)) {
-    const actionMap = {
-      'psyche': 'analyzePsyche',
-      'archetype': 'analyzeArchetype',
-      'soul': 'analyzeSoul',
-      'shadow': 'analyzeShadow',
-      'rhetoric': 'analyzeRhetoric',
-      'emotion': 'analyzeEmotion',
-      'strategy': 'analyzeStrategy',
-      'specimen': 'analyzeSpecimen',
-      'omniscience': 'analyzeOmniscience'
-    };
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    await ensureContentScript(tab.id);
 
-    try {
-      // First, ensure content script is injected
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['content.js']
-        });
-      } catch (e) {
-        // Content script may already be injected, continue
-      }
+    const action = actionMap[type] || `analyze${type.charAt(0).toUpperCase() + type.slice(1)}`;
+    const response = await sendMessageWithTimeout(tab.id, { action }, 20000);
 
-      // Small delay to ensure content script is ready
-      await new Promise(resolve => setTimeout(resolve, 100));
+    if (response) {
+      if (response.error) throw new Error(response.error);
 
-      const response = await chrome.tabs.sendMessage(tab.id, { action: actionMap[type] });
-      if (response) {
-        showStatus(`${type} scan complete`, 'success');
-        displayAnalysisResults(type, response);
-      } else {
-        showStatus(`${type} scan returned no data`, 'error');
-      }
-    } catch (error) {
-      console.error('Analysis error:', error);
-      showStatus('Error: ' + error.message, 'error');
+      // Store in global context for aggregation
+      window.SITE_CONTEXT = window.SITE_CONTEXT || {};
+      window.SITE_CONTEXT[type] = response;
+
+      displayAnalysisResults(type, response);
+      showStatus(`${type} scan complete`, 'success');
+    } else {
+      showStatus(`${type} scan returned no data`, 'error');
+    }
+  } catch (err) {
+    console.error('Analysis error:', err);
+    showStatus(err.message, 'error');
+  }
+}
+// Display Analysis Results
+function displayAnalysisResults(type, data) {
+  if (!data) return;
+
+  const container = document.getElementById('analysis-results');
+  const content = document.getElementById('result-content');
+  const d3Container = document.getElementById('d3-container');
+  const title = document.getElementById('result-title');
+
+  container.style.display = 'flex';
+  title.innerText = `${type.toUpperCase()} Analysis`;
+  content.style.display = 'block';
+  if (d3Container) d3Container.style.display = 'none';
+
+  // Specific renderers based on type
+  if (type === 'visualize') {
+    if (d3Container) {
+      d3Container.style.display = 'block';
+      content.style.display = 'none';
+      renderD3Hierarchy(data);
     }
     return;
   }
 
-  // Original analyses use script injection
-  let func;
-  switch (type) {
-    case 'structure': func = analyzeStructure; break;
-    case 'palette': func = analyzePalette; break;
-    case 'assets': func = analyzeAssets; break;
-    case 'fonts': func = analyzeFonts; break;
-    case 'storage': func = analyzeStorage; break;
-    case 'workers': func = analyzeWorkers; break;
-    case 'perf': func = analyzePerf; break;
-    case 'stack': func = analyzeStack; break;
-    case 'visualize': func = analyzeDomTree; break;
-    case 'sequence': func = analyzeSequence; break;
-    case 'a11y': func = analyzeA11y; break;
-    case 'seo': func = analyzeSEO; break;
-    case 'code': func = analyzeCode; break;
-    case 'net': func = analyzeNetwork; break;
+  if (type === 'sequence') {
+    renderSequenceDiagram(data);
+    return;
   }
 
-  chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: func
-  }, (results) => {
-    if (results && results[0]) {
-      displayAnalysisResults(type, results[0].result);
-    }
-  });
-}
-
-// Analysis Functions (Injected)
-function analyzeStructure() {
-  const nodes = [];
-  const collect = (root) => {
-    const all = root.querySelectorAll('*');
-    all.forEach(el => {
-      nodes.push(el);
-      if (el.shadowRoot) collect(el.shadowRoot);
-    });
-  };
-  collect(document);
-
-  const depth = (n) => n.parentNode ? depth(n.parentNode) + 1 : (n.host ? depth(n.host) + 1 : 0);
-  let maxDepth = 0;
-  nodes.forEach(el => maxDepth = Math.max(maxDepth, depth(el)));
-
-  const tags = {};
-  nodes.forEach(el => {
-    const tag = el.tagName.toLowerCase();
-    tags[tag] = (tags[tag] || 0) + 1;
-  });
-
-  const sortedTags = Object.entries(tags).sort((a, b) => b[1] - a[1]);
-
-  return {
-    totalElements: nodes.length,
-    maxDepth,
-    topTags: sortedTags,
-    title: document.title,
-    description: document.querySelector('meta[name="description"]')?.content || 'None'
-  };
-}
-
-function analyzePalette() {
-  const all = document.querySelectorAll('*');
-  const colors = {};
-  const backgrounds = {};
-
-  all.forEach(el => {
-    const style = window.getComputedStyle(el);
-    const color = style.color;
-    const bg = style.backgroundColor;
-
-    if (color && color !== 'rgba(0, 0, 0, 0)') colors[color] = (colors[color] || 0) + 1;
-    if (bg && bg !== 'rgba(0, 0, 0, 0)') backgrounds[bg] = (backgrounds[bg] || 0) + 1;
-  });
-
-  const process = (obj) => Object.entries(obj)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-    .map(([c]) => c);
-
-  return {
-    text: process(colors),
-    backgrounds: process(backgrounds)
-  };
-}
-
-function analyzeAssets() {
-  const imageElements = Array.from(document.querySelectorAll('img'));
-  const images = imageElements.map(img => ({
-    src: img.src,
-    width: img.naturalWidth || img.clientWidth,
-    height: img.naturalHeight || img.clientHeight,
-    alt: img.alt || 'No alt text',
-    type: img.src.split('.').pop().split(/[?#]/)[0].toUpperCase() || 'IMG',
-    broken: img.naturalWidth === 0 && img.src !== ''
-  })).filter(img => img.src);
-
-  // Add SVGs
-  const svgs = document.querySelectorAll('svg').length;
-
-  // Background images
-  const bgImages = [];
-  document.querySelectorAll('*').forEach(el => {
-    const bg = window.getComputedStyle(el).backgroundImage;
-    if (bg && bg !== 'none' && bg.includes('url')) {
-      const url = bg.match(/url\(['"]?([^'"]+)['"]?\)/)?.[1];
-      if (url) bgImages.push(url);
-    }
-  });
-
-  const scripts = Array.from(document.querySelectorAll('script')).map(s => s.src).filter(Boolean);
-  const css = Array.from(document.querySelectorAll('link[rel="stylesheet"]')).map(l => l.href).filter(Boolean);
-
-  return {
-    images,
-    svgs,
-    bgImages: [...new Set(bgImages)],
-    imageCount: images.length,
-    scriptCount: scripts.length,
-    cssCount: css.length,
-    brokenCount: images.filter(i => i.broken).length
-  };
-}
-
-function analyzeFonts() {
-  const fonts = {};
-  document.querySelectorAll('*').forEach(el => {
-    const font = window.getComputedStyle(el).fontFamily.split(',')[0].replace(/['"]/g, '');
-    if (font) fonts[font] = (fonts[font] || 0) + 1;
-  });
-
-  return Object.entries(fonts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([f, c]) => ({ font: f, count: c }));
-}
-
-function analyzeStorage() {
-  const getStorageSize = (storage) => {
-    let t = 0;
-    for (let x in storage) t += (storage[x].length + x.length) * 2;
-    return (t / 1024).toFixed(2);
-  };
-
-  return {
-    lsCount: localStorage.length,
-    lsSize: getStorageSize(localStorage),
-    ssCount: sessionStorage.length,
-    ssSize: getStorageSize(sessionStorage),
-    cookies: document.cookie.split(';').filter(c => c.trim()).length,
-    lsItems: Object.entries(localStorage).map(([k, v]) => ({ k, v: v.slice(0, 50) })),
-    ssItems: Object.entries(sessionStorage).map(([k, v]) => ({ k, v: v.slice(0, 50) }))
-  };
-}
-
-async function analyzeWorkers() {
-  if ('serviceWorker' in navigator) {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    return {
-      count: regs.length,
-      active: regs.map(r => ({
-        scope: r.scope,
-        state: r.active ? r.active.state : 'installing'
-      }))
-    };
-  }
-  return { count: 0, notSupported: true };
-}
-
-function analyzePerf() {
-  const perf = window.performance;
-  const nav = perf.getEntriesByType('navigation')[0] || {};
-  const res = perf.getEntriesByType('resource');
-
-  const totalJS = res.filter(r => r.initiatorType === 'script').length;
-  const totalImg = res.filter(r => r.initiatorType === 'img').length;
-  const totalXHR = res.filter(r => r.initiatorType === 'xmlhttprequest' || r.initiatorType === 'fetch').length;
-
-  return {
-    loadTime: (nav.loadEventEnd - nav.startTime).toFixed(0),
-    domReady: (nav.domContentLoadedEventEnd - nav.startTime).toFixed(0),
-    resources: { js: totalJS, img: totalImg, xhr: totalXHR }
-  };
-}
-
-function analyzeStack() {
-  const stack = [];
-  if (window.React || document.querySelector('[data-reactroot], [id^="react-"]')) stack.push('React');
-  if (window.Vue || document.querySelector('[data-v-]')) stack.push('Vue');
-  if (window.angular || document.querySelector('.ng-binding, [ng-app], [data-ng-app]')) stack.push('Angular');
-  if (window.jQuery || window.$) stack.push('jQuery');
-  if (document.querySelector('meta[name="generator"][content*="WordPress"]')) stack.push('WordPress');
-  if (window.Shopify) stack.push('Shopify');
-  if (window.next) stack.push('Next.js');
-  if (document.getElementById('__nuxt')) stack.push('Nuxt');
-
-  return stack.length ? stack : ['Unknown / Custom'];
-}
-
-function analyzeDomTree() {
-  // Simplified DOM Tree Extractor for D3
-  const traverse = (node, depth = 0) => {
-    if (depth > 4) return null; // Limit depth for perf
-
-    // Ignore text nodes, comments, scripts
-    if (node.nodeType !== 1) return null;
-    const tag = node.tagName.toLowerCase();
-    if (['script', 'style', 'svg', 'path', 'g'].includes(tag)) return null;
-
-    const children = [];
-    node.childNodes.forEach(child => {
-      const c = traverse(child, depth + 1);
-      if (c) children.push(c);
-    });
-
-    return {
-      name: tag,
-      id: node.id || '',
-      class: node.className && typeof node.className === 'string' ? node.className.split(' ')[0] : '',
-      value: children.length + 1,
-      children: children.length ? children : null
-    };
-  };
-
-  return traverse(document.body);
-}
-
-function analyzeA11y() {
-  const images = Array.from(document.querySelectorAll('img'));
-  const missingAlt = images.filter(img => !img.alt).map(img => ({ src: img.src.split('/').pop() || 'Inline', full: img.src }));
-
-  const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
-  const smallButtons = buttons.filter(btn => {
-    const r = btn.getBoundingClientRect();
-    return r.width < 24 || r.height < 24;
-  }).map(btn => ({ text: btn.innerText.trim().slice(0, 20) || 'Icon Button', tag: btn.tagName }));
-
-  const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
-  const unlabelled = inputs.filter(input => {
-    if (input.id && document.querySelector(`label[for="${input.id}"]`)) return false;
-    if (input.closest('label')) return false;
-    if (input.getAttribute('aria-label') || input.getAttribute('aria-labelledby')) return false;
-    return true;
-  }).map(input => ({ placeholder: input.placeholder || 'No Placeholder', name: input.name || input.id || 'Unnamed' }));
-
-  return {
-    images: { total: images.length, missingAlt },
-    buttons: { total: buttons.length, tooSmall: smallButtons },
-    inputs: { total: inputs.length, unlabelled },
-    ariaElements: document.querySelectorAll('[aria-label], [aria-labelledby], [role]').length
-  };
-}
-
-function analyzeSEO() {
-  const meta = (name) => document.querySelector(`meta[name="${name}"], meta[property="og:${name}"]`)?.content;
-  const headings = {};
-  ['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].forEach(h => {
-    headings[h] = document.querySelectorAll(h).length;
-  });
-
-  const links = Array.from(document.querySelectorAll('a'));
-  const internal = links.filter(a => a.href.includes(window.location.hostname)).length;
-  const external = links.length - internal;
-
-  return {
-    title: document.title,
-    description: meta('description') || 'Missing',
-    ogTitle: meta('title') || 'Missing',
-    headings,
-    links: {
-      total: links.length,
-      internal,
-      external,
-      list: links.slice(0, 20).map(a => ({ text: a.innerText.trim().slice(0, 30) || 'Unnamed', href: a.href }))
-    },
-    lang: document.documentElement.lang || 'Not set',
-    meta: Array.from(document.querySelectorAll('meta')).map(m => ({
-      name: m.name || m.getAttribute('property') || 'Unknown',
-      content: m.content
-    })).filter(m => m.content).slice(0, 10)
-  };
-}
-
-function analyzeSequence() {
-  const steps = [];
-  const actors = ['User', 'DOM', 'Logic', 'API'];
-
-  // 1. Initial Load
-  steps.push({ from: 'User', to: 'DOM', label: 'HTTP GET /', type: 'request' });
-  steps.push({ from: 'DOM', to: 'Logic', label: 'Parse HTML & Scripts', type: 'call' });
-
-  // 2. State Detection
-  if (window.React || document.querySelector('[data-reactroot]')) {
-    steps.push({ from: 'Logic', to: 'DOM', label: 'Mount VirtualDOM', type: 'response' });
-  }
-
-  // 3. Data Fetching (Reconstructed from performance entries)
-  const resources = window.performance.getEntriesByType('resource');
-  const fetches = resources.filter(r => r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest').slice(0, 3);
-
-  fetches.forEach(req => {
-    const name = req.name.split('/').pop().split('?')[0] || 'API';
-    steps.push({ from: 'Logic', to: 'API', label: `fetch(${name})`, type: 'request' });
-    steps.push({ from: 'API', to: 'Logic', label: 'JSON Data', type: 'response' });
-    steps.push({ from: 'Logic', to: 'DOM', label: 'Update View', type: 'response' });
-  });
-
-  // 4. Interaction Points
-  const buttons = document.querySelectorAll('button').length;
-  if (buttons > 0) {
-    steps.push({ from: 'User', to: 'DOM', label: `Click Interaction (${buttons} entry pts)`, type: 'call' });
-    steps.push({ from: 'DOM', to: 'Logic', label: 'Event Handler', type: 'call' });
-  }
-
-  return { actors, steps };
-}
-
-function analyzeCode() {
-  const scripts = Array.from(document.querySelectorAll('script'));
-  const data = {
-    total: scripts.length,
-    external: scripts.filter(s => s.src).length,
-    inline: scripts.filter(s => !s.src).length,
-    modules: scripts.filter(s => s.type === 'module').length,
-    async: scripts.filter(s => s.async).length,
-    defer: scripts.filter(s => s.defer).length,
-    sources: scripts.filter(s => s.src).map(s => {
-      try {
-        const url = new URL(s.src);
-        return {
-          host: url.hostname,
-          path: url.pathname.split('/').pop() || 'index',
-          size: '?' // Browser doesn't expose script size easily without Fetch
-        };
-      } catch (e) { return { host: 'unknown', path: s.src }; }
-    })
-  };
-  return data;
-}
-
-function analyzeNetwork() {
-  const resources = window.performance.getEntriesByType('resource');
-  const apiCalls = resources.filter(r => r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest');
-
-  return apiCalls.map(r => ({
-    name: r.name ? r.name.split('/').pop().split('?')[0] : 'Unknown',
-    url: r.name,
-    type: r.initiatorType.toUpperCase(),
-    duration: Math.round(r.duration),
-    size: r.transferSize ? (r.transferSize / 1024).toFixed(1) + ' KB' : 'Cached',
-    status: r.responseStatus || '200?'
-  }));
+  // General JSON/Summary display for others
+  content.innerHTML = `<pre style="font-size: 11px; white-space: pre-wrap; background: var(--bg-tertiary); padding: 12px; border-radius: 6px;">${JSON.stringify(data, null, 2)}</pre>`;
 }
 
 // ============================================
@@ -2594,7 +2295,10 @@ async function extractSiteContext() {
     interactions: null,
     psychology: null,
     performance: null,
-    quality: null
+    quality: null,
+    deepMetamodel: null,
+    siteDNA: null,
+    llmContext: null
   };
 
   try {
@@ -2618,6 +2322,39 @@ async function extractSiteContext() {
 
     // Small delay to ensure all data is captured
     await new Promise(resolve => setTimeout(resolve, 500));
+
+    // === DEEP METAMODEL: Extract site DNA from content script ===
+    try {
+      const dnaResponse = await new Promise((resolve) => {
+        chrome.tabs.sendMessage(tab.id, { action: 'generateLLMContext' }, (response) => {
+          resolve(response || null);
+        });
+      });
+      if (dnaResponse && !dnaResponse.error) {
+        context.siteDNA = dnaResponse.dna;
+        context.llmContext = dnaResponse.markdown;
+        context.deepMetamodel = {
+          designSystem: dnaResponse.dna?.designSystem || null,
+          layoutBlueprint: dnaResponse.dna?.layoutBlueprint || null,
+          componentPatterns: dnaResponse.dna?.componentPatterns || null,
+          semanticContent: dnaResponse.dna?.semanticContent || null,
+          accessibility: dnaResponse.dna?.accessibility || null,
+          responsive: dnaResponse.dna?.responsive || null,
+          animationSystem: dnaResponse.dna?.animationSystem || null,
+          iconSystem: dnaResponse.dna?.iconSystem || null,
+          contentHierarchy: dnaResponse.dna?.contentHierarchy || null,
+          stylesheets: dnaResponse.dna?.stylesheets || null,
+          // Reconstructable Layers
+          rawCSS: dnaResponse.dna?.rawCSS || null,
+          htmlSkeleton: dnaResponse.dna?.htmlSkeleton ? true : false,
+          sectionedContent: dnaResponse.dna?.sectionedContent || null,
+          templatePatterns: dnaResponse.dna?.templatePatterns || null,
+          classVocabulary: dnaResponse.dna?.classVocabulary || null
+        };
+      }
+    } catch (dnaError) {
+      console.warn('Deep metamodel extraction failed:', dnaError);
+    }
 
     // Aggregate from window.SITE_CONTEXT
     const raw = window.SITE_CONTEXT || {};
@@ -2717,13 +2454,24 @@ async function extractSiteContext() {
     // Calculate quality score
     context.metadata.qualityScore = calculateContextQuality(context);
 
+    // Calculate deep metamodel layer count
+    if (context.deepMetamodel) {
+      context.metadata.metamodelLayers = Object.values(context.deepMetamodel).filter(v => v !== null).length;
+    }
+
     // Cache to Chrome storage
     await cacheContext(context);
 
     // Display results
     displayContextExtraction(context);
 
-    showStatus(`Context extracted (Quality: ${context.metadata.qualityScore}%)`, 'success');
+    const layerInfo = context.metadata.metamodelLayers ? ` | ${context.metadata.metamodelLayers} deep layers` : '';
+    showStatus(`Context extracted (Quality: ${context.metadata.qualityScore}%${layerInfo})`, 'success');
+
+    // Display the deep metamodel
+    if (context.llmContext) {
+      displayMetamodel(context.llmContext);
+    }
 
     return context;
 
@@ -2742,58 +2490,98 @@ function calculateContextQuality(context) {
   let score = 0;
   let maxScore = 0;
 
-  // Structure (20 points)
-  maxScore += 20;
+  // Structure (15 points)
+  maxScore += 15;
   if (context.structure) {
-    if (context.structure.totalNodes > 0) score += 10;
-    if (context.structure.maxDepth > 0) score += 5;
-    if (Object.keys(context.structure.tagDistribution || {}).length > 0) score += 5;
+    if (context.structure.totalNodes > 0) score += 7;
+    if (context.structure.maxDepth > 0) score += 4;
+    if (Object.keys(context.structure.tagDistribution || {}).length > 0) score += 4;
   }
 
-  // Design (15 points)
-  maxScore += 15;
+  // Design (10 points)
+  maxScore += 10;
   if (context.design) {
-    if ((context.design.colorPalette || []).length > 0) score += 10;
-    if ((context.design.typography?.fonts || []).length > 0) score += 5;
+    if ((context.design.colorPalette || []).length > 0) score += 7;
+    if ((context.design.typography?.fonts || []).length > 0) score += 3;
   }
 
-  // Tech Stack (10 points)
-  maxScore += 10;
+  // Tech Stack (5 points)
+  maxScore += 5;
   if (context.tech && (context.tech.frameworks || []).length > 0) {
-    score += 10;
+    score += 5;
   }
 
-  // Code Patterns (15 points)
-  maxScore += 15;
+  // Code Patterns (10 points)
+  maxScore += 10;
   if (context.code) {
-    if (context.code.totalScripts > 0) score += 10;
-    if ((context.code.sources || []).length > 0) score += 5;
+    if (context.code.totalScripts > 0) score += 7;
+    if ((context.code.sources || []).length > 0) score += 3;
   }
 
-  // Interactions (10 points)
-  maxScore += 10;
+  // Interactions (5 points)
+  maxScore += 5;
   if (context.interactions && context.interactions.totalLinks > 0) {
-    score += 10;
+    score += 5;
   }
 
-  // Psychology (10 points)
-  maxScore += 10;
+  // Psychology (5 points)
+  maxScore += 5;
   if (context.psychology) {
-    if ((context.psychology.darkPatterns || []).length > 0) score += 5;
-    if ((context.psychology.persuasionTechniques || []).length > 0) score += 5;
+    if ((context.psychology.darkPatterns || []).length > 0) score += 3;
+    if ((context.psychology.persuasionTechniques || []).length > 0) score += 2;
   }
 
-  // Performance (10 points)
-  maxScore += 10;
+  // Performance (5 points)
+  maxScore += 5;
   if (context.performance && context.performance.loadTime > 0) {
-    score += 10;
+    score += 5;
   }
 
-  // Quality (10 points)
-  maxScore += 10;
+  // Quality (5 points)
+  maxScore += 5;
   if (context.quality) {
-    if (context.quality.a11yIssues) score += 5;
-    if (context.quality.seoData) score += 5;
+    if (context.quality.a11yIssues) score += 3;
+    if (context.quality.seoData) score += 2;
+  }
+
+  // === DEEP METAMODEL LAYERS (40 points) ===
+  maxScore += 40;
+  if (context.deepMetamodel) {
+    // Design System (8 points)
+    if (context.deepMetamodel.designSystem) {
+      if (context.deepMetamodel.designSystem.typography?.fontFamilies?.length > 0) score += 3;
+      if (context.deepMetamodel.designSystem.colors?.text?.length > 0) score += 3;
+      if (context.deepMetamodel.designSystem.spacing?.paddings?.length > 0) score += 2;
+    }
+    // Layout Blueprint (5 points)
+    if (context.deepMetamodel.layoutBlueprint) {
+      if (context.deepMetamodel.layoutBlueprint.flexConfigs?.length > 0 || context.deepMetamodel.layoutBlueprint.gridConfigs?.length > 0) score += 5;
+    }
+    // Component Patterns (5 points)
+    if (context.deepMetamodel.componentPatterns && Object.keys(context.deepMetamodel.componentPatterns).length > 0) {
+      score += 5;
+    }
+    // Semantic Content (5 points)
+    if (context.deepMetamodel.semanticContent) {
+      if (context.deepMetamodel.semanticContent.headingTree?.length > 0) score += 3;
+      if (context.deepMetamodel.semanticContent.structuredData?.length > 0) score += 2;
+    }
+    // Accessibility (5 points)
+    if (context.deepMetamodel.accessibility) score += 5;
+    // Responsive (4 points)
+    if (context.deepMetamodel.responsive?.breakpoints?.length > 0) score += 4;
+    // Animation System (3 points)
+    if (context.deepMetamodel.animationSystem) score += 3;
+    // Content Hierarchy (3 points)
+    if (context.deepMetamodel.contentHierarchy?.sections?.length > 0) score += 3;
+    // Stylesheets (2 points)
+    if (context.deepMetamodel.stylesheets) score += 2;
+    // CSS Rules (3 points)
+    if (context.deepMetamodel.rawCSS?.rules?.length > 0) score += 3;
+    // HTML Skeleton (3 points)
+    if (context.deepMetamodel.htmlSkeleton) score += 3;
+    // Template Patterns (2 points)
+    if (context.deepMetamodel.templatePatterns?.length > 0) score += 2;
   }
 
   return Math.round((score / maxScore) * 100);
@@ -2804,30 +2592,35 @@ function calculateContextQuality(context) {
  * Prioritizes most valuable data for code generation
  */
 function compressContextForLLM(context) {
+  // If deep metamodel is available, use the rich LLM context directly
+  if (context.llmContext) {
+    return {
+      url: context.metadata.url,
+      quality: context.metadata.qualityScore,
+      metamodelLayers: context.metadata.metamodelLayers || 0,
+      fullContext: context.llmContext
+    };
+  }
+
+  // Fallback: minimal compression
   const compressed = {
     url: context.metadata.url,
-    // Structure (essential)
     structure: {
       nodes: context.structure?.totalNodes || 0,
       depth: context.structure?.maxDepth || 0,
       topTags: Object.entries(context.structure?.tagDistribution || {}).slice(0, 10).map(([tag, count]) => `${tag}:${count}`)
     },
-    // Design (essential)
     colors: (context.design?.colorPalette || []).slice(0, 8),
-    // Tech (essential for context)
     tech: (context.tech?.frameworks || []).join(', '),
-    // Code (important patterns)
     scripts: {
       total: context.code?.totalScripts || 0,
       external: context.code?.externalScripts || 0,
       hosts: (context.code?.sources || []).slice(0, 5)
     },
-    // Psychology (key patterns only)
     patterns: {
       dark: (context.psychology?.darkPatterns || []).slice(0, 5),
       persuasion: (context.psychology?.persuasionTechniques || []).slice(0, 5)
     },
-    // Quality indicators
     quality: context.metadata.qualityScore
   };
 
@@ -2836,10 +2629,38 @@ function compressContextForLLM(context) {
 
 /**
  * Generate LLM system prompt with context injection
+ * Now uses the deep metamodel when available for dramatically richer context
  */
 function generateLLMPrompt(context, userRequest) {
   const compressed = compressContextForLLM(context);
 
+  // If we have the full site DNA context, use it directly
+  if (compressed.fullContext) {
+    return `You are an expert web developer, UX designer, and Chrome Extension developer. You have been given a comprehensive reverse-engineered analysis of the target website.
+
+Use the following deep site DNA to inform your work. This includes the complete design system (typography, colors, spacing, shadows), layout architecture (flex/grid configs), detected UI component patterns, semantic content hierarchy, accessibility analysis, responsive breakpoints, animation system, brand archetype, psychological profile, strategic architecture, and more.
+
+${compressed.fullContext}
+
+---
+
+## USER REQUEST
+${userRequest}
+
+## YOUR TASK
+Using the comprehensive site DNA above, generate a solution that:
+1. **Matches the design system** — use the exact fonts, colors, spacing, and shadow values from the site
+2. **Follows the layout patterns** — respect flex/grid configurations and container widths
+3. **Replicates component patterns** — build with the same card, modal, tab, and navigation patterns
+4. **Maintains the brand voice** — match the archetype, tone, and rhetoric style
+5. **Preserves accessibility** — fix identified issues and maintain WCAG standards
+6. **Respects responsive behavior** — use the same breakpoints and responsive image patterns
+7. **Incorporates motion design** — apply similar animation/transition patterns
+
+Provide complete, production-ready code that seamlessly integrates with or remixes the target site.`;
+  }
+
+  // Fallback prompt with minimal data
   const prompt = `You are an expert Chrome Extension developer with deep knowledge of the target website.
 
 ## SITE CONTEXT (Reverse-Engineered)
@@ -2877,18 +2698,12 @@ Generate a Chrome Extension (Manifest V3) that addresses the user's request whil
 }
 
 /**
- * Cache context to Chrome storage for reuse
+ * Cache context to ProjectManager for reuse
  */
 async function cacheContext(context) {
   try {
-    const cacheKey = `context_${new URL(context.metadata.url).hostname}`;
-    await chrome.storage.local.set({
-      [cacheKey]: {
-        data: context,
-        timestamp: Date.now()
-      }
-    });
-    console.log('Context cached:', cacheKey);
+    await ProjectManager.cacheSiteContext(context.metadata.url, context);
+    console.log('Context cached');
   } catch (error) {
     console.error('Context caching error:', error);
   }
@@ -2899,20 +2714,7 @@ async function cacheContext(context) {
  */
 async function getCachedContext(url) {
   try {
-    const cacheKey = `context_${new URL(url).hostname}`;
-    const result = await chrome.storage.local.get(cacheKey);
-
-    if (result[cacheKey]) {
-      const cached = result[cacheKey];
-      const age = Date.now() - cached.timestamp;
-
-      // Cache valid for 1 hour
-      if (age < 3600000) {
-        return cached.data;
-      }
-    }
-
-    return null;
+    return await ProjectManager.getCachedSiteContext(url);
   } catch (error) {
     console.error('Context retrieval error:', error);
     return null;
@@ -3036,6 +2838,103 @@ function displayContextExtraction(context) {
     }
   });
 }
+
+// Display Metamodel / Site DNA
+function displayMetamodel(markdown) {
+  const container = document.getElementById('analysis-results');
+  const content = document.getElementById('result-content');
+  const d3Container = document.getElementById('d3-container');
+  const title = document.getElementById('result-title');
+
+  container.style.display = 'flex';
+  if (d3Container) d3Container.style.display = 'none';
+  content.style.display = 'block';
+  title.textContent = '🔮 Reconstructable Site DNA';
+
+  const wordCount = markdown ? markdown.split(/\s+/).length : 0;
+  const safeMarkdown = markdown
+    ? markdown.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    : 'No DNA extracted yet.';
+
+  content.innerHTML = `
+    <div class="analysis-item">
+      <div class="analysis-header">
+        <div class="header-metrics">
+          <div class="metric"><strong>${wordCount}</strong> Tokens</div>
+          <div class="metric highlight"><strong>LLM Ready</strong></div>
+        </div>
+        <div class="dive-actions">
+           <button class="btn btn-secondary btn-small" id="copy-dna-btn">Copy to Clipboard</button>
+        </div>
+      </div>
+      <pre style="max-height: 500px; overflow-y: auto; background: var(--bg-tertiary); color: var(--text-code); padding: 12px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; white-space: pre-wrap;">${safeMarkdown}</pre>
+    </div>
+  `;
+
+  document.getElementById('copy-dna-btn')?.addEventListener('click', () => {
+    navigator.clipboard.writeText(markdown).then(() => showStatus('DNA copied!', 'success'));
+  });
+}
+
+// Display Omniscient Blueprint Results
+function displayExtractionResults(data) {
+  const container = document.getElementById('analysis-results');
+  const content = document.getElementById('result-content');
+  const title = document.getElementById('result-title');
+
+  container.style.display = 'flex';
+  content.style.display = 'block';
+  title.textContent = '💎 Omniscient Blueprint';
+
+  if (!data) { content.innerHTML = '<div class="error">No data extracted.</div>'; return; }
+
+  content.innerHTML = `
+    <div class="analysis-item">
+      <div class="analysis-header">
+        <div class="header-metrics">
+          <div class="metric"><strong>${data.objectModel?.totalNodes || 0}</strong> Nodes</div>
+          <div class="metric"><strong>${data.psyche?.darkPatterns?.length || 0}</strong> Dark Patterns</div>
+        </div>
+        <button class="btn btn-secondary btn-small" id="download-blueprint">Download JSON</button>
+      </div>
+      
+      <div class="stats-grid">
+         <div class="stat-card">
+           <span class="stat-value">${data.strategy?.cognitiveBurden || 0}%</span>
+           <span class="stat-label">Cognitive Burden</span>
+         </div>
+         <div class="stat-card">
+           <span class="stat-value">${data.role || 'Visitor'}</span>
+           <span class="stat-label">Persona Map</span>
+         </div>
+      </div>
+
+      <div class="dive-section" style="margin-top:20px">
+        <h5 style="color:var(--accent-color)">Remix Opportunities</h5>
+        <ul>
+          ${(data.strategy?.remixOpportunities || []).map(opp => `
+            <li style="margin-bottom:10px">
+              <strong>${opp.type}</strong>: ${opp.action}
+              <div style="font-size:10px; color:var(--text-dim)">${opp.rationale}</div>
+            </li>
+          `).join('') || '<li>None detected.</li>'}
+        </ul>
+      </div>
+
+      <div class="dive-section" style="margin-top:20px">
+        <h5 style="color:var(--accent-color)">Psychological Layer</h5>
+        <div>Scarcity: ${data.psyche?.scarcity || 0} signals</div>
+        <div>Urgency: ${data.psyche?.urgencySignals || 0} signals</div>
+        <div>Authority: ${data.psyche?.authority || 0} signals</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('download-blueprint')?.addEventListener('click', () => {
+    downloadAsFile(JSON.stringify(data, null, 2), 'blueprint.json', 'application/json');
+  });
+}
+
 
 // Render Results
 function displayAnalysisResults(type, data) {
@@ -4249,6 +4148,20 @@ function displayAnalysisResults(type, data) {
     );
   }
 
+  // Fallback for unhandled types (Raw JSON View)
+  if (!html) {
+    if (data && typeof data === 'object') {
+      const json = JSON.stringify(data, null, 2);
+      html = createDeepDive(type,
+        `Raw Data Dump`,
+        `<pre style="white-space: pre-wrap; word-break: break-all; font-family: monospace; font-size: 10px; color: var(--text-code); background: var(--bg-tertiary); padding: 10px; border-radius: 4px;">${json}</pre>`,
+        { title: `${type} (Raw Inspector)`, export: true }
+      );
+    } else {
+      html = `<div class="analysis-item"><div class="empty-state">No visualizer available for ${type}. <br>Data: ${data}</div></div>`;
+    }
+  }
+
   content.innerHTML = html;
 
   // Add search functionality
@@ -4638,8 +4551,8 @@ function displayExtractionResults(extraction) {
       <div class="extraction-section">
         <h4>🌐 Website Metadata</h4>
         <div class="metadata-grid">
-          <div><strong>URL:</strong> ${extraction.metadata.url}</div>
-          <div><strong>Domain:</strong> ${extraction.metadata.domain}</div>
+          <div><strong>URL:</strong> ${extraction.metadata?.url || 'Unknown'}</div>
+          <div><strong>Domain:</strong> ${extraction.metadata?.domain || 'Unknown'}</div>
           <div><strong>Viewport:</strong> ${extraction.metadata.viewport.width}x${extraction.metadata.viewport.height}</div>
           <div><strong>Extracted:</strong> ${new Date(extraction.metadata.timestamp).toLocaleString()}</div>
         </div>
@@ -5614,3 +5527,40 @@ Modify the files to customize your extension:
 Built with ReMixr IDE - A meta-extension development environment.
 `;
 }
+
+// --- RE-CONSTRUCTABLE DNA HELPERS ---
+
+function generateAIContext(data) {
+  return `# SITE DNA: ${data.domain || 'Unknown'}
+Generated: ${new Date().toISOString()}
+
+## CORE ANALYSIS
+${JSON.stringify(data, (key, value) => (key === 'objectModel' ? undefined : value), 2)}
+`;
+}
+
+function compressContextForLLM(context) {
+  const shallow = { ...context };
+  delete shallow.objectModel;
+  return shallow;
+}
+
+function generateLLMPrompt(context, userGoal) {
+  const dna = JSON.stringify(compressContextForLLM(context));
+  return `Prompt: Develop a feature where ${userGoal}. Context: ${dna}`;
+}
+
+function downloadAsFile(text, filename, type) {
+  const file = new Blob([text], { type: type });
+  const a = document.createElement("a");
+  const url = URL.createObjectURL(file);
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  }, 0);
+}
+

@@ -31,6 +31,7 @@
         "<all_urls>"
       ],
       "js": [
+        "lib/inspector-kernels.js",
         "lib/analysis.js",
         "content.js"
       ],

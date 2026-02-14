@@ -15,8 +15,9 @@
  */
 
 /**
- * ReMixr Utility Functions
- * Common helper functions for the ReMixr extension
+ * ReMixr DOM Utilities
+ * UI-dependent helper functions for the ReMixr popup.
+ * Requires core-utils.js to be loaded first.
  */
 
 /**
@@ -76,50 +77,7 @@ function copyToClipboard(text, onSuccess) {
     });
 }
 
-/**
- * Debounces a function call
- * @param {Function} func - The function to debounce
- * @param {number} wait - The wait time in milliseconds
- * @returns {Function} - The debounced function
- */
-function debounce(func, wait) {
-    let timeout;
-    return function executedFunction(...args) {
-        const later = () => {
-            clearTimeout(timeout);
-            func(...args);
-        };
-        clearTimeout(timeout);
-        timeout = setTimeout(later, wait);
-    };
-}
 
-/**
- * Throttles a function call
- * @param {Function} func - The function to throttle
- * @param {number} limit - The time limit in milliseconds
- * @returns {Function} - The throttled function
- */
-function throttle(func, limit) {
-    let inThrottle;
-    return function () {
-        const args = arguments;
-        const context = this;
-        if (!inThrottle) {
-            func.apply(context, args);
-            inThrottle = true;
-            setTimeout(() => inThrottle = false, limit);
-        }
-    }
-}
-
-/**
- * Generates a unique ID
- * @returns {string} - A random unique ID
- */
-function generateId() {
-    return 'id-' + Math.random().toString(36).substr(2, 9);
-}
 
 /**
  * Escapes HTML characters to prevent XSS
@@ -127,13 +85,7 @@ function generateId() {
  * @returns {string} - The escaped string
  */
 function escapeHTML(unsafe) {
-    if (typeof unsafe !== 'string') return unsafe;
-    return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    return CoreUtils.escapeHTML(unsafe);
 }
 /**
  * Waits for an element to appear in the DOM
