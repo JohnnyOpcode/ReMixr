@@ -2510,6 +2510,9 @@
         const lines = [];
         const add = (text) => lines.push(text);
 
+        add(`> **Prompting Hint for LLM:**`);
+        add(`> *Use this complete Website DNA to synthesize all layers (psychology, design, structure, strategy) to provide a comprehensive audit or reconstruction plan. Focus on identifying architectural inconsistencies and high-leverage UX improvements.*`);
+        add('');
         add(`# Website DNA: ${dna._meta?.title || ''}`);
         add(`URL: ${dna._meta?.url || 'unknown'}`);
         add(`Domain: ${dna._meta?.domain || ''} | Path: ${dna._meta?.path || '/'}`);

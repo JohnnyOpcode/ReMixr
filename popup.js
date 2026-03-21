@@ -645,6 +645,29 @@ function setupEventListeners() {
     }
   });
 
+  // Context Dialog functionality
+  document.getElementById('view-extracted-context')?.addEventListener('click', () => {
+    const dialog = document.getElementById('context-dialog');
+    const textarea = document.getElementById('context-dialog-textarea');
+    if (window.LAST_MARKDOWN_CONTEXT) {
+      textarea.value = window.LAST_MARKDOWN_CONTEXT;
+    }
+    dialog.classList.remove('context-dialog-hidden');
+  });
+
+  document.getElementById('close-context-dialog')?.addEventListener('click', () => {
+    document.getElementById('context-dialog').classList.add('context-dialog-hidden');
+  });
+
+  document.getElementById('copy-context-dialog')?.addEventListener('click', () => {
+    const text = document.getElementById('context-dialog-textarea').value;
+    if (text) {
+      navigator.clipboard.writeText(text).then(() => showStatus('Context copied to clipboard!', 'success'));
+    } else {
+      showStatus('No context to copy', 'error');
+    }
+  });
+
   // MacGyver Tools removed from here as they are wired up below via toggleTool or runMacGyver
   // Helper to toggle button state and send message
   const toggleTool = async (btnId, action, successMsg, failMsg) => {
@@ -802,6 +825,13 @@ function setupEventListeners() {
       // Store as DNA for template hydration
       window.LAST_SITE_DNA = response;
       
+      // Update Context Dialog specific to this view
+      window.LAST_MARKDOWN_CONTEXT = formatAnalysisForLLM('omniscience', response, tab);
+      const textarea = document.getElementById('context-dialog-textarea');
+      if (textarea && !document.getElementById('context-dialog').classList.contains('context-dialog-hidden')) {
+          textarea.value = window.LAST_MARKDOWN_CONTEXT;
+      }
+
       showStatus('Omniscient Blueprint ready!', 'success');
     } catch (error) {
       console.error('[ReMixr] Omniscience extraction failed:', error);
@@ -824,6 +854,10 @@ function setupEventListeners() {
       if (!ready) throw new Error("Content script injection failed");
       const response = await sendMessageWithTimeout(tab.id, { action: 'generateLLMContext' }, 30000);
       if (response && response.markdown) {
+        window.LAST_MARKDOWN_CONTEXT = response.markdown;
+        const textarea = document.getElementById('context-dialog-textarea');
+        if (textarea) textarea.value = response.markdown;
+
         displayMetamodel(response.markdown);
         showStatus('Metamodel ready!', 'success');
         
@@ -2266,6 +2300,106 @@ function ensureContentScript(tabId) {
 
 
 
+function formatAnalysisForLLM(type, data, tab = null) {
+  const prompts = {
+    'structure': 'Use the following DOM architecture and component map to understand the page layout and semantic structure. Look for nesting depth, container patterns, and semantic misuse.',
+    'palette': 'Use the following extracted design tokens, typography, and color schemes to recreate or analyze the visual brand identity. Pay attention to color contrast and consistency.',
+    'psyche': 'Analyze the following cognitive load, dark patterns, and persuasion techniques to evaluate potential user manipulation or UX friction. Identify high-risk psychological triggers.',
+    'archetype': 'Review the following brand personality signals and archetype scores to understand the core brand identity and tone. Align messaging with the primary archetype.',
+    'shadow': 'Review these extracted dark patterns and deceptive design tactics to identify trust violations or hostile UX. Recommend removals for ethical compliance.',
+    'rhetoric': 'Analyze the following rhetorical devices, power words, and linguistic patterns to understand the copy\'s emotional and persuasive appeal. Evaluate readability versus target audience.',
+    'code': 'Review this code execution graph and script analysis to gauge performance, architecture, and external dependencies. Locate heavy scripts or privacy-risky assets.',
+    'net': 'Review the intercepted network requests to analyze the data pipeline, API usage, and resource load characteristics. Look for redundant fetches or slow endpoints.',
+    'omniscience': 'This is the complete Site DNA. Synthesize all layers (psychology, design, structure, strategy) to provide a comprehensive audit or reconstruction plan.',
+    'default': `Here is the extracted ${type.toUpperCase()} context for analysis:`
+  };
+
+  let md = `> **Prompting Hint for LLM:**\n> *${prompts[type] || prompts['default']}*\n\n`;
+  md += `# Context Analysis: ${type.toUpperCase()}\n`;
+  
+  if (tab) {
+    md += `**Target:** [${tab.title || 'Page'}](${tab.url})\n`;
+  }
+  
+  md += `_Extracted at ${new Date().toLocaleTimeString()}_\n\n---\n\n`;
+
+  const formatData = (obj, indent = 0) => {
+    if (obj === null || obj === undefined) return '';
+    if (typeof obj !== 'object') return String(obj);
+    let res = '';
+    const spaces = ' '.repeat(indent);
+
+    if (Array.isArray(obj)) {
+      if (obj.length === 0) return 'None\n';
+      
+      // If it's an array of objects with the same keys, use a TABLE
+      if (typeof obj[0] === 'object' && obj[0] !== null) {
+        const keys = Object.keys(obj[0]);
+        if (keys.length > 0 && keys.length <= 6) {
+           res += `| ${keys.join(' | ')} |\n`;
+           res += `| ${keys.map(() => '---').join(' | ')} |\n`;
+           obj.forEach(item => {
+             res += `| ${keys.map(k => {
+               const val = item[k];
+               return typeof val === 'object' ? JSON.stringify(val).slice(0, 50) : String(val).replace(/\|/g, '\\|');
+             }).join(' | ')} |\n`;
+           });
+           return res + '\n';
+        }
+      }
+
+      // Fallback for non-tabular arrays
+      if (typeof obj[0] !== 'object') {
+        return obj.join(', ') + '\n';
+      }
+      obj.forEach(item => {
+        if (typeof item === 'object' && item !== null) {
+          const entries = Object.entries(item);
+          if (entries.length > 0) {
+            res += `${spaces}- **${entries[0][0]}**: ${typeof entries[0][1] === 'object' ? JSON.stringify(entries[0][1]) : entries[0][1]}\n`;
+            for (let i = 1; i < entries.length; i++) {
+              res += `${spaces}  - **${entries[i][0]}**: ${typeof entries[i][1] === 'object' ? JSON.stringify(entries[i][1]) : entries[i][1]}\n`;
+            }
+          } else {
+            res += `${spaces}- {}\n`;
+          }
+        } else {
+          res += `${spaces}- ${item}\n`;
+        }
+      });
+      return res;
+    }
+
+    // Object traversal
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'object' && v !== null) {
+        if (Array.isArray(v)) {
+           if (v.length === 0) {
+             res += `${spaces}- **${k}:** None\n`;
+           } else if (typeof v[0] !== 'object') {
+             res += `${spaces}- **${k}:** ${v.join(', ')}\n`;
+           } else {
+             res += `${spaces}- **${k}:**\n${formatData(v, indent + 2)}`;
+           }
+        } else {
+           res += `${spaces}- **${k}:**\n${formatData(v, indent + 2)}`;
+        }
+      } else {
+        res += `${spaces}- **${k}:** ${v}\n`;
+      }
+    }
+    return res;
+  };
+
+  md += formatData(data);
+  md += `\n---\n\n## Actionable Recommendations\n`;
+  md += `- [ ] Verify the above data against current site goals.\n`;
+  md += `- [ ] Use this context to regenerate or refine component code.\n`;
+  md += `- [ ] Identify ${type} inconsistencies and propose immediate fixes.\n`;
+  
+  return md;
+}
+
 async function runAnalysis(type) {
   showStatus(`Running ${type} scan...`, 'info');
 
@@ -2306,6 +2440,13 @@ async function runAnalysis(type) {
       // Store in global context for aggregation
       window.SITE_CONTEXT = window.SITE_CONTEXT || {};
       window.SITE_CONTEXT[type] = response;
+
+      // Update the Context Dialog to be specific to this view
+      window.LAST_MARKDOWN_CONTEXT = formatAnalysisForLLM(type, response, tab);
+      const textarea = document.getElementById('context-dialog-textarea');
+      if (textarea && !document.getElementById('context-dialog').classList.contains('context-dialog-hidden')) {
+          textarea.value = window.LAST_MARKDOWN_CONTEXT;
+      }
 
       displayAnalysisResults(type, response);
       showStatus(`${type} scan complete`, 'success');

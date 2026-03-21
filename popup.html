@@ -666,6 +666,7 @@
             <div class="results-actions-inline">
               <button id="fullscreen-toggle" class="btn-icon-inline" title="Toggle fullscreen">⛶</button>
               <button id="clear-results" class="btn-text-inline" title="Clear results">Clear</button>
+              <button id="view-extracted-context" class="btn-text-inline" title="View Context" style="margin-left: 8px;">Context</button>
             </div>
           </div>
           <div id="result-content" class="results-content">
@@ -874,6 +875,20 @@
 
     <!-- Status Bar & Toast moved inside container -->
     <div id="status" class="status"></div>
+  </div>
+
+  <!-- Context Dialog Modal -->
+  <div id="context-dialog" class="context-dialog context-dialog-hidden">
+    <div class="context-dialog-header">
+      <h3 class="context-dialog-title">Extracted Context</h3>
+      <div class="context-dialog-actions">
+        <button id="copy-context-dialog" class="btn-icon-inline" title="Copy to Clipboard">📋 Copy</button>
+        <button id="close-context-dialog" class="btn-icon-inline" title="Close">❌</button>
+      </div>
+    </div>
+    <div class="context-dialog-body">
+      <textarea id="context-dialog-textarea" readonly placeholder="No context generated yet. Click 'Transform Code' (🔮) first."></textarea>
+    </div>
   </div>
 
   <!-- Scripts -->
