@@ -2,9 +2,9 @@
 
 **The Ultimate Meta-Extension Builder & Web Analysis Suite**
 
-![ReMixr UI Overview](screenshots/Screenshot-UI.png)
+![ReMixr Overview](remixr_architecture.png)
 
-ReMixr is a powerful browser extension that lets you **build other browser extensions** directly in your browser. It combines an AI-powered development environment (IDE) with a suite of sophisticated analysis and hacking ("MacGyver") tools, effectively giving you "Developer Superpowers" on any website.
+ReMixr is a powerful browser extension that lets you **build other browser extensions** directly in your browser. It combines an AI-powered development environment (IDE) with a suite of sophisticated analysis and hacking ("MacGyver") tools, effectively giving you "Developer Superpowers" over any website.
 
 ## ✨ Features
 

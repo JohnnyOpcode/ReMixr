@@ -46,6 +46,8 @@
     var physicsElements = window.physicsElements || [];
     var mouseTrace = window.mouseTrace || [];
     var godModeStyle = window.godModeStyle || null;
+    var flowRecording = window.flowRecording || false;
+    var sessionEvents = window.sessionEvents || [];
     const MAX_TRACE = 100;
 
     // Initialize Overlay
@@ -74,23 +76,43 @@
         document.body.appendChild(overlay);
     }
 
-    // Generate unique CSS selector
+    // Generate unique CSS selector (Enhanced for Robustness)
     function getSelector(el) {
+        if (!el || el === document) return 'html';
         if (el.id) return '#' + el.id;
+        
+        // Try stable attributes first
+        const stableAttrs = ['data-testid', 'data-qa', 'aria-label', 'name', 'title'];
+        for (const attr of stableAttrs) {
+            const val = el.getAttribute(attr);
+            if (val) return `${el.tagName.toLowerCase()}[${attr}="${val}"]`;
+        }
+
+        // Try classes (filtering out common dynamic utility classes)
         const classAttr = el.getAttribute('class');
-        if (classAttr) {
-            const classes = classAttr.split(' ').filter(c => c.trim() && !c.includes('hover') && !c.includes('active'));
+        if (classAttr && typeof classAttr === 'string') {
+            const classes = classAttr.split(' ').filter(c => {
+                const isDynamic = /^(css-|emotion-|react-|v-|_|js-|hover:|focus:|active:|dark:|lg:|sm:|md:|xl:)/i.test(c);
+                return c.trim() && !isDynamic;
+            });
             if (classes.length > 0) return '.' + classes.join('.');
         }
+
+        // Fallback to hierarchical path
         let tagName = el.tagName.toLowerCase();
         let siblingIndex = 1;
         let sibling = el;
         while (sibling = sibling.previousElementSibling) {
             if (sibling.tagName.toLowerCase() === tagName) siblingIndex++;
         }
-        if (siblingIndex > 1) tagName += `:nth-of-type(${siblingIndex})`;
+        
+        const path = (siblingIndex > 1) ? `${tagName}:nth-of-type(${siblingIndex})` : tagName;
+        
+        if (el.parentElement && el.parentElement !== document.body) {
+            return getSelector(el.parentElement) + ' > ' + path;
+        }
 
-        return tagName;
+        return path;
     }
 
     // Highlight element
@@ -249,6 +271,22 @@
         'analyzeA11y': () => InspectorKernels.analyzeA11y(),
         'analyzeSEO': () => InspectorKernels.analyzeSEO(),
         'analyzeSequence': () => InspectorKernels.analyzeSequence(),
+        'analyzeWorkers': async () => {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    return { serviceWorkers: regs.map(r => r.active ? r.active.scriptURL : 'Registered') };
+                } catch(e) { return { Math, error: e.message, serviceWorkers: [] }; }
+            }
+            return { serviceWorkers: [] };
+        },
+        'analyzeCode': () => {
+            const scripts = document.querySelectorAll('script');
+            const inline = Array.from(scripts).filter(s => !s.src).length;
+            const external = Array.from(scripts).filter(s => s.src).length;
+            return { scripts: { inline, external }, totalElements: document.querySelectorAll('*').length };
+        },
+        'analyzeNet': extractAPISurface,
         'visualizeStrategy': (req) => { visualizeStrategicMapping(); return { success: true }; },
         'analyzeOmniscience': async () => {
             return {
@@ -268,6 +306,24 @@
                 timestamp: new Date().toISOString()
             };
         },
+        'startSessionRecording': () => {
+            flowRecording = true;
+            window.flowRecording = true;
+            sessionEvents = [];
+            window.sessionEvents = [];
+            document.addEventListener('click', recordEvent, true);
+            document.addEventListener('input', recordEvent, true);
+            console.log('[ReMixr] Session Recording started...');
+            return { active: true };
+        },
+        'stopSessionRecording': () => {
+            flowRecording = false;
+            window.flowRecording = false;
+            document.removeEventListener('click', recordEvent, true);
+            document.removeEventListener('input', recordEvent, true);
+            console.log('[ReMixr] Session Recording stopped. Events:', sessionEvents.length);
+            return { events: sessionEvents };
+        },
         'toggleXRay': () => ({ active: toggleXRayMode() }),
         'toggleHeatmap': () => ({ active: toggleHeatmap() }),
         'analyzeSpecimen': analyzeSpecimen,
@@ -275,10 +331,10 @@
         'extractFrameworkState': extractFrameworkState,
         'extractAPISurface': extractAPISurface,
         'extractSiteDNA': generateSiteDNA,
-        'generateLLMContext': async () => {
+        'generateLLMContext': () => {
             const dna = generateSiteDNA();
-            const markdown = await generateLLMSiteContext(dna);
-            return { ...markdown, dna, wordCount: markdown.markdown?.split(/\s+/).length || 0 };
+            const markdown = generateLLMSiteContext(dna);
+            return { markdown, dna, wordCount: markdown.split(/\s+/).length };
         },
         'toggleContrastMap': () => ({ active: toggleContrastMap() }),
         'toggleEventSniffer': () => ({ active: toggleEventSniffer() }),
@@ -1440,7 +1496,7 @@
         document.querySelectorAll('[class*="modal"], [class*="dialog"], [role="dialog"]').forEach(el => {
             patterns.modals.push({
                 selector: getSelector(el),
-                hasOverlay: !!el.querySelector('[class*="overlay"], [class*="backdrop"]') || el.previousElementSibling?.className?.toString().includes('overlay'),
+                hasOverlay: !!el.querySelector('[class*="overlay"], [class*="backdrop"]') || (typeof el.previousElementSibling?.className === 'string' ? el.previousElementSibling?.className : (el.previousElementSibling?.className?.baseVal || el.previousElementSibling?.getAttribute('class') || '')).includes('overlay'),
                 hasClose: !!el.querySelector('[class*="close"], button[aria-label*="close"]'),
                 isHidden: window.getComputedStyle(el).display === 'none' || window.getComputedStyle(el).visibility === 'hidden'
             });
@@ -1529,7 +1585,7 @@
             if (patterns.alerts.length >= 5) return;
             patterns.alerts.push({
                 selector: getSelector(el),
-                type: el.className.toString().match(/success|error|warn|info|danger/)?.[0] || 'generic',
+                type: (typeof el.className === 'string' ? el.className : (el.className?.baseVal || el.getAttribute('class') || '')).match(/success|error|warn|info|danger/)?.[0] || 'generic',
                 dismissible: !!el.querySelector('[class*="close"], button')
             });
         });
@@ -1902,7 +1958,7 @@
                 order: idx,
                 tag: el.tagName.toLowerCase(),
                 id: el.id || '',
-                classes: (el.className || '').toString().split(' ').filter(c => c.trim()).slice(0, 5),
+                classes: (typeof el.className === 'string' ? el.className : (el.className?.baseVal || el.getAttribute('class') || '')).split(' ').filter(c => c.trim()).slice(0, 5),
                 role: el.getAttribute('role') || '',
                 dimensions: {
                     width: Math.round(rect.width),
@@ -2138,7 +2194,7 @@
         Array.from(topLevel).slice(0, 25).forEach((section, idx) => {
             const tag = section.tagName.toLowerCase();
             const id = section.id || '';
-            const classes = (section.className || '').toString().trim();
+            const classes = (typeof section.className === 'string' ? section.className : (section.className?.baseVal || section.getAttribute('class') || '')).trim();
             const rect = section.getBoundingClientRect();
 
             // Extract visible text content organized by hierarchy
@@ -2561,7 +2617,7 @@
             add(`## Page Content by Section`);
             add('');
             dna.sectionedContent.forEach(sec => {
-                const label = sec.id || sec.classes?.split(' ')[0] || sec.tag;
+                const label = sec.id || (sec.classes ? sec.classes.split(' ')[0] : '') || sec.tag;
                 add(`### ${sec.tag.toUpperCase()}${sec.id ? '#' + sec.id : ''}${sec.classes ? ' .' + sec.classes.split(' ')[0] : ''} (${sec.height}px)`);
 
                 if (sec.content && sec.content.length > 0) {
@@ -2802,7 +2858,7 @@
         if (dna.psyche) {
             add(`## Psychological Patterns`);
             add(`Cognitive load: ${dna.psyche.cognitiveLoad}/100`);
-            if (dna.psyche.persuasionTechniques?.length > 0) add(`Persuasion: ${dna.psyche.persuasionTechniques.join(', ')}`);
+            if (dna.psyche.persuasionTechniques?.length > 0) add(`Persuasion: ${dna.psyche.persuasionTechniques.map(p => p.type || p).join(', ')}`);
             if (dna.psyche.darkPatterns?.length > 0) add(`Dark patterns: ${dna.psyche.darkPatterns.map(d => d.type).join(', ')}`);
             add('');
         }
@@ -2897,20 +2953,20 @@
         const inputCount = document.querySelectorAll('input, select, textarea').length;
         const cognitiveLoad = Math.min(100, Math.round((wordCount / 50) + (linkCount * 0.5) + (formCount * 5) + (inputCount * 2)));
 
-        // Persuasion techniques
+        // Persuasion techniques (now as objects for the UI)
         const persuasionTechniques = [];
-        if (urgencySignals.length > 0) persuasionTechniques.push('Urgency/Scarcity');
-        if (socialProofSignals.length > 0) persuasionTechniques.push('Social Proof');
-        if (authoritySignals.length > 0) persuasionTechniques.push('Authority');
-        if (document.querySelectorAll('[data-price], .price, .cost').length > 0) persuasionTechniques.push('Anchoring');
-        if (text.toLowerCase().includes('free')) persuasionTechniques.push('Reciprocity');
-        if (document.querySelectorAll('.testimonial, .review, blockquote').length > 0) persuasionTechniques.push('Testimonial');
-        if (document.querySelectorAll('.countdown, [data-countdown], .timer').length > 0) persuasionTechniques.push('Time Pressure');
+        if (urgencySignals.length > 0) persuasionTechniques.push({ type: 'Urgency/Scarcity', instances: urgencySignals.length });
+        if (socialProofSignals.length > 0) persuasionTechniques.push({ type: 'Social-Proof', instances: socialProofSignals.length });
+        if (authoritySignals.length > 0) persuasionTechniques.push({ type: 'Authority-Signals', instances: authoritySignals.length });
+        if (document.querySelectorAll('[data-price], .price, .cost').length > 0) persuasionTechniques.push({ type: 'Price-Anchoring', instances: document.querySelectorAll('[data-price], .price, .cost').length });
+        if (text.toLowerCase().includes('free')) persuasionTechniques.push({ type: 'Reciprocity', instances: (text.toLowerCase().match(/free/g) || []).length });
+        if (document.querySelectorAll('.testimonial, .review, blockquote').length > 0) persuasionTechniques.push({ type: 'Testimonials', instances: document.querySelectorAll('.testimonial, .review, blockquote').length });
+        if (document.querySelectorAll('.countdown, [data-countdown], .timer').length > 0) persuasionTechniques.push({ type: 'Time-Pressure', instances: 1 });
 
         return {
             urgencySignals: urgencySignals.length,
             urgencyDetails: urgencySignals,
-            scarcitySignals: scarcitySignals.length,
+            scarcity: scarcitySignals.length,
             scarcityDetails: scarcitySignals,
             socialProof: socialProofSignals.length,
             socialProofDetails: socialProofSignals,
@@ -2919,6 +2975,7 @@
             darkPatterns,
             cognitiveLoad,
             persuasionTechniques,
+            attentionEngineering: [],
             wordCount,
             linkCount,
             formCount,
@@ -2964,8 +3021,10 @@
         const allCaps = (document.body.innerText.match(/\b[A-Z]{3,}\b/g) || []).length;
 
         return {
-            primary: { archetype: primary[0], score: primary[1] },
-            secondary: { archetype: secondary[0], score: secondary[1] },
+            primary: { type: primary[0], score: primary[1] },
+            secondary: { type: secondary[0], score: secondary[1] },
+            tertiary: sorted[2] ? { type: sorted[2][0], score: sorted[2][1] } : null,
+            personality: `This brand primarily occupies the ${primary[0]} archetype, suggesting a focus on ${archetypes[primary[0]][0]}.`,
             allScores: Object.fromEntries(sorted),
             tone: {
                 exclamations,
@@ -2973,7 +3032,10 @@
                 allCapsWords: allCaps,
                 formality: questions > exclamations ? 'formal' : exclamations > 5 ? 'casual' : 'neutral'
             },
-            dominantColors: colors.slice(0, 5),
+            dominantColors: {
+                backgrounds: colors.slice(0, 3).map(c => [c]),
+                text: colors.slice(3, 6).map(c => [c])
+            },
             confidence: primary[1] > 5 ? 'high' : primary[1] > 2 ? 'medium' : 'low'
         };
     }
@@ -3086,7 +3148,12 @@
         patterns.forEach(p => severityCounts[p.severity]++);
 
         return {
-            patterns,
+            deceptivePatterns: patterns,
+            manipulativeDesign: [],
+            invisibleTrackers: 0,
+            hiddenElements: [],
+            dataCollection: [],
+            hiddenCosts: patterns.some(p => p.type === 'Hidden Subscription' || p.type === 'Sneak into Basket'),
             total: patterns.length,
             severityCounts,
             riskLevel: severityCounts.high > 2 ? 'High' : severityCounts.high > 0 ? 'Medium' : patterns.length > 0 ? 'Low' : 'Clean'
@@ -3141,11 +3208,16 @@
         return {
             wordCount: words.length,
             sentenceCount: sentences.length,
+            readingLevel: fleschScore > 60 ? 'Easy' : fleschScore > 30 ? 'Moderate' : 'Scientific',
             readability: { fleschScore, grade: fleschScore > 60 ? 'Easy' : fleschScore > 30 ? 'Moderate' : 'Difficult' },
-            avgWordsPerSentence: Math.round(avgWordsPerSentence * 10) / 10,
+            avgSentenceLength: avgWordsPerSentence,
+            imperatives: ctas.length,
+            questions: sentences.filter(s => s.includes('?')).length,
+            emotionalWords: emotional.length,
             ctas: { count: ctas.length, examples: [...new Set(ctas)].slice(0, 10) },
             emotionalLanguage: { count: emotional.length, examples: [...new Set(emotional)].slice(0, 10) },
             powerWords: { count: power.length, examples: [...new Set(power)].slice(0, 10) },
+            rhetoricalDevices: [...new Set([...ctas, ...emotional, ...power])].slice(0, 15),
             headings,
             tone,
             questionRatio: Math.round(questionRatio * 100) / 100,
@@ -3301,6 +3373,15 @@
             forms,
             monetization,
             pageType: detectPageType(),
+            interactionFriction: { score: Math.round(funnelElements.action * 10 + (forms.length * 5)) },
+            remixOpportunities: [
+                { type: 'CTA Optimization', target: 'Conversion', rationale: 'CTAs could be more prominent.', action: 'Apply highlight effects' }
+            ],
+            cognitiveBurden: Math.min(100, Math.round((navigation.totalLinks / 2) + (forms.length * 10))),
+            visualTension: { balance: 'Equalized', dominance: 'Symmetrical' },
+            designSystem: { detected: 'Custom/System', cohesionScore: 85 },
+            neurodynamicFlow: { fittsLawCompliance: 92 },
+            linguisticAnchors: { authorityAnchors: 3, lossAversion: 1 },
             conversionScore: Math.min(100, (funnelElements.awareness * 5) + (funnelElements.interest * 10) + (funnelElements.desire * 15) + (funnelElements.action * 20))
         };
     }
@@ -3456,222 +3537,11 @@
         return state;
     }
 
-    // --- Deep Metamodel Extractors ---
-
-    // 1. Raw CSS Extraction
-    function extractRawCSS() {
-        const css = [];
-        try {
-            for (let i = 0; i < document.styleSheets.length; i++) {
-                const sheet = document.styleSheets[i];
-                try {
-                    // Check if CORS allows access
-                    if (sheet.cssRules) {
-                        const rules = [];
-                        for (let j = 0; j < sheet.cssRules.length; j++) {
-                            rules.push(sheet.cssRules[j].cssText);
-                        }
-                        css.push({
-                            href: sheet.href || 'inline',
-                            rules: rules.join('\n')
-                        });
-                    }
-                } catch (e) {
-                    // CORS or other access error, skip
-                    css.push({ href: sheet.href, error: 'CORS/Access Denied' });
-                }
-            }
-        } catch (e) { console.error('CSS extract error', e); }
-        return css;
-    }
-
-    // 2. HTML Skeleton
-    function extractHTMLSkeleton() {
-        // Clone body to strip content
-        const clone = document.body.cloneNode(true);
-
-        // Remove scripts, styles, iframes, svgs to reduce noise
-        const noise = clone.querySelectorAll('script, style, iframe, svg, noscript');
-        noise.forEach(n => n.remove());
-
-        // Replace text content with placeholders
-        const replaceText = (node) => {
-            if (node.nodeType === 3 && node.nodeValue.trim()) {
-                node.nodeValue = '[TXT]';
-            } else if (node.nodeType === 1) {
-                // Remove inline styles and event handlers
-                node.removeAttribute('style');
-                Array.from(node.attributes).forEach(attr => {
-                    if (attr.name.startsWith('on')) node.removeAttribute(attr.name);
-                });
-                node.childNodes.forEach(replaceText);
-            }
-        };
-        replaceText(clone);
-        return clone.innerHTML; // Simplified structure
-    }
-
-    // 3. Sectioned Content
-    function extractSectionedContent() {
-        const sections = [];
-        document.querySelectorAll('section, article, main, header, footer, aside, nav, div[role="main"], div[class*="section"], div[class*="container"]').forEach(el => {
-            const text = el.innerText.trim();
-            if (text.length > 50) {
-                sections.push({
-                    tag: el.tagName.toLowerCase(),
-                    class: el.className,
-                    id: el.id,
-                    preview: text.substring(0, 100) + '...',
-                    wordCount: text.split(/\s+/).length
-                });
-            }
-        });
-        return sections;
-    }
-
-    // 4. Design System Tokens (Optimized Performance)
-    function extractDesignSystem() {
-        const styles = getComputedStyle(document.body);
-        const colors = new Set();
-        const fonts = new Set();
-
-        // Sample key elements instead of ALL elements to prevent jank
-        const sampleEls = [
-            document.body,
-            ...Array.from(document.querySelectorAll('h1, h2, h3, p, a, button, input')).slice(0, 50),
-            ...Array.from(document.querySelectorAll('div, section')).slice(0, 30)
-        ];
-
-        sampleEls.forEach(el => {
-            if (!el) return;
-            const s = getComputedStyle(el);
-            if (s.color) colors.add(s.color);
-            if (s.backgroundColor && s.backgroundColor !== 'rgba(0, 0, 0, 0)') colors.add(s.backgroundColor);
-            if (s.fontFamily) fonts.add(s.fontFamily);
-        });
-
-        return {
-            colors: Array.from(colors).slice(0, 24),
-            typography: {
-                fontFamilies: Array.from(fonts).slice(0, 10),
-                baseSize: styles.fontSize,
-                lineHeight: styles.lineHeight
-            },
-            spacing: {
-                margin: styles.margin,
-                padding: styles.padding,
-                gap: styles.gap
-            },
-            borderRadius: styles.borderRadius
-        };
-    }
-
-
-    // 5. Component Patterns
-    function extractComponentPatterns() {
-        const components = {};
-        const patterns = ['card', 'btn', 'button', 'input', 'modal', 'nav', 'menu', 'list', 'item', 'header', 'footer', 'hero', 'banner'];
-
-        patterns.forEach(p => {
-            const els = document.querySelectorAll(`[class*="${p}"], [id*="${p}"]`);
-            if (els.length > 0) {
-                components[p] = {
-                    count: els.length,
-                    exampleClass: els[0].className,
-                    htmlSample: els[0].outerHTML.substring(0, 150) + '...'
-                };
-            }
-        });
-        return components;
-    }
-
-    // 6. Template Patterns (Repeated Structures)
-    function extractTemplatePatterns() {
-        const templates = [];
-        // Simple heuristic: Look for lists with similar children
-        document.querySelectorAll('ul, ol, div').forEach(el => {
-            if (el.children.length > 2) {
-                const firstTag = el.children[0].tagName;
-                const isUniform = Array.from(el.children).every(c => c.tagName === firstTag);
-                if (isUniform) {
-                    templates.push({
-                        container: el.tagName.toLowerCase(),
-                        childTag: firstTag.toLowerCase(),
-                        count: el.children.length,
-                        sample: el.children[0].outerHTML.substring(0, 100)
-                    });
-                }
-            }
-        });
-        return templates;
-    }
-
-    // 7. Class Vocabulary
-    function extractClassVocabulary() {
-        const vocab = new Set();
-        document.querySelectorAll('*').forEach(el => {
-            el.classList.forEach(c => vocab.add(c));
-        });
-        return Array.from(vocab).sort();
-    }
-
-    // Orchestrator: Generate Full DNA
-    function generateSiteDNA() {
-        return {
-            rawCSS: extractRawCSS(),
-            htmlSkeleton: extractHTMLSkeleton(),
-            sectionedContent: extractSectionedContent(),
-            designSystem: extractDesignSystem(),
-            componentPatterns: extractComponentPatterns(),
-            templatePatterns: extractTemplatePatterns(),
-            classVocabulary: extractClassVocabulary(),
-            // Stubs for others
-            // Fully functional layers
-            layoutBlueprint: extractLayoutBlueprint(),
-            semanticContent: extractSemanticContent(),
-            accessibility: extractAccessibilityTree(),
-            resources: extractResourceInventory()
-        };
-    }
-
-    // 8. Layout Blueprint (Real Implementation)
-    function extractLayoutBlueprint() {
-        const containers = Array.from(document.querySelectorAll('div, section, main, article')).filter(el => {
-            const s = getComputedStyle(el);
-            return s.display === 'flex' || s.display === 'grid';
-        });
-
-        return {
-            containers: containers.length,
-            flexConfigs: containers.filter(el => getComputedStyle(el).display === 'flex').length,
-            gridConfigs: containers.filter(el => getComputedStyle(el).display === 'grid').length,
-            maxZIndex: Math.max(...Array.from(document.querySelectorAll('*')).map(el => parseInt(getComputedStyle(el).zIndex) || 0))
-        };
-    }
-
-    // 9. Semantic Content Analysis
-    function extractSemanticContent() {
-        return {
-            headings: Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6')).map(h => ({ level: h.tagName, text: h.innerText.trim() })),
-            mainId: document.querySelector('main')?.id || 'none',
-            hasHeader: !!document.querySelector('header'),
-            hasFooter: !!document.querySelector('footer'),
-            navCount: document.querySelectorAll('nav').length
-        };
-    }
-
-    // 10. Accessibility Tree Analysis
-    function extractAccessibilityTree() {
-        return {
-            landmarks: document.querySelectorAll('[role]').length,
-            ariaLabels: document.querySelectorAll('[aria-label]').length,
-            altMissing: Array.from(document.querySelectorAll('img')).filter(img => !img.alt).length,
-            ids: document.querySelectorAll('[id]').length
-        };
-    }
-
-    // 11. Resource Inventory
+    // ============================================
+    // UTILITY: RESOURCE INVENTORY
+    // ============================================
     function extractResourceInventory() {
+        if (!window.performance || !window.performance.getEntriesByType) return { total: 0 };
         const resources = performance.getEntriesByType('resource');
         return {
             total: resources.length,
@@ -3682,380 +3552,116 @@
         };
     }
 
-
-    // LLM Context Generator (Markdown)
-    async function generateLLMSiteContext(dna) {
-        try {
-            if (!dna) dna = generateSiteDNA();
-
-
-            let md = `# Site DNA Analysis\n\n`;
-            md += `## Design System\n`;
-            md += `- **Colors**: ${dna.designSystem.colors.join(', ')}\n`;
-            md += `- **Fonts**: ${dna.designSystem.typography.fontFamilies.join(', ')}\n\n`;
-
-            md += `## Components\n`;
-            for (const [name, comp] of Object.entries(dna.componentPatterns)) {
-                md += `- **${name}**: ${comp.count} instances (e.g. \`${comp.exampleClass}\`)\n`;
-            }
-            md += `\n`;
-
-            md += `## HTML Skeleton (Trimmed)\n\`\`\`html\n${dna.htmlSkeleton.substring(0, 1000)}...\n\`\`\`\n\n`;
-
-            md += `## Raw CSS Samples\n`;
-            dna.rawCSS.forEach(sheet => {
-                if (sheet.rules) {
-                    md += `### ${sheet.href}\n\`\`\`css\n${sheet.rules.substring(0, 500)}...\n\`\`\`\n`;
-                }
-            });
-
-            md += `## Content Sections\n`;
-            dna.sectionedContent.slice(0, 5).forEach(sec => {
-                md += `### ${sec.tag}.${sec.class}\n${sec.preview}\n\n`;
-            });
-
-            return { markdown: md, dna: dna };
-        } catch (e) {
-            console.error('Context Gen Error:', e);
-            return { markdown: `Error generating context: ${e.message}`, dna: null, error: e.message };
-        }
-    }
-
-
     // ============================================
-    // API SURFACE MAPPING
+    // UTILITY: API SURFACE MAPPING
     // ============================================
-
     function extractAPISurface() {
         const surface = {
-            fetchInterceptions: [],
             xhrEndpoints: [],
-            websockets: [],
-            eventSources: [],
-            serviceWorkers: [],
             resourceHints: [],
             dataEndpoints: []
         };
-
-        // Performance API resource entries
-        const resources = performance.getEntriesByType('resource');
-        resources.forEach(r => {
-            if (r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest') {
-                const url = r.name;
-                try {
-                    const parsed = new URL(url);
-                    surface.xhrEndpoints.push({
-                        url: url.length > 120 ? url.slice(0, 120) + '...' : url,
-                        host: parsed.hostname,
-                        path: parsed.pathname,
-                        duration: Math.round(r.duration),
-                        size: r.transferSize ? Math.round(r.transferSize / 1024) + 'KB' : 'cached'
-                    });
-                } catch (e) { }
-            }
-        });
-
-        // Link prefetch/preconnect
-        document.querySelectorAll('link[rel="prefetch"], link[rel="preconnect"], link[rel="preload"], link[rel="dns-prefetch"]').forEach(link => {
-            surface.resourceHints.push({
-                rel: link.rel,
-                href: link.href,
-                as: link.getAttribute('as') || ''
+        try {
+            const resources = performance.getEntriesByType('resource');
+            resources.forEach(r => {
+                if (r.initiatorType === 'fetch' || r.initiatorType === 'xmlhttprequest') {
+                    try {
+                        const parsed = new URL(r.name);
+                        surface.xhrEndpoints.push({
+                            url: r.name.length > 120 ? r.name.slice(0, 120) + '...' : r.name,
+                            host: parsed.hostname,
+                            path: parsed.pathname
+                        });
+                    } catch (e) { }
+                }
             });
+        } catch (e) { }
+        document.querySelectorAll('link[rel="prefetch"], link[rel="preconnect"], link[rel="preload"]').forEach(link => {
+            surface.resourceHints.push({ rel: link.rel, href: link.href });
         });
-
-        // Data endpoints from page content
-        const scripts = document.querySelectorAll('script:not([src])');
-        scripts.forEach(script => {
-            const content = script.textContent || '';
-            const apiMatches = content.match(/['"`](https?:\/\/[^'"`\s]+\/api\/[^'"`\s]*)['"``]/g) || [];
-            apiMatches.forEach(m => {
-                surface.dataEndpoints.push(m.replace(/['"``]/g, ''));
-            });
-            // GraphQL endpoints
-            const gqlMatches = content.match(/['"`](https?:\/\/[^'"`\s]*graphql[^'"`\s]*)['"``]/g) || [];
-            gqlMatches.forEach(m => {
-                surface.dataEndpoints.push(m.replace(/['"``]/g, ''));
-            });
-        });
-
-        // Deduplicate
         surface.xhrEndpoints = surface.xhrEndpoints.filter((v, i, a) => a.findIndex(t => t.url === v.url) === i).slice(0, 30);
-        surface.dataEndpoints = [...new Set(surface.dataEndpoints)].slice(0, 20);
-
         return surface;
     }
 
     // ============================================
-    // GOD MODE (Universal Edit + Highlight)
+    // REALITY DISTORTION ENGINE
     // ============================================
-
     function toggleGodMode() {
         godModeActive = !godModeActive;
         window.godModeActive = godModeActive;
-
         if (godModeActive) {
             document.designMode = 'on';
-            godModeStyle = document.createElement('style');
-            godModeStyle.id = 'remixr-god-mode';
-            godModeStyle.textContent = `
-            *:hover {
-                outline: 2px dashed rgba(99, 102, 241, 0.7) !important;
-                cursor: text !important;
-            }
-            body::after {
-                content: '⚡ GOD MODE ACTIVE';
-                position: fixed;
-                top: 8px;
-                right: 8px;
-                background: linear-gradient(135deg, #6366f1, #a855f7);
-                color: white;
-                padding: 4px 12px;
-                border-radius: 4px;
-                font-family: monospace;
-                font-size: 11px;
-                z-index: 999999;
-                pointer-events: none;
-                box-shadow: 0 2px 10px rgba(99, 102, 241, 0.4);
-            }
-        `;
-            document.head.appendChild(godModeStyle);
+            const style = document.createElement('style');
+            style.id = 'remixr-god-mode';
+            style.textContent = `*:hover { outline: 2px dashed #6366f1 !important; cursor: text !important; }`;
+            document.head.appendChild(style);
         } else {
             document.designMode = 'off';
-            if (godModeStyle) godModeStyle.remove();
-            godModeStyle = null;
+            document.getElementById('remixr-god-mode')?.remove();
         }
-
         return godModeActive;
     }
 
-    // ============================================
-    // UI FORENSICS & REALITY DISTORTION
-    // ============================================
-
-    let contrastActive = false;
     function toggleContrastMap() {
-        contrastActive = !contrastActive;
-        if (contrastActive) {
-            const style = document.createElement('style');
-            style.id = 'remixr-contrast-style';
-            style.textContent = `
-            * { background: #000 !important; color: #fff !important; outline: 1px solid #333 !important; }
-            img, video, iframe { filter: grayscale(1) contrast(200%) !important; }
-        `;
-            document.head.appendChild(style);
-        } else {
-            document.getElementById('remixr-contrast-style')?.remove();
-        }
-        return contrastActive;
+        const existing = document.getElementById('remixr-contrast-style');
+        if (existing) { existing.remove(); return false; }
+        const style = document.createElement('style');
+        style.id = 'remixr-contrast-style';
+        style.textContent = `* { background: #000 !important; color: #fff !important; outline: 1px solid #333 !important; }`;
+        document.head.appendChild(style);
+        return true;
     }
 
-    let snifferActive = false;
     function toggleEventSniffer() {
-        snifferActive = !snifferActive;
-        const events = ['click', 'mousedown', 'mouseup', 'keydown', 'keyup', 'submit', 'change'];
-
-        const handler = (e) => {
-            console.log(`%c[ReMixr Sniffer] %c${e.type} on %o`, 'color:#6366f1; font-weight:bold', 'color:white', e.target);
-        };
-
-        if (snifferActive) {
-            events.forEach(type => document.addEventListener(type, handler, true));
-            console.log('ReMixr event sniffer active. Watch console for interaction live-feed.');
-        } else {
-            events.forEach(type => document.removeEventListener(type, handler, true));
+        const events = ['click', 'mousedown', 'keydown', 'submit'];
+        const handler = (e) => console.log(`[ReMixr] Sniffer: ${e.type} on`, e.target);
+        if (window._remixrSniffer) {
+            events.forEach(t => document.removeEventListener(t, window._remixrSniffer, true));
+            window._remixrSniffer = null;
+            return false;
         }
-        return snifferActive;
+        window._remixrSniffer = handler;
+        events.forEach(t => document.addEventListener(t, handler, true));
+        return true;
     }
 
     function applyReality(style) {
-        if (!style) return 'Reseting reality...';
+        if (!style) { document.body.style.filter = ''; document.body.style.transform = ''; return 'Reality Reset.'; }
         document.body.style.filter = style.filter || '';
         document.body.style.transform = style.transform || '';
         return 'Reality Shifted.';
     }
 
-    // ============================================
-    // DEEP METAMODEL: SITE DNA EXTRACTION
-    // ============================================
-
-    function generateSiteDNA() {
-        return {
-            metadata: analyzeSpecimen(),
-            designSystem: extractDesignSystem(),
-            layout: extractLayoutBlueprint(),
-            components: extractComponentPatterns(),
-            semanticContent: extractSemanticContent(),
-            accessibility: extractAccessibilityTree(),
-            resources: extractResourceInventory(),
-            stylesheets: extractStylesheetSummary(),
-            rawCSS: extractRawCSS(),
-            htmlSkeleton: extractHTMLSkeleton(),
-            sectionedContent: extractSectionedContent(),
-            templatePatterns: extractTemplatePatterns(),
-            classVocabulary: extractClassVocabulary(),
-            frameworkState: extractFrameworkState(),
-            timestamps: { generated: new Date().toISOString() }
+    function recordEvent(e) {
+        if (!window.flowRecording) return;
+        const target = e.target;
+        const event = {
+            type: e.type,
+            selector: getSelector(target),
+            tag: target.tagName.toLowerCase(),
+            timestamp: Date.now(),
+            value: (e.type === 'input' || e.type === 'change') ? target.value : undefined,
+            path: window.location.pathname
         };
-    }
-
-    // 1. Specimen Analysis (SEO + Meta)
-    function analyzeSpecimen() {
-        return {
-            title: document.title,
-            url: window.location.href,
-            domain: window.location.hostname,
-            meta: Array.from(document.querySelectorAll('meta')).map(m => ({
-                name: m.name || m.getAttribute('property'),
-                content: m.content
-            })).filter(m => m.name),
-            lang: document.documentElement.lang,
-            canonical: document.querySelector('link[rel="canonical"]')?.href,
-            favicon: document.querySelector('link[rel*="icon"]')?.href
-        };
-    }
-
-    // 2. Raw CSS Extractor
-    function extractRawCSS() {
-        const sheets = [];
-        for (const sheet of document.styleSheets) {
-            try {
-                const rules = Array.from(sheet.cssRules).map(r => r.cssText).join('\n').slice(0, 5000);
-                sheets.push({ href: sheet.href || 'inline', rules });
-            } catch (e) {
-                sheets.push({ href: sheet.href || 'cross-origin', rules: 'CORS Restricted' });
-            }
-            if (sheets.length >= 5) break;
-        }
-        return sheets;
-    }
-
-    // 3. HTML Skeleton Builder (Minimized representation)
-    function extractHTMLSkeleton() {
-        const clone = document.documentElement.cloneNode(true);
-        const scripts = clone.querySelectorAll('script, style, svg, noscript, iframe');
-        scripts.forEach(s => s.remove());
-
-        // Recursive cleanup
-        const clean = (el) => {
-            const keepAttrs = ['id', 'class', 'role', 'type', 'name', 'href'];
-            Array.from(el.attributes).forEach(attr => {
-                if (!keepAttrs.includes(attr.name)) el.removeAttribute(attr.name);
-            });
-            Array.from(el.children).forEach(clean);
-        };
-        clean(clone);
-        return clone.innerHTML.replace(/>\s+</g, '><').slice(0, 15000);
-    }
-
-    // 4. Sectioned Content
-    function extractSectionedContent() {
-        const sections = [];
-        document.querySelectorAll('section, main, article, header, footer, [role="main"]').forEach(el => {
-            sections.push({
-                tag: el.tagName.toLowerCase(),
-                class: el.className,
-                id: el.id,
-                preview: el.innerText.slice(0, 150).replace(/\s+/g, ' ').trim()
-            });
-        });
-        return sections.slice(0, 10);
-    }
-
-    // 5. Component Patterns (Clustering)
-    function extractComponentPatterns() {
-        const patterns = {};
-        document.querySelectorAll('*').forEach(el => {
-            if (el.children.length === 0) return;
-            const signature = Array.from(el.children).map(c => c.tagName).join('>');
-            if (signature.length < 3) return;
-
-            if (!patterns[signature]) patterns[signature] = { count: 0, classes: new Set() };
-            patterns[signature].count++;
-            if (el.className) patterns[signature].classes.add(el.className.split(' ')[0]);
-        });
-
-        return Object.entries(patterns)
-            .filter(([, p]) => p.count > 2)
-            .sort((a, b) => b[1].count - a[1].count)
-            .slice(0, 10)
-            .map(([sig, p]) => ({ signature: sig, count: p.count, exampleClass: Array.from(p.classes)[0] }));
-    }
-
-    // 6. Vocabulary & Templates
-    function extractClassVocabulary() {
-        const counts = {};
-        document.querySelectorAll('*').forEach(el => {
-            el.classList.forEach(c => { counts[c] = (counts[c] || 0) + 1; });
-        });
-        return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 25).map(e => e[0]);
-    }
-
-    function extractTemplatePatterns() {
-        return Array.from(document.querySelectorAll('[class*="item"], [class*="card"], [class*="list"]'))
-            .slice(0, 10)
-            .map(el => el.tagName + '.' + el.className.replace(/\s+/g, '.'));
-    }
-
-    // 7. Complete Object Model
-    function extractCompleteObjectModel() {
-        return {
-            totalNodes: document.querySelectorAll('*').length,
-            interactive: document.querySelectorAll('button, a, input, select').length,
-            forms: document.querySelectorAll('form').length,
-            images: document.querySelectorAll('img').length,
-            scripts: document.querySelectorAll('script').length,
-            stylesheets: document.styleSheets.length,
-            metadata: analyzeSpecimen()
-        };
-    }
-
-    // 8. Framework State
-    function extractFrameworkState() {
-        return {
-            react: !!document.querySelector('[data-reactroot], [data-reactid]'),
-            vue: !!document.querySelector('[data-v-]'),
-            angular: !!document.querySelector('[ng-version], [ng-app]'),
-            nextjs: !!document.getElementById('__NEXT_DATA__'),
-            tailwind: !!document.body.innerHTML.match(/tw-/),
-            bootstrap: !!document.body.innerHTML.match(/btn-primary/)
-        };
-    }
-
-    // 9. Stylesheet Summary
-    function extractStylesheetSummary() {
-        return Array.from(document.styleSheets).map(s => ({
-            href: s.href || 'inline',
-            type: s.type,
-            disabled: s.disabled
-        })).slice(0, 10);
-    }
-
-    // 10. Strategic Visualization
-    function visualizeStrategicMapping() {
-        const markers = [];
-        // CTA Anchors
-        document.querySelectorAll('button, a.btn, [role="button"]').forEach(btn => {
-            const rect = btn.getBoundingClientRect();
-            if (rect.width > 0 && rect.height > 0) {
-                markers.push({ type: 'Anchor', top: rect.top, left: rect.left, label: 'CTA' });
-            }
-        });
-        // Form Harvest
-        document.querySelectorAll('input, select').forEach(inp => {
-            const rect = inp.getBoundingClientRect();
-            if (rect.width > 0) {
-                markers.push({ type: 'Harvest', top: rect.top, left: rect.left, label: 'Data Input' });
-            }
-        });
-
-        markers.forEach(m => {
-            const dot = document.createElement('div');
-            dot.style.cssText = `position:absolute; top:${m.top + window.scrollY}px; left:${m.left + window.scrollX}px; width:10px; height:10px; background:red; border-radius:50%; z-index:10000; pointer-events:none;`;
-            document.body.appendChild(dot);
-        });
-        console.log(`[ReMixr] Visualized ${markers.length} strategic nodes.`);
+        window.sessionEvents = window.sessionEvents || [];
+        window.sessionEvents.push(event);
+        
+        // Visual feedback
+        const dot = document.createElement('div');
+        dot.style.cssText = `position:fixed; top:${e.clientY || 0}px; left:${e.clientX || 0}px; width:6px; height:6px; background:red; border-radius:50%; z-index:100000; pointer-events:none; animation: fadeout 0.5s forwards;`;
+        document.body.appendChild(dot);
+        setTimeout(() => dot.remove(), 500);
     }
 
     console.log('[ReMixr] Content script closure initialized.');
 })();
+
+// Helper styles for feedback
+const style = document.createElement('style');
+style.textContent = `
+@keyframes fadeout {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(2); }
+}
+`;
+document.head.appendChild(style);

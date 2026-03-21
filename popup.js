@@ -17,15 +17,11 @@
 // ReMixr Extension Builder - Main Logic
 
 // State Management
-// Link to ProjectManager for persistence
 let projects = [];
 let currentProject = null;
 let currentFile = 'manifest.json';
 let cmEditor = null;
-
-// Convenience aliases (can be removed later)
-const getProjects = () => ProjectManager.projects;
-const getCurrentProject = () => ProjectManager.currentProject;
+let _previewTimeout = null; // Module-scoped to avoid 'this' anti-pattern in arrow fns
 
 // Extension Templates
 // TEMPLATES moved to lib/templates.js
@@ -347,8 +343,8 @@ async function toggleTheme() {
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-  // Enable keyboard shortcuts
-  document.addEventListener('keydown', handleKeyboardShortcuts);
+  // Note: keydown/handleKeyboardShortcuts is registered in setupEventListeners() below.
+  // Do NOT add it here as well — that would cause every shortcut to fire twice.
 
   // Init CodeMirror
   const textarea = document.getElementById('code-editor');
@@ -365,9 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
     cmEditor.on('change', () => {
       if (currentProject && currentFile) {
         currentProject.files[currentFile] = cmEditor.getValue();
-        // Debounce preview update
-        if (this.previewTimeout) clearTimeout(this.previewTimeout);
-        this.previewTimeout = setTimeout(() => updatePreview(), 500);
+        // Debounce preview update using module-scoped variable (not 'this')
+        if (_previewTimeout) clearTimeout(_previewTimeout);
+        _previewTimeout = setTimeout(() => updatePreview(), 500);
       }
     });
   }
@@ -518,7 +514,7 @@ function updateFileTree() {
  * Handles tab switching, button clicks, and user interactions.
  */
 function setupEventListeners() {
-  // Keyboard shortcuts
+  // Keyboard shortcuts — single canonical registration (NOT added in DOMContentLoaded)
   document.addEventListener('keydown', handleKeyboardShortcuts);
 
   // Tab switching
@@ -620,6 +616,11 @@ function setupEventListeners() {
   // Analysis Triggers (Unified)
   document.getElementById('scan-strategy')?.addEventListener('click', () => runAnalysis('strategy'));
   document.getElementById('scan-psyche')?.addEventListener('click', () => runAnalysis('psyche'));
+  document.getElementById('scan-rhetoric')?.addEventListener('click', () => runAnalysis('rhetoric'));
+  document.getElementById('scan-archetype')?.addEventListener('click', () => runAnalysis('archetype'));
+  document.getElementById('scan-soul')?.addEventListener('click', () => runAnalysis('soul'));
+  document.getElementById('scan-shadow')?.addEventListener('click', () => runAnalysis('shadow'));
+  document.getElementById('scan-emotion')?.addEventListener('click', () => runAnalysis('emotion'));
   document.getElementById('run-omniscience-btn')?.addEventListener('click', handleOmniscienceExtraction);
 
 
@@ -644,9 +645,7 @@ function setupEventListeners() {
     }
   });
 
-  // MacGyver Tools
-  document.getElementById('tool-edit')?.addEventListener('click', () => runMacGyver('toggleEditMode'));
-  document.getElementById('tool-zap')?.addEventListener('click', () => runMacGyver('zapElement'));
+  // MacGyver Tools removed from here as they are wired up below via toggleTool or runMacGyver
   // Helper to toggle button state and send message
   const toggleTool = async (btnId, action, successMsg, failMsg) => {
     const btn = document.getElementById(btnId);
@@ -664,7 +663,7 @@ function setupEventListeners() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       try {
-        await ensureContentScript(tab.id);
+        await ensureContentScriptReady(tab.id);
         chrome.tabs.sendMessage(tab.id, { action: action }, response => {
           if (chrome.runtime.lastError) {
             showStatus('Error: Refresh page to use tools', 'error');
@@ -715,6 +714,79 @@ function setupEventListeners() {
   document.getElementById('tool-enable')?.addEventListener('click', () => toggleTool('tool-enable', 'enableInputs', 'Inputs Enabled', null));
   document.getElementById('tool-unmask')?.addEventListener('click', () => toggleTool('tool-unmask', 'showPasswords', 'Passwords Unmasked', null));
   document.getElementById('tool-kill-sticky')?.addEventListener('click', () => toggleTool('tool-kill-sticky', 'killStickies', 'Sticky Elements Removed', null));
+  document.getElementById('tool-record')?.addEventListener('click', toggleRecording);
+  
+  let recordingActive = false;
+  async function toggleRecording() {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab) return;
+    
+    const btn = document.getElementById('tool-record');
+    if (!recordingActive) {
+      await sendMessageWithTimeout(tab.id, { action: 'startSessionRecording' });
+      recordingActive = true;
+      btn.classList.add('active');
+      btn.innerHTML = '<span class="icon">⏹️</span> <span class="tool-btn-label">Stop Rec</span>';
+      showStatus('Recording User Flow... Interaction recorded with red dots.', 'info');
+    } else {
+      const response = await sendMessageWithTimeout(tab.id, { action: 'stopSessionRecording' });
+      recordingActive = false;
+      btn.classList.remove('active');
+      btn.innerHTML = '<span class="icon">🔴</span> <span class="tool-btn-label">Record Flow</span>';
+      
+      if (response && response.events) {
+        handleRecordedFlow(response.events);
+      }
+    }
+  }
+
+  function handleRecordedFlow(events) {
+    if (!events || events.length === 0) {
+      showStatus('No interactions recorded.', 'warning');
+      return;
+    }
+    
+    showStatus(`Captured ${events.length} interactions. Generating Automation...`, 'success');
+    
+    // Generate Automation Code
+    let automationCode = '// --- AUTO-GENERATED FLOW AUTOMATION ---\n';
+    automationCode += 'async function runRecordedFlow() {\n';
+    automationCode += '  const steps = ' + JSON.stringify(events, null, 2) + ';\n\n';
+    automationCode += '  for (const step of steps) {\n';
+    automationCode += '    console.log(\`[ReMixr] Replaying step: \${step.type} on \${step.selector}\`);\n';
+    automationCode += '    const el = document.querySelector(step.selector);\n';
+    automationCode += '    if (!el) { console.warn(\`Element not found: \${step.selector}\`); continue; }\n\n';
+    automationCode += '    if (step.type === "click") { el.click(); }\n';
+    automationCode += '    else if (step.type === "input") { el.value = step.value; el.dispatchEvent(new Event("input", {bubbles:true})); el.dispatchEvent(new Event("change", {bubbles:true})); }\n\n';
+    automationCode += '    await new Promise(r => setTimeout(r, 1000)); // Delay between steps\n';
+    automationCode += '  }\n';
+    automationCode += '}\n\n';
+    automationCode += '// Auto-run or add a button?\n';
+    automationCode += 'setTimeout(runRecordedFlow, 2000);\n';
+
+    // Create Project
+    const template = TEMPLATES['content-modifier'];
+    currentProject = {
+        name: `Flow: ${new Date().toLocaleTimeString()}`,
+        files: {},
+        created: Date.now(),
+        modified: Date.now()
+    };
+
+    for (const [filename, content] of Object.entries(template.files)) {
+        currentProject.files[filename] = typeof content === 'object' ? JSON.stringify(content, null, 2) : content;
+    }
+    
+    currentProject.files['content.js'] = automationCode;
+    
+    switchTab('code');
+    document.getElementById('project-name').value = currentProject.name;
+    currentFile = 'content.js';
+    updateFileTree();
+    loadFileIntoEditor('content.js');
+    saveCurrentProject();
+  }
+
   // --- Unified Extraction Handlers ---
 
   async function handleOmniscienceExtraction() {
@@ -725,7 +797,11 @@ function setupEventListeners() {
       const ready = await ensureContentScriptReady(tab.id);
       if (!ready) throw new Error("Content script injection failed");
       const response = await sendMessageWithTimeout(tab.id, { action: 'analyzeOmniscience' }, 30000);
-      displayExtractionResults(response);
+      displayOmniscienceResults(response);
+      
+      // Store as DNA for template hydration
+      window.LAST_SITE_DNA = response;
+      
       showStatus('Omniscient Blueprint ready!', 'success');
     } catch (error) {
       console.error('[ReMixr] Omniscience extraction failed:', error);
@@ -750,7 +826,11 @@ function setupEventListeners() {
       if (response && response.markdown) {
         displayMetamodel(response.markdown);
         showStatus('Metamodel ready!', 'success');
-        window.LAST_SITE_DNA = response.markdown;
+        
+        // Store DNA object for template hydration
+        if (response.dna) {
+           window.LAST_SITE_DNA = response.dna;
+        }
       } else { throw new Error(response?.error || 'Empty response'); }
     } catch (error) {
       console.error('[ReMixr] Context extraction failed:', error);
@@ -776,7 +856,7 @@ function setupEventListeners() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab) {
       try {
-        await ensureContentScript(tab.id);
+        await ensureContentScriptReady(tab.id);
         chrome.tabs.sendMessage(tab.id, { action: 'applyReality', style }, response => {
           if (response?.style) showStatus(response.style, 'success');
         });
@@ -1032,12 +1112,17 @@ function loadTemplate(templateName) {
     }
   }
 
+  // Hydrate project with Site DNA if available (Ambient Intelligence)
+  if (window.LAST_SITE_DNA && typeof HydrationEngine !== 'undefined') {
+    currentProject = HydrationEngine.hydrate(currentProject, window.LAST_SITE_DNA);
+  }
+
   switchTab('code');
   document.getElementById('project-name').value = currentProject.name;
   currentFile = 'manifest.json';
   updateFileTree();
   loadFileIntoEditor('manifest.json');
-  showStatus(`Template "${template.name}" loaded`, 'success');
+  showStatus(`Template "${template.name}" loaded${window.LAST_SITE_DNA ? ' (Hydrated with Site DNA)' : ''}`, 'success');
 }
 
 // Load file into editor
@@ -1069,7 +1154,6 @@ function loadFileIntoEditor(filename) {
 
 // SHINY LOGIC
 let shinyProject = null;
-let shinyHistory = [];
 
 function initShinyTab() {
   if (!shinyProject) {
@@ -2174,14 +2258,10 @@ async function toggleInspector(active) {
 // Ensure content script is running before messaging
 /**
  * Unified bridge to the content script.
+ * Delegates directly to core-utils.js ensureContentScriptReady.
  */
-async function ensureContentScript(tabId) {
-  try {
-    return await ensureContentScriptReady(tabId);
-  } catch (err) {
-    error('Setup/Injection failed:', err);
-    throw err;
-  }
+function ensureContentScript(tabId) {
+  return ensureContentScriptReady(tabId);
 }
 
 
@@ -2195,6 +2275,7 @@ async function runAnalysis(type) {
     'assets': 'analyzeAssets',
     'fonts': 'analyzeFonts',
     'storage': 'analyzeStorage',
+    'workers': 'analyzeWorkers',
     'perf': 'analyzePerf',
     'stack': 'analyzeStack',
     'visualize': 'analyzeDomTree',
@@ -2236,41 +2317,7 @@ async function runAnalysis(type) {
     showStatus(err.message, 'error');
   }
 }
-// Display Analysis Results
-function displayAnalysisResults(type, data) {
-  if (!data) return;
-
-  const container = document.getElementById('analysis-results');
-  const content = document.getElementById('result-content');
-  const d3Container = document.getElementById('d3-container');
-  const title = document.getElementById('result-title');
-
-  container.style.display = 'flex';
-  title.innerText = `${type.toUpperCase()} Analysis`;
-  content.style.display = 'block';
-  if (d3Container) d3Container.style.display = 'none';
-
-  // Specific renderers based on type
-  if (type === 'visualize') {
-    if (d3Container) {
-      d3Container.style.display = 'block';
-      content.style.display = 'none';
-      renderD3Hierarchy(data);
-    }
-    return;
-  }
-
-  if (type === 'sequence') {
-    renderSequenceDiagram(data);
-    return;
-  }
-
-  // General JSON/Summary display for others
-  content.innerHTML = `<pre style="font-size: 11px; white-space: pre-wrap; background: var(--bg-tertiary); padding: 12px; border-radius: 6px;">${JSON.stringify(data, null, 2)}</pre>`;
-}
-
-// ============================================
-// SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
+//SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
 // ============================================
 
 /**
@@ -2877,7 +2924,7 @@ function displayMetamodel(markdown) {
 }
 
 // Display Omniscient Blueprint Results
-function displayExtractionResults(data) {
+function displayOmniscienceResults(data) {
   const container = document.getElementById('analysis-results');
   const content = document.getElementById('result-content');
   const title = document.getElementById('result-title');
@@ -2911,14 +2958,18 @@ function displayExtractionResults(data) {
 
       <div class="dive-section" style="margin-top:20px">
         <h5 style="color:var(--accent-color)">Remix Opportunities</h5>
-        <ul>
-          ${(data.strategy?.remixOpportunities || []).map(opp => `
-            <li style="margin-bottom:10px">
-              <strong>${opp.type}</strong>: ${opp.action}
+        <div id="remix-opportunities-list">
+          ${(data.strategy?.remixOpportunities || []).map((opp, idx) => `
+            <div class="remix-card" style="margin-bottom:12px; border: 1px solid rgba(255,255,255,0.1); padding:10px; border-radius:8px; background:rgba(255,255,255,0.02)">
+              <div style="display:flex; justify-content:space-between; align-items:start;">
+                <strong>${opp.type}</strong>
+                <button class="btn btn-primary btn-mini build-remix-btn" data-index="${idx}">Build Remix</button>
+              </div>
+              <div style="font-size:11px; margin: 4px 0;">${opp.action}</div>
               <div style="font-size:10px; color:var(--text-dim)">${opp.rationale}</div>
-            </li>
-          `).join('') || '<li>None detected.</li>'}
-        </ul>
+            </div>
+          `).join('') || '<div>None detected.</div>'}
+        </div>
       </div>
 
       <div class="dive-section" style="margin-top:20px">
@@ -2933,6 +2984,67 @@ function displayExtractionResults(data) {
   document.getElementById('download-blueprint')?.addEventListener('click', () => {
     downloadAsFile(JSON.stringify(data, null, 2), 'blueprint.json', 'application/json');
   });
+
+  // Handle Remix Buttons
+  document.querySelectorAll('.build-remix-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.index);
+      const opportunity = data.strategy.remixOpportunities[idx];
+      handleBuildRemix(opportunity);
+    });
+  });
+}
+
+/**
+ * Creates a new project based on a Remix Opportunity.
+ * Injects the remix code into the target template.
+ */
+function handleBuildRemix(opportunity) {
+    if (!opportunity || !opportunity.code) {
+        showStatus('Invalid remix opportunity', 'error');
+        return;
+    }
+
+    showStatus(`Building ${opportunity.type} Remix...`, 'info');
+    
+    // 1. Start with a Content Modifier template (most common for remixes)
+    const template = TEMPLATES['content-modifier'];
+    if (!template) return;
+
+    currentProject = {
+        name: `Remix: ${opportunity.type}`,
+        files: {},
+        created: Date.now(),
+        modified: Date.now()
+    };
+
+    // 2. Clone template files
+    for (const [filename, content] of Object.entries(template.files)) {
+        currentProject.files[filename] = typeof content === 'object' ? JSON.stringify(content, null, 2) : content;
+    }
+
+    // 3. Hydrate with Site DNA if available
+    if (window.LAST_SITE_DNA && typeof HydrationEngine !== 'undefined') {
+        currentProject = HydrationEngine.hydrate(currentProject, window.LAST_SITE_DNA);
+    }
+
+    // 4. Inject the Remix code into content.js
+    let contentJs = currentProject.files['content.js'] || '';
+    const remixInjection = `
+// --- AUTOMATED REMIX ENGINE: ${opportunity.type} ---
+${opportunity.code}
+// --------------------------------------------------
+`;
+    currentProject.files['content.js'] = remixInjection + contentJs;
+
+    // 5. Switch to builder and load project
+    switchTab('code');
+    document.getElementById('project-name').value = currentProject.name;
+    currentFile = 'content.js';
+    updateFileTree();
+    loadFileIntoEditor('content.js');
+    saveCurrentProject();
+    showStatus(`Remix Complete! Project "${currentProject.name}" saved and ready.`, 'success');
 }
 
 
@@ -2984,27 +3096,27 @@ function displayAnalysisResults(type, data) {
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value">${data.totalElements}</span>
+          <span class="stat-value">${data.totalElements || 0}</span>
           <span class="stat-label">Total Nodes</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.maxDepth}</span>
+          <span class="stat-value">${data.maxDepth || 0}</span>
           <span class="stat-label">Max Depth</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.topTags.length}</span>
+          <span class="stat-value">${data.topTags?.length || 0}</span>
           <span class="stat-label">Tag Types</span>
         </div>
       </div>
       <div class="chart-container">
         <div class="bar-chart">
-          ${data.topTags.slice(0, 10).map(([tag, count]) => {
-      const pct = (count / data.totalElements * 100).toFixed(1);
+          ${(data.topTags || []).slice(0, 10).map(([tag, count]) => {
+      const pct = (count / (data.totalElements || 1) * 100).toFixed(1);
       return `
               <div class="bar-chart-item">
-                <div class="bar-chart-label">&lt;${tag}&gt;</div>
+                <div class="bar-chart-label">&lt;${tag || 'unknown'}&gt;</div>
                 <div class="bar-chart-bar">
-                  <div class="bar-chart-fill" style="width: ${pct}%">${count}</div>
+                  <div class="bar-chart-fill" style="width: ${pct}%">${count || 0}</div>
                 </div>
               </div>
             `;
@@ -3021,11 +3133,11 @@ function displayAnalysisResults(type, data) {
             </tr>
           </thead>
           <tbody>
-            ${data.topTags.map(([tag, count]) => `
+            ${(data.topTags || []).map(([tag, count]) => `
               <tr>
-                <td>&lt;${tag}&gt;</td>
-                <td>${count}</td>
-                <td>${(count / data.totalElements * 100).toFixed(2)}%</td>
+                <td>&lt;${tag || 'unknown'}&gt;</td>
+                <td>${count || 0}</td>
+                <td>${((count || 0) / (data.totalElements || 1) * 100).toFixed(2)}%</td>
               </tr>
             `).join('')}
           </tbody>
@@ -3034,7 +3146,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('struct',
-      `<strong>${data.totalElements}</strong> Nodes · <strong>${data.maxDepth}</strong> Depth · <strong>${data.topTags.length}</strong> Types`,
+      `<strong>${data.totalElements || 0}</strong> Nodes · <strong>${data.maxDepth || 0}</strong> Depth · <strong>${data.topTags?.length || 0}</strong> Types`,
       detailHtml,
       { title: 'DOM Structure Analysis', search: true, export: true }
     );
@@ -3042,17 +3154,17 @@ function displayAnalysisResults(type, data) {
     const detailHtml = `
       <div class="dive-section">
         <div class="palette-group">
-          <strong>Text Colors (${data.text.length})</strong>
+          <strong>Text Colors (${data.text?.length || 0})</strong>
           <div class="swatches">
-            ${data.text.map(c => `<div class="swatch" style="background:${c}" title="${c}" data-color="${c}"></div>`).join('')}
+            ${(data.text || []).map(c => `<div class="swatch" style="background:${c}" title="${c}" data-color="${c}"></div>`).join('')}
           </div>
         </div>
       </div>
       <div class="dive-section">
         <div class="palette-group">
-          <strong>Background Colors (${data.backgrounds.length})</strong>
+          <strong>Background Colors (${data.backgrounds?.length || 0})</strong>
           <div class="swatches">
-            ${data.backgrounds.map(c => `<div class="swatch" style="background:${c}" title="${c}" data-color="${c}"></div>`).join('')}
+            ${(data.backgrounds || []).map(c => `<div class="swatch" style="background:${c}" title="${c}" data-color="${c}"></div>`).join('')}
           </div>
         </div>
       </div>
@@ -3062,15 +3174,15 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="stats-grid">
           <div class="stat-card">
-            <span class="stat-value">${data.text.length + data.backgrounds.length}</span>
+            <span class="stat-value">${(data.text?.length || 0) + (data.backgrounds?.length || 0)}</span>
             <span class="stat-label">Total Colors</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">${data.text.length}</span>
+            <span class="stat-value">${data.text?.length || 0}</span>
             <span class="stat-label">Text</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">${data.backgrounds.length}</span>
+            <span class="stat-value">${data.backgrounds?.length || 0}</span>
             <span class="stat-label">Backgrounds</span>
           </div>
         </div>
@@ -3078,7 +3190,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('palette-dive',
-      `<strong>${data.text.length}</strong> Text · <strong>${data.backgrounds.length}</strong> Background · <strong>${data.text.length + data.backgrounds.length}</strong> Total`,
+      `<strong>${data.text?.length || 0}</strong> Text · <strong>${data.backgrounds?.length || 0}</strong> Background · <strong>${(data.text?.length || 0) + (data.backgrounds?.length || 0)}</strong> Total`,
       detailHtml,
       { title: 'Color Palette', search: false, export: true }
     );
@@ -3086,15 +3198,15 @@ function displayAnalysisResults(type, data) {
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value">${data.imageCount}</span>
+          <span class="stat-value">${data.imageCount || 0}</span>
           <span class="stat-label">Images</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.svgs}</span>
+          <span class="stat-value">${data.svgs || 0}</span>
           <span class="stat-label">SVG</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.cssCount}</span>
+          <span class="stat-value">${data.cssCount || 0}</span>
           <span class="stat-label">Stylesheets</span>
         </div>
         <div class="stat-card">
@@ -3116,11 +3228,11 @@ function displayAnalysisResults(type, data) {
               </tr>
             </thead>
             <tbody>
-              ${data.images.slice(0, 50).map(img => `
+              ${(data.images || []).slice(0, 50).map(img => `
                 <tr>
                   <td><span class="metric-badge"><span class="icon">🖼️</span> IMG</span></td>
-                  <td style="font-size:10px; font-family: var(--mono-font);">${img.src.split('/').pop().slice(0, 40)}</td>
-                  <td><span class="metric-badge">${img.width}×${img.height}</span></td>
+                  <td style="font-size:10px; font-family: var(--mono-font);">${img.src?.split('/').pop().slice(0, 40) || 'unknown'}</td>
+                  <td><span class="metric-badge">${img.width || 0}×${img.height || 0}</span></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -3130,27 +3242,30 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('assets-overview',
-      `<strong>${data.imageCount + data.svgs}</strong> Images · <strong>${data.cssCount}</strong> CSS · <strong>${data.jsCount || 0}</strong> JS`,
+      `<strong>${(data.imageCount || 0) + (data.svgs || 0)}</strong> Images · <strong>${data.cssCount || 0}</strong> CSS · <strong>${data.jsCount || 0}</strong> JS`,
       detailHtml,
       { title: 'Asset Analysis', search: true, export: true }
     );
   } else if (type === 'storage') {
+    const lsItems = data?.lsItems || [];
+    const ssItems = data?.ssItems || [];
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value">${data.lsSize} KB</span>
-          <span class="stat-label">LocalStorage</span>
+          <span class="stat-value">${data?.lsSize || 0} KB</span>
+          <span class="stat-label">Local Size</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.cookies}</span>
+          <span class="stat-value">${data?.cookies || 0}</span>
           <span class="stat-label">Cookies</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.lsItems.length}</span>
+          <span class="stat-value">${lsItems.length}</span>
           <span class="stat-label">LS Items</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.ssItems.length}</span>
+          <span class="stat-value">${ssItems.length}</span>
           <span class="stat-label">SS Items</span>
         </div>
       </div>
@@ -3167,10 +3282,10 @@ function displayAnalysisResults(type, data) {
               </tr>
             </thead>
             <tbody>
-              ${data.lsItems.length > 0 ? data.lsItems.map(i => `
+              ${lsItems.length > 0 ? lsItems.map(i => `
                 <tr>
-                  <td>${i.k}</td>
-                  <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${i.v}</td>
+                  <td>${i?.k || ''}</td>
+                  <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${i?.v || ''}</td>
                 </tr>
               `).join('') : '<tr><td colspan="2" style="text-align: center; opacity: 0.5;">Empty</td></tr>'}
             </tbody>
@@ -3190,10 +3305,10 @@ function displayAnalysisResults(type, data) {
               </tr>
             </thead>
             <tbody>
-              ${data.ssItems.length > 0 ? data.ssItems.map(i => `
+              ${ssItems.length > 0 ? ssItems.map(i => `
                 <tr>
-                  <td>${i.k}</td>
-                  <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${i.v}</td>
+                  <td>${i?.k || ''}</td>
+                  <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">${i?.v || ''}</td>
                 </tr>
               `).join('') : '<tr><td colspan="2" style="text-align: center; opacity: 0.5;">Empty</td></tr>'}
             </tbody>
@@ -3203,7 +3318,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('storage-dive',
-      `<span>LS: <strong>${data.lsSize} KB</strong></span> · <span>Cookies: <strong>${data.cookies}</strong></span> · <span>Items: <strong>${data.lsItems.length + data.ssItems.length}</strong></span>`,
+      `<span>LS: <strong>${data?.lsSize || 0} KB</strong></span> · <span>Cookies: <strong>${data?.cookies || 0}</strong></span> · <span>Items: <strong>${lsItems.length + ssItems.length}</strong></span>`,
       detailHtml,
       { title: 'Storage Analysis', search: true, export: true }
     );
@@ -3214,30 +3329,34 @@ function displayAnalysisResults(type, data) {
       return 'severity-high';
     };
 
+    const loadTime = data?.loadTime || 0;
+    const domReady = data?.domReady || 0;
+    const resources = data?.resources || {};
+
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value ${getLoadTimeColor(data.loadTime)}">${data.loadTime}ms</span>
+          <span class="stat-value ${getLoadTimeColor(loadTime)}">${loadTime}ms</span>
           <span class="stat-label">Load Time</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.domReady}ms</span>
+          <span class="stat-value">${domReady}ms</span>
           <span class="stat-label">DOM Ready</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.resources.js}</span>
+          <span class="stat-value">${resources.js || 0}</span>
           <span class="stat-label">JS Files</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.resources.img}</span>
+          <span class="stat-value">${resources.img || 0}</span>
           <span class="stat-label">Images</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.resources.xhr}</span>
+          <span class="stat-value">${resources.xhr || 0}</span>
           <span class="stat-label">XHR</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.resources.css || 0}</span>
+          <span class="stat-value">${resources.css || 0}</span>
           <span class="stat-label">CSS</span>
         </div>
       </div>
@@ -3250,25 +3369,25 @@ function displayAnalysisResults(type, data) {
             <div class="bar-chart-item">
               <div class="bar-chart-label">DNS</div>
               <div class="bar-chart-bar">
-                <div class="bar-chart-fill" style="width: ${Math.min((data.dns || 100) / 10, 100)}%">${data.dns || 'N/A'}</div>
+                <div class="bar-chart-fill" style="width: ${Math.min((data?.dns || 100) / 10, 100)}%">${data?.dns || 'N/A'}</div>
               </div>
             </div>
             <div class="bar-chart-item">
               <div class="bar-chart-label">Connect</div>
               <div class="bar-chart-bar">
-                <div class="bar-chart-fill" style="width: ${Math.min((data.connect || 200) / 10, 100)}%">${data.connect || 'N/A'}</div>
+                <div class="bar-chart-fill" style="width: ${Math.min((data?.connect || 200) / 10, 100)}%">${data?.connect || 'N/A'}</div>
               </div>
             </div>
             <div class="bar-chart-item">
               <div class="bar-chart-label">DOM Ready</div>
               <div class="bar-chart-bar">
-                <div class="bar-chart-fill" style="width: ${Math.min(data.domReady / 50, 100)}%">${data.domReady}ms</div>
+                <div class="bar-chart-fill" style="width: ${Math.min((domReady || 0) / 50, 100)}%">${domReady || 0}ms</div>
               </div>
             </div>
             <div class="bar-chart-item">
               <div class="bar-chart-label">Load</div>
               <div class="bar-chart-bar">
-                <div class="bar-chart-fill" style="width: ${Math.min(data.loadTime / 50, 100)}%; background: ${data.loadTime < 1000 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'}">${data.loadTime}ms</div>
+                <div class="bar-chart-fill" style="width: ${Math.min((loadTime || 0) / 50, 100)}%; background: ${(loadTime || 0) < 1000 ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'}">${loadTime || 0}ms</div>
               </div>
             </div>
           </div>
@@ -3277,12 +3396,12 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('perf-metrics',
-      `<span>Load: <span class="${getLoadTimeColor(data.loadTime)}">${data.loadTime}ms</span></span> · <span>DOM: <strong>${data.domReady}ms</strong></span> · <span>Resources: <strong>${data.resources.js + data.resources.img + data.resources.xhr}</strong></span>`,
+      `<span>Load: <span class="${getLoadTimeColor(loadTime)}">${loadTime}ms</span></span> · <span>DOM: <strong>${domReady}ms</strong></span> · <span>Resources: <strong>${(resources.js || 0) + (resources.img || 0) + (resources.xhr || 0)}</strong></span>`,
       detailHtml,
       { title: 'Performance Metrics', search: false, export: true }
     );
   } else if (type === 'a11y') {
-    const totalFlaws = data.images.missingAlt.length + data.buttons.tooSmall.length + data.inputs.unlabelled.length;
+    const totalFlaws = (data.images?.missingAlt?.length || 0) + (data.buttons?.tooSmall?.length || 0) + (data.inputs?.unlabelled?.length || 0);
     const score = Math.max(0, 100 - (totalFlaws * 5));
     const getScoreColor = (score) => {
       if (score >= 80) return 'severity-low';
@@ -3301,15 +3420,15 @@ function displayAnalysisResults(type, data) {
           <span class="stat-label">Issues</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.images.missingAlt.length}</span>
+          <span class="stat-value">${data.images?.missingAlt?.length || 0}</span>
           <span class="stat-label">Missing Alt</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.buttons.tooSmall.length}</span>
+          <span class="stat-value">${data.buttons?.tooSmall?.length || 0}</span>
           <span class="stat-label">Small Buttons</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.inputs.unlabelled.length}</span>
+          <span class="stat-value">${data.inputs?.unlabelled?.length || 0}</span>
           <span class="stat-label">Unlabelled</span>
         </div>
       </div>
@@ -3328,21 +3447,21 @@ function displayAnalysisResults(type, data) {
                 </tr>
               </thead>
               <tbody>
-                ${data.images.missingAlt.map(img => `
+                ${(data.images?.missingAlt || []).map(img => `
                   <tr>
                     <td><span class="severity-high">HIGH</span></td>
                     <td>Missing Alt Text</td>
-                    <td style="font-size:10px; font-family: var(--mono-font);">${img.src.split('/').pop().slice(0, 30)}</td>
+                    <td style="font-size:10px; font-family: var(--mono-font);">${img.src?.split('/').pop().slice(0, 30) || 'unknown'}</td>
                   </tr>
                 `).join('')}
-                ${data.buttons.tooSmall.map(btn => `
+                ${(data.buttons?.tooSmall || []).map(btn => `
                   <tr>
                     <td><span class="severity-med">MEDIUM</span></td>
                     <td>Button Too Small</td>
                     <td style="font-size:10px;">${btn.text || '(no text)'}</td>
                   </tr>
                 `).join('')}
-                ${data.inputs.unlabelled.map(inp => `
+                ${(data.inputs?.unlabelled || []).map(inp => `
                   <tr>
                     <td><span class="severity-med">MEDIUM</span></td>
                     <td>Input Not Labelled</td>
@@ -3369,28 +3488,30 @@ function displayAnalysisResults(type, data) {
     );
   } else if (type === 'seo') {
     html = createDeepDive('seo-meta',
-      `<span>Title: <span style="font-size:9px; color:var(--accent-color)">${data.title}</span></span>`,
-      `<div class="stat-row"><span>Description</span> <span style="font-size:9px; color:var(--text-dim)">${data.description}</span></div>
+      `<span>Title: <span style="font-size:9px; color:var(--accent-color)">${data.title || 'Untitled'}</span></span>`,
+      `<div class="stat-row"><span>Description</span> <span style="font-size:9px; color:var(--text-dim)">${data.description || 'No description'}</span></div>
         <h5 style="margin-top:12px; font-size:10px; color:var(--accent-color)">Meta & Link Profile</h5>
         <table class="data-table">
-          ${data.meta.map(m => `<tr><td>${m.name}</td><td>${m.content}</td></tr>`).join('')}
-          ${data.links.list.map(l => `<tr><td>LINK</td><td>${l.text}</td></tr>`).join('')}
+          ${(data.meta || []).map(m => `<tr><td>${m.name || 'meta'}</td><td>${m.content || ''}</td></tr>`).join('')}
+          ${(data.links?.list || []).map(l => `<tr><td>LINK</td><td>${l.text || ''}</td></tr>`).join('')}
         </table>`
     );
   } else if (type === 'code') {
-    const extPct = Math.round((data.external / data.total) * 100) || 0;
+    const total = data?.total || 1;
+    const external = data?.external || 0;
+    const extPct = Math.round((external / total) * 100) || 0;
     html = createDeepDive('code-trace',
-      `<span>Total Scripts: <strong>${data.total}</strong></span> · <span>External: <strong>${extPct}%</strong></span>`,
+      `<span>Total Scripts: <strong>${external + (data?.inline || 0)}</strong></span> · <span>External: <strong>${extPct}%</strong></span>`,
       `<div style="height:6px; display:flex; border-radius:2px; overflow:hidden; margin:8px 0; background:#333;">
           <div style="width:${extPct}%; background:var(--accent-color);"></div>
           <div style="width:${100 - extPct}%; background:orange;"></div>
         </div>
         <div style="flex:1; overflow-y:auto; background:rgba(0,0,0,0.2); border-radius:var(--radius); padding:10px;">
-          ${data.sources.map(s => `
+          ${(data?.sources || []).map(s => `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:6px;">
               <div>
-                <div style="color:var(--accent-color); font-weight:bold; font-size:11px;">${s.host}</div>
-                <div style="opacity:0.5; font-size:9px;">${s.path}</div>
+                <div style="color:var(--accent-color); font-weight:bold; font-size:11px;">${s?.host || 'unknown'}</div>
+                <div style="opacity:0.5; font-size:9px;">${s?.path || '/'}</div>
               </div>
               <span class="tag-badge" style="background:#222; margin:0;">JS</span>
             </div>
@@ -3398,7 +3519,7 @@ function displayAnalysisResults(type, data) {
         </div>`
     );
   } else if (type === 'net' || type === 'network') {
-    if (data.length === 0) {
+    if (!Array.isArray(data) || data.length === 0) {
       html = '<div class="empty-state">No API traffic detected since page load.</div>';
     } else {
       html = createDeepDive('net-log',
@@ -3407,14 +3528,14 @@ function displayAnalysisResults(type, data) {
             ${data.map(req => `
               <div style="background:rgba(255,255,255,0.03); padding:10px; border-radius:var(--radius); margin-bottom:8px; border-left:3px solid ${req.type === 'FETCH' ? '#10b981' : '#6366f1'};">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px;">
-                  <strong style="font-size:12px; color:#fff;">${req.name}</strong>
-                  <span class="tag-badge" style="background:#222; font-size:9px; border-color:#444;">${req.type}</span>
+                  <strong style="font-size:12px; color:#fff;">${req.name || 'Request'}</strong>
+                  <span class="tag-badge" style="background:#222; font-size:9px; border-color:#444;">${req.type || 'XHR'}</span>
                 </div>
-                <div style="font-size:10px; opacity:0.6; word-break:break-all; margin-bottom:8px; font-family:var(--mono-font);">${req.url}</div>
+                <div style="font-size:10px; opacity:0.6; word-break:break-all; margin-bottom:8px; font-family:var(--mono-font);">${req.url || 'unknown'}</div>
                 <div style="display:flex; gap:12px; font-size:11px;">
-                  <span title="Duration">⏱️ ${req.duration}ms</span>
-                  <span title="Size">📦 ${req.size}</span>
-                  <span style="color:#4ade80" title="Status">✓ ${req.status}</span>
+                  <span title="Duration">⏱️ ${req.duration || 0}ms</span>
+                  <span title="Size">📦 ${req.size || '0 B'}</span>
+                  <span style="color:#4ade80" title="Status">✓ ${req.status || 200}</span>
                 </div>
               </div>
             `).join('')}
@@ -3425,46 +3546,46 @@ function displayAnalysisResults(type, data) {
     html = createDeepDive('stack-tech',
       `<strong>Detected Technologies:</strong>`,
       `<div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
-          ${data.map(tech => `
+          ${(Array.isArray(data) ? data : []).map(tech => `
             <div class="tag-badge" style="background:var(--accent-color); color: white; padding: 4px 10px; font-size: 11px;">
-              ${tech}
+              ${tech || 'unknown'}
             </div>
           `).join('')}
         </div>`,
       { title: 'Technology Stack', search: false, export: true }
     );
   } else if (type === 'psyche') {
-    const totalPatterns = data.darkPatterns.length + data.persuasionTechniques.length;
-    const loadScore = Math.max(0, 100 - Math.floor(data.cognitiveLoad / 10));
+    const totalPatterns = (data?.darkPatterns?.length || 0) + (data?.persuasionTechniques?.length || 0);
+    const loadScore = Math.max(0, 100 - Math.floor((data?.cognitiveLoad || 0) / 10));
 
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value severity-${data.darkPatterns.length > 5 ? 'high' : data.darkPatterns.length > 2 ? 'med' : 'low'}">${data.darkPatterns.length}</span>
+          <span class="stat-value severity-${(data.darkPatterns?.length || 0) > 5 ? 'high' : (data.darkPatterns?.length || 0) > 2 ? 'med' : 'low'}">${data.darkPatterns?.length || 0}</span>
           <span class="stat-label">Dark Patterns</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.persuasionTechniques.length}</span>
+          <span class="stat-value">${data.persuasionTechniques?.length || 0}</span>
           <span class="stat-label">Persuasion Tech.</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value severity-${loadScore < 50 ? 'high' : loadScore < 75 ? 'med' : 'low'}">${data.cognitiveLoad}</span>
+          <span class="stat-value severity-${loadScore < 50 ? 'high' : loadScore < 75 ? 'med' : 'low'}">${data.cognitiveLoad || 0}</span>
           <span class="stat-label">Cognitive Load</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.urgencySignals}</span>
+          <span class="stat-value">${data.urgencySignals || 0}</span>
           <span class="stat-label">Urgency Signals</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.scarcity}</span>
+          <span class="stat-value">${data.scarcity || 0}</span>
           <span class="stat-label">Scarcity</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.socialProof}</span>
+          <span class="stat-value">${data.socialProof || 0}</span>
           <span class="stat-label">Social Proof</span>
         </div>
       </div>
-      ${data.darkPatterns.length > 0 ? `
+      ${(data.darkPatterns?.length || 0) > 0 ? `
         <div class="dive-section">
           <div class="dive-section-header">
             <h5>⚠️ Dark Patterns Detected</h5>
@@ -3479,11 +3600,11 @@ function displayAnalysisResults(type, data) {
                 </tr>
               </thead>
               <tbody>
-                ${data.darkPatterns.map(p => `
+                ${(data.darkPatterns || []).map(p => `
                   <tr>
-                    <td style="font-weight: 600; text-transform: capitalize;">${p.type.replace(/-/g, ' ')}</td>
-                    <td style="font-size: 11px;">"${p.trigger}"</td>
-                    <td><span class="severity-${p.severity}">${p.severity.toUpperCase()}</span></td>
+                    <td style="font-weight: 600; text-transform: capitalize;">${(p.type || '').replace(/-/g, ' ')}</td>
+                    <td style="font-size: 11px;">"${p.trigger || ''}"</td>
+                    <td><span class="severity-${p.severity || 'low'}">${(p.severity || 'low').toUpperCase()}</span></td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -3495,14 +3616,14 @@ function displayAnalysisResults(type, data) {
         <div class="dive-section-header">
           <h5>Persuasion Techniques</h5>
         </div>
-        ${data.persuasionTechniques.map(tech => `
+        ${(data.persuasionTechniques || []).map(tech => `
           <div class="data-row">
-            <span class="label">${tech.type.replace(/-/g, ' ')}</span>
-            <span class="value">${tech.instances} instances</span>
+            <span class="label">${(tech.type || '').replace(/-/g, ' ')}</span>
+            <span class="value">${tech.instances || 0} instances</span>
           </div>
         `).join('')}
       </div>
-      ${data.attentionEngineering.length > 0 ? `
+      ${Array.isArray(data?.attentionEngineering) && data.attentionEngineering.length > 0 ? `
         <div class="dive-section">
           <div class="dive-section-header">
             <h5>Attention Engineering</h5>
@@ -3510,7 +3631,7 @@ function displayAnalysisResults(type, data) {
           ${data.attentionEngineering.map(item => `
             <div class="metric-badge">
               <span class="icon">⚡</span>
-              ${item.type.replace(/-/g, ' ')}: ${item.count}
+              ${(item?.type || '').replace(/-/g, ' ')}: ${item?.count || 0}
             </div>
           `).join('')}
         </div>
@@ -3518,28 +3639,28 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('psyche-analysis',
-      `<span>Patterns: <strong class="severity-${totalPatterns > 10 ? 'high' : totalPatterns > 5 ? 'med' : 'low'}">${totalPatterns}</strong></span> · <span>Load: <strong>${data.cognitiveLoad}</strong></span> · <span>Dark: <strong class="severity-${data.darkPatterns.length > 5 ? 'high' : data.darkPatterns.length > 2 ? 'med' : 'low'}">${data.darkPatterns.length}</strong></span>`,
+      `<span>Patterns: <strong class="severity-${totalPatterns > 10 ? 'high' : totalPatterns > 5 ? 'med' : 'low'}">${totalPatterns}</strong></span> · <span>Load: <strong>${data?.cognitiveLoad || 0}</strong></span> · <span>Dark: <strong class="severity-${(data?.darkPatterns?.length || 0) > 5 ? 'high' : (data?.darkPatterns?.length || 0) > 2 ? 'med' : 'low'}">${data?.darkPatterns?.length || 0}</strong></span>`,
       detailHtml,
       { title: 'Psychological Pattern Analysis', search: true, export: true }
     );
   } else if (type === 'archetype') {
     const detailHtml = `
       <div class="stats-grid">
-        ${data.primary ? `
+        ${data?.primary ? `
           <div class="stat-card">
-            <span class="stat-value">${data.primary.type.toUpperCase()}</span>
+            <span class="stat-value">${(data.primary.type || 'N/A').toUpperCase()}</span>
             <span class="stat-label">Primary Archetype</span>
           </div>
         ` : ''}
-        ${data.secondary ? `
+        ${data?.secondary ? `
           <div class="stat-card">
-            <span class="stat-value" style="font-size: 24px;">${data.secondary.type.toUpperCase()}</span>
+            <span class="stat-value" style="font-size: 24px;">${(data.secondary.type || 'N/A').toUpperCase()}</span>
             <span class="stat-label">Secondary</span>
           </div>
         ` : ''}
-        ${data.tertiary ? `
+        ${data?.tertiary ? `
           <div class="stat-card">
-            <span class="stat-value" style="font-size: 20px;">${data.tertiary.type.toUpperCase()}</span>
+            <span class="stat-value" style="font-size: 20px;">${(data.tertiary.type || 'N/A').toUpperCase()}</span>
             <span class="stat-label">Tertiary</span>
           </div>
         ` : ''}
@@ -3550,7 +3671,7 @@ function displayAnalysisResults(type, data) {
         </div>
         <div style="padding: 20px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3); margin-bottom: 20px;">
           <div style="font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 8px;">
-            ${data.personality}
+            ${data.personality || 'Neutral personality profile.'}
           </div>
         </div>
       </div>
@@ -3559,17 +3680,18 @@ function displayAnalysisResults(type, data) {
           <h5>Archetype Scores</h5>
         </div>
         <div class="bar-chart">
-          ${Object.entries(data.allScores)
-        .sort(([, a], [, b]) => b - a)
+          ${Object.entries(data?.allScores || {})
+        .sort(([, a], [, b]) => (b || 0) - (a || 0))
         .slice(0, 8)
         .map(([archetype, score]) => {
-          const maxScore = Math.max(...Object.values(data.allScores));
-          const pct = (score / maxScore * 100).toFixed(1);
+          const scores = Object.values(data?.allScores || {});
+          const maxScore = scores.length > 0 ? Math.max(...scores) : 1;
+          const pct = ((score || 0) / maxScore * 100).toFixed(1);
           return `
                 <div class="bar-chart-item">
-                  <div class="bar-chart-label">${archetype.charAt(0).toUpperCase() + archetype.slice(1)}</div>
+                  <div class="bar-chart-label">${(archetype || '').charAt(0).toUpperCase() + (archetype || '').slice(1)}</div>
                   <div class="bar-chart-bar">
-                    <div class="bar-chart-fill" style="width: ${pct}%">${score}</div>
+                    <div class="bar-chart-fill" style="width: ${pct}%">${score || 0}</div>
                   </div>
                 </div>
               `;
@@ -3584,7 +3706,7 @@ function displayAnalysisResults(type, data) {
           <div>
             <strong style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Backgrounds</strong>
             <div class="swatches">
-              ${data.dominantColors.backgrounds.map(([color]) => `
+              ${(data.dominantColors?.backgrounds || []).map(([color]) => `
                 <div class="swatch" style="background: ${color}" title="${color}" data-color="${color}"></div>
               `).join('')}
             </div>
@@ -3592,7 +3714,7 @@ function displayAnalysisResults(type, data) {
           <div>
             <strong style="font-size: 12px; color: var(--text-secondary); display: block; margin-bottom: 8px;">Text</strong>
             <div class="swatches">
-              ${data.dominantColors.text.map(([color]) => `
+              ${(data.dominantColors?.text || []).map(([color]) => `
                 <div class="swatch" style="background: ${color}" title="${color}" data-color="${color}"></div>
               `).join('')}
             </div>
@@ -3602,13 +3724,13 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('archetype-analysis',
-      `<span>Primary: <strong>${data.primary ? data.primary.type.toUpperCase() : 'N/A'}</strong></span> · <span>Score: <strong>${data.primary ? data.primary.score : 0}</strong></span>`,
+      `<span>Primary: <strong>${data.primary?.type ? data.primary.type.toUpperCase() : 'N/A'}</strong></span> · <span>Score: <strong>${data.primary?.score || 0}</strong></span>`,
       detailHtml,
       { title: 'Brand Archetype Analysis', search: false, export: true }
     );
   } else if (type === 'soul') {
-    const authenticityScore = Math.max(0, Math.min(100, data.authenticity));
-    const humanScore = Math.round((data.humanCentered / Math.max(data.corporateness, 1)) * 100);
+    const authenticityScore = Math.max(0, Math.min(100, data.authenticity || data.credibilityScore || 0));
+    const humanScore = Math.round(((data.humanCentered || 0) / Math.max(data.corporateness || 0, 1)) * 100) || 50;
 
     const detailHtml = `
       <div class="stats-grid">
@@ -3617,15 +3739,15 @@ function displayAnalysisResults(type, data) {
           <span class="stat-label">Authenticity</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.transparencyScore}</span>
+          <span class="stat-value">${data.transparencyScore || 0}</span>
           <span class="stat-label">Transparency</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.coherence}</span>
+          <span class="stat-value">${data.coherence || 0}</span>
           <span class="stat-label">Coherence</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.trustSignals}</span>
+          <span class="stat-value">${data.trustSignals || 0}</span>
           <span class="stat-label">Trust Signals</span>
         </div>
       </div>
@@ -3635,15 +3757,15 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="data-row">
           <span class="label">Primary Intention</span>
-          <span class="value">${data.intention}</span>
+          <span class="value">${data.intention || 'General Purpose'}</span>
         </div>
         <div class="data-row">
           <span class="label">Purpose</span>
-          <span class="value">${data.purpose}</span>
+          <span class="value">${data.purpose || 'Website interaction'}</span>
         </div>
         <div class="data-row">
           <span class="label">Orientation</span>
-          <span class="value">${data.humanCentered > data.corporateness ? 'Human-Centered' : 'Corporate-Centered'}</span>
+          <span class="value">${(data.humanCentered || 0) > (data.corporateness || 0) ? 'Human-Centered' : 'Corporate-Centered'}</span>
         </div>
       </div>
       <div class="dive-section">
@@ -3654,19 +3776,19 @@ function displayAnalysisResults(type, data) {
           <div class="progress-fill" style="width: ${humanScore}%; background: ${humanScore > 60 ? 'linear-gradient(90deg, #10b981 0%, #059669 100%)' : 'linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%)'}"></div>
         </div>
         <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px; color: var(--text-dim);">
-          <span>Corporate: ${data.corporateness}</span>
-          <span>Human: ${data.humanCentered}</span>
+          <span>Corporate: ${data.corporateness || 0}</span>
+          <span>Human: ${data.humanCentered || 0}</span>
         </div>
       </div>
     `;
 
     html = createDeepDive('soul-analysis',
-      `<span>Authenticity: <strong class="severity-${authenticityScore > 70 ? 'low' : authenticityScore > 40 ? 'med' : 'high'}">${authenticityScore}</strong></span> · <span>Intent: <strong>${data.intention}</strong></span> · <span>Trust: <strong>${data.trustSignals}</strong></span>`,
+      `<span>Authenticity: <strong class="severity-${authenticityScore > 70 ? 'low' : authenticityScore > 40 ? 'med' : 'high'}">${authenticityScore}</strong></span> · <span>Intent: <strong>${data.intention || 'General'}</strong></span> · <span>Trust: <strong>${data.trustSignals || 0}</strong></span>`,
       detailHtml,
       { title: 'Soul Analysis', search: false, export: true }
     );
   } else if (type === 'shadow') {
-    const shadowScore = data.deceptivePatterns.length + data.manipulativeDesign.length + (data.hiddenCosts ? 5 : 0);
+    const shadowScore = (data.deceptivePatterns?.length || 0) + (data.manipulativeDesign?.length || 0) + (data.hiddenCosts ? 5 : 0);
 
     const detailHtml = `
       <div class="stats-grid">
@@ -3675,19 +3797,19 @@ function displayAnalysisResults(type, data) {
           <span class="stat-label">Shadow Score</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.invisibleTrackers}</span>
+          <span class="stat-value">${data.invisibleTrackers || 0}</span>
           <span class="stat-label">Trackers</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.deceptivePatterns.length}</span>
+          <span class="stat-value">${data.deceptivePatterns?.length || 0}</span>
           <span class="stat-label">Deceptive Patterns</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.hiddenElements.length}</span>
+          <span class="stat-value">${data.hiddenElements?.length || 0}</span>
           <span class="stat-label">Hidden Elements</span>
         </div>
       </div>
-      ${data.manipulativeDesign.length > 0 ? `
+      ${(data.manipulativeDesign?.length || 0) > 0 ? `
         <div class="dive-section">
           <div class="dive-section-header">
             <h5>🎭 Manipulative Design</h5>
@@ -3695,12 +3817,12 @@ function displayAnalysisResults(type, data) {
           ${data.manipulativeDesign.map(design => `
             <div class="metric-badge">
               <span class="icon">⚠️</span>
-              ${design}
+              ${design || 'Deceptive layout element'}
             </div>
           `).join('')}
         </div>
       ` : ''}
-      ${data.deceptivePatterns.length > 0 ? `
+      ${Array.isArray(data?.deceptivePatterns) && data.deceptivePatterns.length > 0 ? `
         <div class="dive-section">
           <div class="dive-section-header">
             <h5>Deceptive Patterns</h5>
@@ -3716,8 +3838,8 @@ function displayAnalysisResults(type, data) {
               <tbody>
                 ${data.deceptivePatterns.map(pattern => `
                   <tr>
-                    <td>${pattern.type}</td>
-                    <td>${pattern.element}</td>
+                    <td>${pattern?.type || 'unknown'}</td>
+                    <td>${pattern?.element || 'anonymous'}</td>
                   </tr>
                 `).join('')}
               </tbody>
@@ -3729,10 +3851,10 @@ function displayAnalysisResults(type, data) {
         <div class="dive-section-header">
           <h5>Data Collection</h5>
         </div>
-        ${data.dataCollection.length > 0 ?
+        ${(data.dataCollection?.length || 0) > 0 ?
         data.dataCollection.map(type => `
             <div class="metric-badge">
-              ${type}
+              ${type || 'Unknown metric'}
             </div>
           `).join('') :
         '<div style="color: var(--text-dim); text-align: center; padding: 20px;">No explicit data collection detected</div>'
@@ -3747,7 +3869,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('shadow-analysis',
-      `<span>Shadow: <strong class="severity-${shadowScore > 10 ? 'high' : shadowScore > 5 ? 'med' : 'low'}">${shadowScore}</strong></span> · <span>Trackers: <strong>${data.invisibleTrackers}</strong></span> · <span>Deceptive: <strong>${data.deceptivePatterns.length}</strong></span>`,
+      `<span>Shadow: <strong class="severity-${shadowScore > 10 ? 'high' : shadowScore > 5 ? 'med' : 'low'}">${shadowScore}</strong></span> · <span>Trackers: <strong>${data.invisibleTrackers || 0}</strong></span> · <span>Deceptive: <strong>${data.deceptivePatterns?.length || 0}</strong></span>`,
       detailHtml,
       { title: 'Shadow Analysis', search: true, export: true }
     );
@@ -3755,27 +3877,27 @@ function displayAnalysisResults(type, data) {
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value">${data.readingLevel}</span>
+          <span class="stat-value">${data.readingLevel || 'Unknown'}</span>
           <span class="stat-label">Reading Ease</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.wordCount}</span>
+          <span class="stat-value">${data.wordCount || 0}</span>
           <span class="stat-label">Words</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${Math.round(data.avgSentenceLength)}</span>
+          <span class="stat-value">${Math.round(data.avgSentenceLength || 0)}</span>
           <span class="stat-label">Avg Sentence</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.imperatives}</span>
+          <span class="stat-value">${data.imperatives || 0}</span>
           <span class="stat-label">Commands</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.questions}</span>
+          <span class="stat-value">${data.questions || 0}</span>
           <span class="stat-label">Questions</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.emotionalWords}</span>
+          <span class="stat-value">${data.emotionalWords || 0}</span>
           <span class="stat-label">Emotional Words</span>
         </div>
       </div>
@@ -3785,25 +3907,25 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="data-row">
           <span class="label">Tone</span>
-          <span class="value">${data.tone}</span>
+          <span class="value">${data.tone || 'neutral'}</span>
         </div>
         <div class="data-row">
           <span class="label">Command Density</span>
-          <span class="value">${((data.imperatives / data.wordCount) * 100).toFixed(2)}%</span>
+          <span class="value">${(((data.imperatives || 0) / Math.max(data.wordCount || 0, 1)) * 100).toFixed(2)}%</span>
         </div>
         <div class="data-row">
           <span class="label">Question Density</span>
-          <span class="value">${((data.questions / data.wordCount) * 100).toFixed(2)}%</span>
+          <span class="value">${(((data.questions || 0) / Math.max(data.wordCount || 0, 1)) * 100).toFixed(2)}%</span>
         </div>
       </div>
-      ${data.rhetoricalDevices.length > 0 ? `
+      ${Array.isArray(data?.rhetoricalDevices) && data.rhetoricalDevices.length > 0 ? `
         <div class="dive-section">
           <div class="dive-section-header">
             <h5>Rhetorical Devices</h5>
           </div>
           ${data.rhetoricalDevices.map(device => `
             <div class="metric-badge">
-              ${device}
+              ${device || 'device'}
             </div>
           `).join('')}
         </div>
@@ -3811,7 +3933,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('rhetoric-analysis',
-      `<span>Tone: <strong>${data.tone}</strong></span> · <span>Reading: <strong>${data.readingLevel}</strong></span> · <span>Commands: <strong>${data.imperatives}</strong></span>`,
+      `<span>Tone: <strong>${data.tone || 'neutral'}</strong></span> · <span>Reading: <strong>${data.readingLevel || 'N/A'}</strong></span> · <span>Commands: <strong>${data.imperatives || 0}</strong></span>`,
       detailHtml,
       { title: 'Rhetorical Analysis', search: false, export: true }
     );
@@ -3823,15 +3945,15 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="data-row">
           <span class="label">Typography Mood</span>
-          <span class="value">${data.typographyMood}</span>
+          <span class="value">${data?.typographyMood || 'neutral'}</span>
         </div>
         <div class="data-row">
           <span class="label">Visual Weight</span>
-          <span class="value">${data.visualWeight}</span>
+          <span class="value">${data?.visualWeight || 'balanced'}</span>
         </div>
         <div class="data-row">
           <span class="label">Emotional Intent</span>
-          <span class="value">${data.emotionalIntent}</span>
+          <span class="value">${data?.emotionalIntent || 'informational'}</span>
         </div>
       </div>
       <div class="dive-section">
@@ -3840,38 +3962,38 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="stats-grid">
           <div class="stat-card">
-            <span class="stat-value">${data.spacingAnalysis.avgPadding}px</span>
+            <span class="stat-value">${data?.spacingAnalysis?.avgPadding || 0}px</span>
             <span class="stat-label">Avg Padding</span>
           </div>
           <div class="stat-card">
-            <span class="stat-value">${data.spacingAnalysis.avgMargin}px</span>
+            <span class="stat-value">${data?.spacingAnalysis?.avgMargin || 0}px</span>
             <span class="stat-label">Avg Margin</span>
           </div>
         </div>
         <div style="padding: 16px; background: rgba(99, 102, 241, 0.1); border-radius: 12px; border: 1px solid rgba(99, 102, 241, 0.3); margin-top: 12px;">
           <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Feeling</div>
-          <div style="font-size: 13px; color: var(--text-secondary);">${data.spacingAnalysis.feeling}</div>
+          <div style="font-size: 13px; color: var(--text-secondary);">${data?.spacingAnalysis?.feeling || 'Standard digital layout.'}</div>
         </div>
       </div>
       <div class="dive-section">
         <div class="dive-section-header">
           <h5>Color Psychology</h5>
         </div>
-        ${Object.entries(data.colorPsychology).map(([color, emotion]) => `
+        ${Object.entries(data?.colorPsychology || {}).map(([color, emotion]) => `
           <div class="data-row">
             <span class="label" style="text-transform: capitalize;">${color}</span>
             <span class="value">${emotion}</span>
           </div>
         `).join('')}
       </div>
-      ${data.designPersonality.length > 0 ? `
+      ${Array.isArray(data?.designPersonality) && data.designPersonality.length > 0 ? `
         <div class="dive-section">
           <div class="dive-section-header">
             <h5>Design Personality</h5>
           </div>
           ${data.designPersonality.map(trait => `
             <div class="metric-badge">
-              ${trait}
+              ${trait || 'trait'}
             </div>
           `).join('')}
         </div>
@@ -3879,7 +4001,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('emotion-analysis',
-      `<span>Mood: <strong>${data.typographyMood}</strong></span> · <span>Intent: <strong>${data.emotionalIntent}</strong></span> · <span>Space: <strong>${data.spacingAnalysis.feeling}</strong></span>`,
+      `<span>Mood: <strong>${data?.typographyMood || 'N/A'}</strong></span> · <span>Intent: <strong>${data?.emotionalIntent || 'N/A'}</strong></span> · <span>Space: <strong>${data?.spacingAnalysis?.feeling || 'N/A'}</strong></span>`,
       detailHtml,
       { title: 'Emotional Design Analysis', search: false, export: true }
     );
@@ -3887,7 +4009,7 @@ function displayAnalysisResults(type, data) {
     const detailHtml = `
       <div class="stats-grid">
         <div class="stat-card">
-          <span class="stat-value ${data.cognitiveBurden > 70 ? 'severity-high' : 'severity-low'}">${data.cognitiveBurden}</span>
+          <span class="stat-value ${(data.cognitiveBurden || 0) > 70 ? 'severity-high' : 'severity-low'}">${data.cognitiveBurden || 0}</span>
           <span class="stat-label">Cognitive Burden</span>
         </div>
         <div class="stat-card">
@@ -3899,7 +4021,7 @@ function displayAnalysisResults(type, data) {
           <span class="stat-label">Visual Balance</span>
         </div>
         <div class="stat-card">
-          <span class="stat-value">${data.interactionFriction.score}</span>
+          <span class="stat-value">${data.interactionFriction?.score || 0}</span>
           <span class="stat-label">Friction Score</span>
         </div>
       </div>
@@ -3910,10 +4032,10 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="report-box" style="background: rgba(99, 102, 241, 0.05); padding: 15px; border-radius: 8px; border-left: 4px solid var(--accent-color);">
           <div style="font-weight: 700; color: var(--accent-color); margin-bottom: 12px; font-size: 13px;">⚡ Remix Opportunity Matrix</div>
-          ${data.remixOpportunities.length > 0 ? data.remixOpportunities.map(opp => `
+          ${(data.remixOpportunities || []).length > 0 ? (data.remixOpportunities || []).map(opp => `
             <div style="margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);">
-              <div style="font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 4px;">${opp.target} <span style="font-weight:400; opacity: 0.6;">/// ${opp.type}</span></div>
-              <div style="font-size: 11px; opacity: 0.8; margin-bottom: 6px;">${opp.rationale}</div>
+              <div style="font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 4px;">${opp.target || 'General'} <span style="font-weight:400; opacity: 0.6;">/// ${opp.type || 'Remix'}</span></div>
+              <div style="font-size: 11px; opacity: 0.8; margin-bottom: 6px;">${opp.rationale || ''}</div>
               <div style="font-size: 11px; color: var(--accent-color); background: rgba(99, 102, 241, 0.1); padding: 6px 8px; border-radius: 4px; display: inline-block;">
                 <span style="font-weight: 700;">Action:</span> ${opp.action || 'Manual review required'}
               </div>
@@ -3928,24 +4050,24 @@ function displayAnalysisResults(type, data) {
         </div>
         <div class="data-row">
             <span class="label">Design System</span>
-            <span class="value">${data.designSystem ? data.designSystem.detected : 'N/A'} (Cohesion: ${data.designSystem ? data.designSystem.cohesionScore : 0}%)</span>
+            <span class="value">${data.designSystem ? data.designSystem.detected : 'N/A'} (Cohesion: ${data.designSystem ? (data.designSystem.cohesionScore || 0) : 0}%)</span>
         </div>
         ${data.visualTension ? `
         <div class="data-row">
             <span class="label">Visual Center of Gravity</span>
-            <span class="value">${data.visualTension.dominance}-Dominant</span>
+            <span class="value">${data.visualTension.dominance || 'Center'}-Dominant</span>
         </div>` : ''}
         <div class="data-row">
             <span class="label">Fitts's Law Compliance</span>
-            <span class="value">${data.neurodynamicFlow.fittsLawCompliance}%</span>
+            <span class="value">${data.neurodynamicFlow?.fittsLawCompliance || 0}%</span>
         </div>
         <div class="data-row">
             <span class="label">Linguistic Anchors</span>
-            <span class="value">${data.linguisticAnchors.authorityAnchors} (Authority), ${data.linguisticAnchors.lossAversion} (Loss)</span>
+            <span class="value">${data.linguisticAnchors?.authorityAnchors || 0} (Authority), ${data.linguisticAnchors?.lossAversion || 0} (Loss)</span>
         </div>
       </div>
 
-      ${data.competitorWeaknesses && data.competitorWeaknesses.length > 0 ? `
+      ${(data.competitorWeaknesses?.length || 0) > 0 ? `
       <div class="dive-section">
          <div class="dive-section-header">
            <h5 style="color: var(--danger-color);">Competitor Weaknesses (Exploit These)</h5>
@@ -3953,7 +4075,7 @@ function displayAnalysisResults(type, data) {
          <ul style="list-style: none; padding: 0; margin: 0;">
            ${data.competitorWeaknesses.map(weakness => `
              <li style="font-size: 11px; color: #ecaeb4; margin-bottom: 6px; padding-left: 12px; position: relative;">
-               <span style="position: absolute; left: 0; font-size: 8px; top: 3px;">🔴</span> ${weakness}
+               <span style="position: absolute; left: 0; font-size: 8px; top: 3px;">🔴</span> ${weakness || 'weakness'}
              </li>
            `).join('')}
          </ul>
@@ -3967,7 +4089,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('strategy-audit',
-      `<span>Burden: <strong class="${data.cognitiveBurden > 70 ? 'severity-high' : 'severity-low'}">${data.cognitiveBurden}</strong></span> · <span>Friction: <strong>${data.interactionFriction.score}</strong></span> · <span>Remix Hooks: <strong>${data.remixOpportunities.length}</strong></span>`,
+      `<span>Burden: <strong class="${(data.cognitiveBurden || 0) > 70 ? 'severity-high' : 'severity-low'}">${data.cognitiveBurden || 0}</strong></span> · <span>Friction: <strong>${data.interactionFriction?.score || 0}</strong></span> · <span>Remix Hooks: <strong>${(data.remixOpportunities || []).length}</strong></span>`,
       detailHtml,
       { title: 'Strategic Engineering Audit', search: false, export: true }
     );
@@ -3978,7 +4100,7 @@ function displayAnalysisResults(type, data) {
         <!-- Typography Section -->
         <div class="specimen-section" style="margin-bottom: 30px;">
           <h5 style="color: var(--accent-color); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">Typography Specimens</h5>
-          ${data.fonts.map(font => `
+          ${(data.fonts || []).map(font => `
             <div style="margin-bottom: 20px; border-bottom: 1px solid rgba(255,255,255,0.03); padding-bottom: 15px;">
               <div style="font-family: '${font}', sans-serif; font-size: 24px; color: var(--text-primary); margin-bottom: 4px;">
                 The quick brown fox jumps over the lazy dog.
@@ -3992,7 +4114,7 @@ function displayAnalysisResults(type, data) {
         <div class="specimen-section" style="margin-bottom: 30px;">
           <h5 style="color: var(--accent-color); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">Brand Palette</h5>
           <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-            ${data.colors.brand.map(color => `
+            ${(data.colors?.brand || []).map(color => `
               <div class="swatch-card" style="cursor: pointer;" data-color="${color}">
                 <div style="height: 40px; background: ${color}; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 4px;"></div>
                 <div style="font-size: 9px; color: var(--text-dim); text-align: center; font-family: var(--mono-font);">${color}</div>
@@ -4005,21 +4127,21 @@ function displayAnalysisResults(type, data) {
         <div class="specimen-section">
           <h5 style="color: var(--accent-color); font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 15px;">UI Components</h5>
           <div style="display: flex; flex-wrap: wrap; gap: 15px;">
-            ${data.buttons.map(btn => `
+            ${(data.buttons || []).map(btn => `
               <div style="padding: 10px; background: rgba(0,0,0,0.1); border-radius: 8px; border: 1px solid rgba(255,255,255,0.02); flex: 1; min-width: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                 <button style="
-                  background: ${btn.bg};
-                  color: ${btn.color};
-                  border-radius: ${btn.radius};
-                  padding: ${btn.padding};
+                  background: ${btn.bg || 'var(--accent-color)'};
+                  color: ${btn.color || '#fff'};
+                  border-radius: ${btn.radius || '4px'};
+                  padding: ${btn.padding || '8px 16px'};
                   border: none;
-                  font-family: '${btn.font}', sans-serif;
+                  font-family: '${btn.font || 'inherit'}', sans-serif;
                   font-size: 12px;
                   margin-bottom: 10px;
                   cursor: pointer;
-                ">${btn.text}</button>
+                ">${btn.text || 'Button'}</button>
                 <div style="font-size: 8px; color: var(--text-dim); text-align: center;">
-                  R: ${btn.radius} | P: ${btn.padding}
+                  R: ${btn.radius || 'N/A'} | P: ${btn.padding || 'N/A'}
                 </div>
               </div>
             `).join('')}
@@ -4030,7 +4152,7 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('brand-specimen',
-      `<span>Fonts: <strong>${data.fonts.length}</strong></span> · <span>Colors: <strong>${data.colors.brand.length}</strong></span> · <span>Btns: <strong>${data.buttons.length}</strong></span>`,
+      `<span>Fonts: <strong>${data.fonts?.length || 0}</strong></span> · <span>Colors: <strong>${data.colors?.brand?.length || 0}</strong></span> · <span>Btns: <strong>${data.buttons?.length || 0}</strong></span>`,
       detailHtml,
       { title: 'Brand Style Guide Specimen', search: false, export: true }
     );
@@ -4044,10 +4166,10 @@ function displayAnalysisResults(type, data) {
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 15px;">
            <div>
              <h4 style="margin: 0; font-size: 18px; color: #fff;">🧿 Omniscient Blueprint</h4>
-             <span style="font-size: 10px; color: var(--text-dim); font-family: var(--mono-font);">TARGET: ${data.domain.toUpperCase()}</span>
+             <span style="font-size: 10px; color: var(--text-dim); font-family: var(--mono-font);">TARGET: ${(data.domain || 'unknown').toUpperCase()}</span>
            </div>
            <div style="text-align: right;">
-             <div style="font-size: 24px; font-weight: 800; color: var(--accent-color);">${data.strategy.cognitiveBurden}</div>
+             <div style="font-size: 24px; font-weight: 800; color: var(--accent-color);">${data.strategy?.cognitiveBurden || 0}</div>
              <div style="font-size: 9px; text-transform: uppercase;">Cognitive Burden</div>
            </div>
         </div>
@@ -4060,15 +4182,15 @@ function displayAnalysisResults(type, data) {
              <h5 style="color: #60a5fa; font-size: 11px; margin-bottom: 10px; text-transform: uppercase;">🧠 Strategic Mind</h5>
              <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
                <span>Design System</span>
-               <span style="color: #fff;">${data.strategy.designSystem ? data.strategy.designSystem.detected : 'N/A'}</span>
+               <span style="color: #fff;">${data.strategy?.designSystem ? data.strategy.designSystem.detected : 'N/A'}</span>
              </div>
              <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
                <span>Friction</span>
-               <span style="color: ${data.strategy.interactionFriction.score > 50 ? '#f87171' : '#4ade80'}">${data.strategy.interactionFriction.score}/100</span>
+               <span style="color: ${(data.strategy?.interactionFriction?.score || 0) > 50 ? '#f87171' : '#4ade80'}">${data.strategy?.interactionFriction?.score || 0}/100</span>
              </div>
              <div style="font-size: 10px; display: flex; justify-content: space-between;">
                <span>Opportunities</span>
-               <span style="color: #fff;">${data.strategy.remixOpportunities.length} Detected</span>
+               <span style="color: #fff;">${data.strategy?.remixOpportunities?.length || 0} Detected</span>
              </div>
            </div>
 
@@ -4077,15 +4199,15 @@ function displayAnalysisResults(type, data) {
              <h5 style="color: #c084fc; font-size: 11px; margin-bottom: 10px; text-transform: uppercase;">👻 Psyche & Soul</h5>
              <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
                <span>Archetype</span>
-               <span style="color: #fff;">${data.archetype && data.archetype.primary ? data.archetype.primary.type : 'Unknown'}</span>
+               <span style="color: #fff;">${data.archetype?.primary?.type || 'Unknown'}</span>
              </div>
              <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
                <span>Tone</span>
-               <span style="color: #fff;">${data.rhetoric.tone}</span>
+               <span style="color: #fff;">${data.rhetoric?.tone || 'neutral'}</span>
              </div>
              <div style="font-size: 10px; display: flex; justify-content: space-between;">
                <span>Dark Patterns</span>
-               <span style="color: ${data.psyche.darkPatterns.length > 0 ? '#f87171' : '#4ade80'}">${data.psyche.darkPatterns.length}</span>
+               <span style="color: ${(data.psyche?.darkPatterns?.length || 0) > 0 ? '#f87171' : '#4ade80'}">${data.psyche?.darkPatterns?.length || 0}</span>
              </div>
            </div>
 
@@ -4095,16 +4217,16 @@ function displayAnalysisResults(type, data) {
              <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
                <span>Palette</span>
                <span style="display:flex; gap:2px;">
-                  ${data.specimen.colors.brand.slice(0, 3).map(c => `<span style="width:8px; height:8px; background:${c}; display:inline-block; border-radius:50%;"></span>`).join('')}
+                  ${(data.specimen?.colors?.brand || []).slice(0, 3).map(c => `<span style="width:8px; height:8px; background:${c}; display:inline-block; border-radius:50%;"></span>`).join('')}
                </span>
              </div>
              <div style="font-size: 10px; margin-bottom: 6px; display: flex; justify-content: space-between;">
                <span>Balance</span>
-               <span style="color: #fff;">${data.strategy.visualTension ? data.strategy.visualTension.balance : 'N/A'}</span>
+               <span style="color: #fff;">${data.strategy?.visualTension?.balance || 'N/A'}</span>
              </div>
              <div style="font-size: 10px; display: flex; justify-content: space-between;">
                <span>Components</span>
-               <span style="color: #fff;">${data.specimen.buttons.length} Extracted</span>
+               <span style="color: #fff;">${data.specimen?.buttons?.length || 0} Extracted</span>
              </div>
            </div>
         </div>
@@ -4112,13 +4234,13 @@ function displayAnalysisResults(type, data) {
         <!-- Remix Matrix (The Action Plan) -->
         <div style="margin-bottom: 20px;">
           <h5 style="font-size: 10px; color: var(--text-dim); margin-bottom: 10px; text-transform: uppercase;">⚡ Remix Action Matrix</h5>
-          ${data.strategy.remixOpportunities.length > 0 ? data.strategy.remixOpportunities.map(opp => `
+          ${(data.strategy?.remixOpportunities?.length || 0) > 0 ? data.strategy.remixOpportunities.map(opp => `
              <div style="background: rgba(99, 102, 241, 0.1); border-left: 3px solid var(--accent-color); padding: 10px; margin-bottom: 8px; border-radius: 0 4px 4px 0;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                   <strong style="color: #fff; font-size: 11px;">${opp.target}</strong>
-                   <span style="font-size: 9px; opacity: 0.7; border: 1px solid rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px;">${opp.type}</span>
+                   <strong style="color: #fff; font-size: 11px;">${opp.target || 'General'}</strong>
+                   <span style="font-size: 9px; opacity: 0.7; border: 1px solid rgba(255,255,255,0.2); padding: 1px 4px; border-radius: 4px;">${opp.type || 'Remix'}</span>
                 </div>
-                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">${opp.rationale}</div>
+                <div style="font-size: 10px; color: var(--text-secondary); margin-bottom: 6px;">${opp.rationale || ''}</div>
                 <div style="font-size: 10px; color: var(--accent-color); font-weight: 700;">👉 ${opp.action || 'Remix this element.'}</div>
              </div>
           `).join('') : '<div style="padding: 10px; text-align: center; color: var(--text-dim); font-size: 11px;">No critical remix opportunities detected. The canvas is blank.</div>'}
@@ -4129,10 +4251,10 @@ function displayAnalysisResults(type, data) {
         <div>
           <h5 style="font-size: 10px; color: var(--text-dim); margin-bottom: 10px; text-transform: uppercase;">🧬 DNA Specimen</h5>
           <div style="display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px;">
-             ${data.specimen.fonts.slice(0, 3).map(f => `
+             ${(data.specimen.fonts || []).slice(0, 3).map(f => `
                 <div style="background: #000; padding: 6px 10px; border-radius: 4px; border: 1px solid #333; font-size: 10px; white-space: nowrap;">Aa ${f}</div>
              `).join('')}
-             ${data.specimen.colors.brand.slice(0, 5).map(c => `
+             ${(data.specimen.colors?.brand || []).slice(0, 5).map(c => `
                 <div style="background: ${c}; width: 24px; height: 24px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);"></div>
              `).join('')}
           </div>
@@ -4142,10 +4264,11 @@ function displayAnalysisResults(type, data) {
     `;
 
     html = createDeepDive('omniscience-blueprint',
-      `<span>Burden: <strong>${data.strategy.cognitiveBurden}</strong></span> · <span>Actions: <strong>${data.strategy.remixOpportunities.length}</strong></span> · <span>Dark Patterns: <strong>${data.psyche.darkPatterns.length}</strong></span>`,
+      `<span>Burden: <strong>${data.strategy?.cognitiveBurden || 0}</strong></span> · <span>Actions: <strong>${data.strategy?.remixOpportunities?.length || 0}</strong></span> · <span>Dark Patterns: <strong>${data.psyche?.darkPatterns?.length || 0}</strong></span>`,
       detailHtml,
-      { title: 'The Omniscient Blueprint', search: false, export: true }
+      { title: 'Omniscience Blueprint', search: false, export: true }
     );
+
   }
 
   // Fallback for unhandled types (Raw JSON View)
@@ -4278,10 +4401,19 @@ function renderD3Graph(rootData) {
     const links = [];
 
     function flatten(node, parentIndex = null) {
+      if (!node) return;
       const i = nodes.length;
-      nodes.push({ id: i, name: node.name, class: node.class, r: Math.min(node.value * 2 + 5, 25) });
+      const value = typeof node.value === 'number' && !isNaN(node.value) ? node.value : (node.size || 5);
+      nodes.push({ 
+        id: i, 
+        name: node.name || 'node', 
+        class: node.class || '', 
+        r: Math.max(2, Math.min(value * 2 + 5, 25)) 
+      });
       if (parentIndex !== null) links.push({ source: parentIndex, target: i });
-      if (node.children) node.children.forEach(c => flatten(c, i));
+      if (node.children && Array.isArray(node.children)) {
+        node.children.forEach(c => flatten(c, i));
+      }
     }
     flatten(rootData);
 
@@ -4505,28 +4637,37 @@ alert('Check your Developer Tools Console (F12) for the injected access.');
 
 function renderSequenceDiagram(data) {
   const content = document.getElementById('result-content');
-  const { actors, steps } = data;
+  const { actors = [], steps = [] } = data || {};
+
+  if (!Array.isArray(actors) || actors.length === 0) {
+    content.innerHTML = '<div class="empty-state">No actors defined for sequence diagram.</div>';
+    return;
+  }
 
   let html = `<div class="sequence-viz">
     <div class="sequence-actors">
-      ${actors.map(a => `<div class="actor"><span>${a}</span></div>`).join('')}
+      ${actors.map(a => `<div class="actor"><span>${a || 'unknown'}</span></div>`).join('')}
     </div>
     <div class="sequence-flow">`;
 
-  steps.forEach(step => {
-    const fromIdx = actors.indexOf(step.from);
-    const toIdx = actors.indexOf(step.to);
-    const left = Math.min(fromIdx, toIdx) * (100 / (actors.length - 1));
-    const width = Math.abs(toIdx - fromIdx) * (100 / (actors.length - 1));
-    const isReverse = toIdx < fromIdx;
+  if (Array.isArray(steps)) {
+    steps.forEach(step => {
+      const fromIdx = actors.indexOf(step.from);
+      const toIdx = actors.indexOf(step.to);
+      if (fromIdx === -1 || toIdx === -1) return;
 
-    html += `
-      <div class="sequence-step ${step.type}" style="left:${left}%; width:${width}%">
-        <div class="step-line ${isReverse ? 'reverse' : ''}"></div>
-        <div class="step-label" style="text-align:${isReverse ? 'right' : 'left'}">${step.label}</div>
-      </div>
-    `;
-  });
+      const left = Math.min(fromIdx, toIdx) * (100 / Math.max(1, actors.length - 1));
+      const width = Math.abs(toIdx - fromIdx) * (100 / Math.max(1, actors.length - 1));
+      const isReverse = toIdx < fromIdx;
+
+      html += `
+        <div class="sequence-step ${step.type || 'message'}" style="left:${left}%; width:${width}%">
+          <div class="step-line ${isReverse ? 'reverse' : ''}"></div>
+          <div class="step-label" style="text-align:${isReverse ? 'right' : 'left'}">${step.label || ''}</div>
+        </div>
+      `;
+    });
+  }
 
   html += `</div></div>`;
   content.innerHTML = html;
@@ -4534,6 +4675,39 @@ function renderSequenceDiagram(data) {
 
 // Show status message in the professional status bar
 // Status message handled by utils.js via showStatus()
+
+/**
+ * Loads an extension project generated by the Wizard into the Builder UI.
+ * Maps the Wizard's file-array format to the Builder's files-object format.
+ */
+function loadProjectIntoBuilder(project) {
+  if (!project) return;
+
+  // The Wizard stores files as an array [{name, content}]; Builder uses {filename: content}
+  const filesObj = {};
+  if (Array.isArray(project.files)) {
+    project.files.forEach(({ name, content }) => { filesObj[name] = content; });
+  } else if (project.files && typeof project.files === 'object') {
+    Object.assign(filesObj, project.files);
+  }
+
+  // Merge manifest from top-level field if present
+  if (project.manifest && !filesObj['manifest.json']) {
+    filesObj['manifest.json'] = project.manifest;
+  }
+
+  currentProject = {
+    name: project.name || 'My Extension',
+    files: filesObj,
+    created: Date.now(),
+    modified: Date.now()
+  };
+
+  document.getElementById('project-name').value = currentProject.name;
+  currentFile = 'manifest.json';
+  updateFileTree();
+  loadFileIntoEditor('manifest.json');
+}
 
 // ============================================
 // EXTRACTION RESULTS DISPLAY
@@ -4553,8 +4727,8 @@ function displayExtractionResults(extraction) {
         <div class="metadata-grid">
           <div><strong>URL:</strong> ${extraction.metadata?.url || 'Unknown'}</div>
           <div><strong>Domain:</strong> ${extraction.metadata?.domain || 'Unknown'}</div>
-          <div><strong>Viewport:</strong> ${extraction.metadata.viewport.width}x${extraction.metadata.viewport.height}</div>
-          <div><strong>Extracted:</strong> ${new Date(extraction.metadata.timestamp).toLocaleString()}</div>
+          <div><strong>Viewport:</strong> ${extraction.metadata?.viewport ? `${extraction.metadata.viewport.width}x${extraction.metadata.viewport.height}` : 'N/A'}</div>
+          <div><strong>Extracted:</strong> ${extraction.metadata?.timestamp ? new Date(extraction.metadata.timestamp).toLocaleString() : 'N/A'}</div>
         </div>
       </div>
 
@@ -4826,16 +5000,16 @@ function generateExtensionFromWizard() {
     created: new Date().toISOString()
   };
 
-  // Save to storage
-  chrome.storage.local.get({ projects: [] }, (result) => {
-    const projects = result.projects;
-    projects.push(project);
-    chrome.storage.local.set({ projects }, () => {
+  // Save to storage using the canonical 'extensionProjects' key
+  chrome.storage.local.get({ extensionProjects: [] }, (result) => {
+    const existingProjects = result.extensionProjects;
+    existingProjects.push(project);
+    chrome.storage.local.set({ extensionProjects: existingProjects }, () => {
       showStatus('Extension generated successfully!', 'success');
       loadProjects();
 
-      // Switch to Builder tab and load the project
-      document.querySelector('[data-tab="builder"]').click();
+      // Switch to Builder (code) tab and load the project
+      switchTab('code');
       loadProjectIntoBuilder(project);
     });
   });
@@ -5526,41 +5700,5 @@ Modify the files to customize your extension:
 
 Built with ReMixr IDE - A meta-extension development environment.
 `;
-}
-
-// --- RE-CONSTRUCTABLE DNA HELPERS ---
-
-function generateAIContext(data) {
-  return `# SITE DNA: ${data.domain || 'Unknown'}
-Generated: ${new Date().toISOString()}
-
-## CORE ANALYSIS
-${JSON.stringify(data, (key, value) => (key === 'objectModel' ? undefined : value), 2)}
-`;
-}
-
-function compressContextForLLM(context) {
-  const shallow = { ...context };
-  delete shallow.objectModel;
-  return shallow;
-}
-
-function generateLLMPrompt(context, userGoal) {
-  const dna = JSON.stringify(compressContextForLLM(context));
-  return `Prompt: Develop a feature where ${userGoal}. Context: ${dna}`;
-}
-
-function downloadAsFile(text, filename, type) {
-  const file = new Blob([text], { type: type });
-  const a = document.createElement("a");
-  const url = URL.createObjectURL(file);
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  setTimeout(() => {
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  }, 0);
 }
 

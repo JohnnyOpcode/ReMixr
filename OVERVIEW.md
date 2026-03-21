@@ -24,8 +24,8 @@ ReMixr has been transformed from a simple website CSS modifier into a **complete
 
 ```
 ┌─────────────────────────────────────────┐
-│          ReMixr Extension Builder        │
-│             (Browser Extension)          │
+│          ReMixr Extension Builder       │
+│             (Browser Extension)         │
 └───────────────┬─────────────────────────┘
                 │
     ┌───────────┼───────────┐

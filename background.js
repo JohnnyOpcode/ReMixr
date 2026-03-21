@@ -51,14 +51,11 @@ chrome.runtime.onStartup.addListener(() => {
  * Configures the panel to open when the extension action is clicked.
  */
 function setupSidePanel() {
-  // Set side panel to open on click
-  // This persists across sessions
+  // Set side panel to open on click; persists across sessions.
   chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true })
     .catch((error) => {
-      // Silently handle error - older Chrome versions may not support this API
-      if (chrome.runtime.lastError) {
-        // Error is already logged by Chrome
-      }
+      // Older Chrome versions may not support this API — log but don't rethrow.
+      console.warn('[ReMixr Background] sidePanel.setPanelBehavior failed:', error.message);
     });
 }
 
@@ -92,8 +89,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 
-
-
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'generateExtension') {
@@ -109,16 +104,3 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   return true;
 });
-
-// Helper to manage project storage
-async function saveProject(project) {
-  const { extensionProjects } = await chrome.storage.local.get(['extensionProjects']);
-  const projects = extensionProjects || [];
-  projects.push(project);
-  await chrome.storage.local.set({ extensionProjects: projects });
-}
-
-async function loadProjects() {
-  const { extensionProjects } = await chrome.storage.local.get(['extensionProjects']);
-  return extensionProjects || [];
-}
