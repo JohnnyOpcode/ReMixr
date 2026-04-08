@@ -43,9 +43,11 @@
       <button class="tab-btn active" data-tab="projects">Projects</button>
       <button class="tab-btn" data-tab="templates">Templates</button>
       <button class="tab-btn" data-tab="code">Code</button>
-      <button class="tab-btn" data-tab="ui">UI</button>
-      <button class="tab-btn" data-tab="analyzer">Inspector</button>
-      <button class="tab-btn" data-tab="tools">Tools</button>
+      <button class="tab-btn" data-tab="ui">Designer</button>
+      <span class="tab-divider"></span>
+      <button class="tab-btn" data-tab="analyzer">Analyze</button>
+      <button class="tab-btn" data-tab="tools">Toolkit</button>
+      <button class="tab-btn" data-tab="pipeline">Pipeline</button>
     </nav>
 
     <!-- CONTENT AREAS -->
@@ -57,7 +59,65 @@
 
         <div id="projects-list" class="projects-list">
           <!-- Populated by JS -->
-          <div class="empty-state">No projects found. Start building!</div>
+          <div class="empty-state">
+            <div class="empty-state-icon">📦</div>
+            <p>No projects yet. Create your first extension!</p>
+            <button id="empty-new-project-btn" class="btn btn-primary empty-state-cta">✨ Start from Template</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pipeline Tab -->
+    <div id="pipeline-tab" class="tab-content">
+      <div class="section">
+        <div class="suite-header">
+          <h2>Agentic Pipeline</h2>
+          <span class="suite-tag">BETA</span>
+        </div>
+        <p class="analyzer-subtitle">Run multi-agent synthesis chains to audit and remix this site.</p>
+        
+        <div class="spacer-16"></div>
+
+        <div class="pipeline-guide">
+          <div class="guide-item">
+            <div class="guide-icon">🔍</div>
+            <div class="guide-content">
+              <strong>One-Click Pipeline</strong>
+              <span>Click the button below — we'll automatically extract site DNA and run the full agent chain for you.</span>
+            </div>
+          </div>
+          <div class="guide-item">
+            <div class="guide-icon">🤖</div>
+            <div class="guide-content">
+              <strong>What Happens</strong>
+              <span>Audits architecture, detects weaknesses, and synthesizes remedies — all automated.</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="spacer-24"></div>
+
+        <div class="pipeline-status-bar">
+          <div class="pipeline-progress-track">
+            <div id="pipeline-progress-fill" class="pipeline-progress-fill"></div>
+          </div>
+        </div>
+
+        <div class="pipeline-controls">
+          <button id="run-remix-pipeline" class="btn btn-primary">
+            <span>🚀 Start Remix Pipeline</span>
+          </button>
+        </div>
+
+        <div class="spacer-24"></div>
+
+        <div id="pipeline-orchestrator" class="pipeline-container">
+          <!-- Pipeline steps injected here -->
+          <div class="empty-state">
+            <div class="empty-state-icon">🤖</div>
+            <p>No active agent sequence. Click <b>Start Remix Pipeline</b> above to begin.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -336,7 +396,10 @@
 
             <!-- File Explorer -->
             <div class="vscode-section">
-              <div class="vscode-section-header">FILES</div>
+              <div class="vscode-section-header" style="justify-content: space-between;">
+                <span>FILES</span>
+                <span id="new-file-btn" title="Create New File" style="font-size: 14px; cursor: pointer; padding: 0 4px;" class="sidebar-action-icon">+</span>
+              </div>
               <div class="vscode-section-content file-tree-padding-0">
                 <div class="file-tree" id="file-tree">
                   <!-- Dynamically populated -->
@@ -373,36 +436,36 @@
 
                 <h4 class="injector-category">Core Features</h4>
                 <div class="feature-injector-grid">
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-storage"><span>💾
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-storage"><span>💾
                       Storage</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-tabs"><span>📑 Tabs</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-notifications"><span>🔔
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-tabs"><span>📑 Tabs</span></label>
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-notifications"><span>🔔
                       Notifications</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-context-menu"><span>📋 Context
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-context-menu"><span>📋 Context
                       Menu</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-background"><span>⚙️
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-background"><span>⚙️
                       Background</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-bookmarks"><span>🔖
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-bookmarks"><span>🔖
                       Bookmarks</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-history"><span>📜
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-history"><span>📜
                       History</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-downloads"><span>⬇️
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-downloads"><span>⬇️
                       Downloads</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-cookies"><span>🍪
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-cookies"><span>🍪
                       Cookies</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-web-request"><span>🌐 Web
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-web-request"><span>🌐 Web
                       Request</span></label>
                 </div>
 
                 <h4 class="injector-category">UI Components</h4>
                 <div class="feature-injector-grid">
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-side-panel"><span>📱 Side
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-side-panel"><span>📱 Side
                       Panel</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-theme"><span>🌓 Theme
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-theme"><span>🌓 Theme
                       Toggle</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-keyboard"><span>⌨️
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-keyboard"><span>⌨️
                       Keyboard</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-badge"><span>🔴 Badge</span></label>
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-badge"><span>🔴 Badge</span></label>
                 </div>
 
                 <h4 class="injector-category">Host Permissions</h4>
@@ -428,21 +491,21 @@
 
                 <h4 class="injector-category">Behaviors</h4>
                 <div class="feature-injector-grid">
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-sync-storage"><span>☁️ Sync
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-sync-storage"><span>☁️ Sync
                       Store</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-auto-open"><span>🚀
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-auto-open"><span>🚀
                       Auto-Open</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-persist-state"><span>💿
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-persist-state"><span>💿
                       Persist</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-match-site"><span>🎨 Match
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-match-site"><span>🎨 Match
                       Site</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-auto-run"><span>⚡
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-auto-run"><span>⚡
                       Auto-Run</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-analytics"><span>📊
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-analytics"><span>📊
                       Analytics</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-hot-reload"><span>🔥 Hot
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-hot-reload"><span>🔥 Hot
                       Reload</span></label>
-                  <label class="feature-checkbox"><input type="checkbox" id="inject-error-tracking"><span>🐛
+                  <label class="wizard-checkbox"><input type="checkbox" id="inject-error-tracking"><span>🐛
                       Errors</span></label>
                 </div>
 
@@ -453,18 +516,20 @@
           </div>
 
           <div class="sidebar-footer">
-            <button id="save-project-btn" class="vscode-btn">💾 Save Project</button>
+            <button id="save-project-btn" class="vscode-btn">💾 Save <span class="kbd-hint">Ctrl+S</span></button>
             <button id="test-extension-btn" class="vscode-btn primary">🚀 Load Extension</button>
             <div class="footer-btn-group">
-              <button id="export-extension-btn" class="vscode-btn footer-btn-flex">📦 ZIP</button>
+              <button id="export-extension-btn" class="vscode-btn footer-btn-flex">📦 ZIP <span class="kbd-hint">Ctrl+E</span></button>
               <button id="preview-btn" class="vscode-btn footer-btn-flex">👁️ Preview</button>
             </div>
           </div>
         </div>
 
+        <div class="sidebar-resizer" id="ide-sidebar-resizer"></div>
+
         <!-- Main Editor Area -->
         <div class="vscode-main">
-          <div class="editor-tabs">
+          <div class="editor-tabs" id="editor-tabs-container">
             <div class="editor-tab active">
               <span id="current-file">manifest.json</span>
             </div>
@@ -522,6 +587,8 @@
             </div>
           </div>
         </div>
+
+        <div class="sidebar-resizer" id="shiny-sidebar-resizer"></div>
 
         <!-- Main - Canvas & Properties -->
         <div class="shiny-main">
@@ -593,68 +660,116 @@
         <!-- Compact Mining Toolbar (Pinned to Top) -->
         <div class="inspector-toolbar">
           <div class="toolbar-switcher">
-            <button class="switcher-btn active" data-cluster="actions">Actions</button>
-            <button class="switcher-btn" data-cluster="architecture">Arch</button>
-            <button class="switcher-btn" data-cluster="design">Design</button>
-            <button class="switcher-btn" data-cluster="tech">Tech</button>
-            <button class="switcher-btn" data-cluster="data">Data</button>
-            <button class="switcher-btn" data-cluster="quality">Qual</button>
-            <button class="switcher-btn" data-cluster="psychology">Psych</button>
+            <button class="switcher-btn active" data-cluster="actions">⚡ Actions</button>
+            <button class="switcher-btn" data-cluster="architecture">🏗 Structure</button>
+            <button class="switcher-btn" data-cluster="design">🎨 Design</button>
+            <button class="switcher-btn" data-cluster="tech">🛠 Tech</button>
+            <button class="switcher-btn" data-cluster="data">💾 Data</button>
+            <button class="switcher-btn" data-cluster="quality">✓ Quality</button>
+            <button class="switcher-btn" data-cluster="psychology">🧠 Psych</button>
           </div>
           <div class="toolbar-tray">
             <!-- Actions Cluster -->
             <div class="toolbar-cluster active" id="cluster-actions">
-              <button id="run-omniscience-btn" class="icon-only-btn" title="Complete Extraction">💎</button>
-              <button id="btn-extract-context" class="icon-only-btn" title="Transform Code">🔮</button>
-              <div class="icon-only-btn-toggle" title="Element Miner">
+              <button id="run-omniscience-btn" class="labeled-icon-btn" title="Complete Extraction">
+                <span class="li-icon">💎</span><span class="li-label">Blueprint</span>
+              </button>
+              <button id="btn-extract-context" class="labeled-icon-btn" title="Transform Code">
+                <span class="li-icon">🔮</span><span class="li-label">Extract</span>
+              </button>
+              <div class="labeled-icon-btn-toggle" title="Element Miner">
                 <input type="checkbox" id="inspector-toggle" class="toolbar-checkbox">
-                <label for="inspector-toggle" class="toolbar-checkbox-label">🎯</label>
+                <label for="inspector-toggle" class="toolbar-checkbox-label">
+                  <span class="li-icon">🎯</span><span class="li-label">Pick</span>
+                </label>
               </div>
             </div>
 
             <!-- Architecture Cluster -->
             <div class="toolbar-cluster" id="cluster-architecture">
-              <button id="scan-structure" class="icon-only-btn" title="Structure Analysis">🏗️</button>
-              <button id="scan-visualize" class="icon-only-btn" title="DOM Map Visualization">🗺️</button>
-              <button id="scan-sequence" class="icon-only-btn" title="Flow & Sequence Analysis">🌊</button>
-              <button id="scan-code" class="icon-only-btn" title="Code Review">💻</button>
+              <button id="scan-structure" class="labeled-icon-btn" title="Structure Analysis">
+                <span class="li-icon">🏗️</span><span class="li-label">Structure</span>
+              </button>
+              <button id="scan-visualize" class="labeled-icon-btn" title="DOM Map Visualization">
+                <span class="li-icon">🗺️</span><span class="li-label">DOM Map</span>
+              </button>
+              <button id="scan-sequence" class="labeled-icon-btn" title="Flow & Sequence Analysis">
+                <span class="li-icon">🌊</span><span class="li-label">Flow</span>
+              </button>
+              <button id="scan-code" class="labeled-icon-btn" title="Code Review">
+                <span class="li-icon">💻</span><span class="li-label">Code</span>
+              </button>
             </div>
 
             <!-- Design Cluster -->
             <div class="toolbar-cluster" id="cluster-design">
-              <button id="scan-palette" class="icon-only-btn" title="Color Palette Extraction">🎨</button>
-              <button id="scan-fonts" class="icon-only-btn" title="Typography & Fonts">🅰️</button>
-              <button id="scan-emotion" class="icon-only-btn" title="Emotional Impact Analysis">😊</button>
+              <button id="scan-palette" class="labeled-icon-btn" title="Color Palette Extraction">
+                <span class="li-icon">🎨</span><span class="li-label">Palette</span>
+              </button>
+              <button id="scan-fonts" class="labeled-icon-btn" title="Typography & Fonts">
+                <span class="li-icon">🅰️</span><span class="li-label">Fonts</span>
+              </button>
+              <button id="scan-emotion" class="labeled-icon-btn" title="Emotional Impact Analysis">
+                <span class="li-icon">😊</span><span class="li-label">Emotion</span>
+              </button>
             </div>
 
             <!-- Tech Stack Cluster -->
             <div class="toolbar-cluster" id="cluster-tech">
-              <button id="scan-assets" class="icon-only-btn" title="Asset Inventory">📦</button>
-              <button id="scan-net" class="icon-only-btn" title="API & Network Sniffer">🔌</button>
-              <button id="scan-perf" class="icon-only-btn premium" title="Performance Audit">⚡</button>
-              <button id="scan-stack" class="icon-only-btn" title="Technology Stack Detection">🛠️</button>
+              <button id="scan-assets" class="labeled-icon-btn" title="Asset Inventory">
+                <span class="li-icon">📦</span><span class="li-label">Assets</span>
+              </button>
+              <button id="scan-net" class="labeled-icon-btn" title="API & Network Sniffer">
+                <span class="li-icon">🔌</span><span class="li-label">Network</span>
+              </button>
+              <button id="scan-perf" class="labeled-icon-btn premium" title="Performance Audit">
+                <span class="li-icon">⚡</span><span class="li-label">Perf</span>
+              </button>
+              <button id="scan-stack" class="labeled-icon-btn" title="Technology Stack Detection">
+                <span class="li-icon">🛠️</span><span class="li-label">Stack</span>
+              </button>
             </div>
 
             <!-- Data Cluster -->
             <div class="toolbar-cluster" id="cluster-data">
-              <button id="scan-storage" class="icon-only-btn" title="Storage & Cache Explorer">💾</button>
-              <button id="scan-workers" class="icon-only-btn" title="Service Workers & Threads">👷</button>
+              <button id="scan-storage" class="labeled-icon-btn" title="Storage & Cache Explorer">
+                <span class="li-icon">💾</span><span class="li-label">Storage</span>
+              </button>
+              <button id="scan-workers" class="labeled-icon-btn" title="Service Workers & Threads">
+                <span class="li-icon">👷</span><span class="li-label">Workers</span>
+              </button>
             </div>
 
             <!-- Quality Cluster -->
             <div class="toolbar-cluster" id="cluster-quality">
-              <button id="scan-a11y" class="icon-only-btn" title="Accessibility Audit">♿</button>
-              <button id="scan-seo" class="icon-only-btn" title="SEO Optimization Check">🔍</button>
+              <button id="scan-a11y" class="labeled-icon-btn" title="Accessibility Audit">
+                <span class="li-icon">♿</span><span class="li-label">A11y</span>
+              </button>
+              <button id="scan-seo" class="labeled-icon-btn" title="SEO Optimization Check">
+                <span class="li-icon">🔍</span><span class="li-label">SEO</span>
+              </button>
             </div>
 
             <!-- Psychology Cluster -->
             <div class="toolbar-cluster" id="cluster-psychology">
-              <button id="scan-strategy" class="icon-only-btn premium" title="Conversion Strategy">📈</button>
-              <button id="scan-psyche" class="icon-only-btn premium" title="Psychological Profiling">🧠</button>
-              <button id="scan-rhetoric" class="icon-only-btn premium" title="Rhetorical Copy Analysis">📝</button>
-              <button id="scan-archetype" class="icon-only-btn premium" title="Brand Archetype">🎭</button>
-              <button id="scan-soul" class="icon-only-btn premium" title="Trust & Authority">🛡️</button>
-              <button id="scan-shadow" class="icon-only-btn premium" title="Dark Pattern Detection">🌑</button>
+              <button id="scan-strategy" class="labeled-icon-btn premium" title="Conversion Strategy">
+                <span class="li-icon">📈</span><span class="li-label">Convert</span>
+              </button>
+              <button id="scan-psyche" class="labeled-icon-btn premium" title="Psychological Profiling">
+                <span class="li-icon">🧠</span><span class="li-label">Psyche</span>
+              </button>
+              <button id="scan-rhetoric" class="labeled-icon-btn premium" title="Rhetorical Copy Analysis">
+                <span class="li-icon">📝</span><span class="li-label">Rhetoric</span>
+              </button>
+              <button id="scan-archetype" class="labeled-icon-btn premium" title="Brand Archetype">
+                <span class="li-icon">🎭</span><span class="li-label">Archetype</span>
+              </button>
+              <button id="scan-soul" class="labeled-icon-btn premium" title="Trust & Authority">
+                <span class="li-icon">🛡️</span><span class="li-label">Trust</span>
+              </button>
+              <button id="scan-shadow" class="labeled-icon-btn premium" title="Dark Pattern Detection">
+                <span class="li-icon">🌑</span><span class="li-label">Dark UX</span>
+              </button>
             </div>
           </div>
         </div>
@@ -671,7 +786,7 @@
           </div>
           <div id="result-content" class="results-content">
             <div class="empty-state">
-              Click any mining tool below to extract insights
+              Select a cluster above, then click any tool to extract insights
             </div>
           </div>
           <div id="d3-container" class="d3-container d3-container-hidden"></div>
@@ -685,6 +800,22 @@
             <button id="close-inspector-panel" class="close-btn">×</button>
           </div>
           <div class="panel-content">
+            <div class="style-group">
+              <div class="style-group-label">Context & A11y</div>
+              <div class="style-row">
+                <span style="font-size:10px; opacity:0.8;">ARIA Role</span>
+                <span id="inspector-a11y-role" style="font-size:10px; color:var(--accent-primary);">-</span>
+              </div>
+              <div class="style-row">
+                <span style="font-size:10px; opacity:0.8;">Tree Depth</span>
+                <span id="inspector-context-depth" style="font-size:10px;">-</span>
+              </div>
+              <div class="style-row">
+                <span style="font-size:10px; opacity:0.8;">Parent</span>
+                <span id="inspector-context-parent" style="font-size:10px; font-family:'JetBrains Mono';">-</span>
+              </div>
+            </div>
+
             <div class="style-group">
               <div class="style-group-label">Layout</div>
               <div class="style-row">
@@ -784,35 +915,54 @@
     <div id="tools-tab" class="tab-content">
       <div class="toolbar-container">
 
+        <!-- Tool Info Bar -->
+        <div id="tool-info-bar" class="tool-info-bar">
+          <span class="tool-info-icon" id="tool-info-icon">🛠</span>
+          <div class="tool-info-text">
+            <strong id="tool-info-name">Select a Tool</strong>
+            <span id="tool-info-desc">Click any tool below to apply it to the current page</span>
+          </div>
+          <span id="tool-info-type" class="tool-type-badge">—</span>
+        </div>
+
         <!-- Group 1: Visual Forensics -->
         <div class="toolbar-group">
           <div class="toolbar-label">Visual Forensics</div>
           <div class="toolbar-row">
-            <button id="tool-xray" class="tool-btn highlight" title="Explode DOM in 3D layers">
+            <button id="tool-xray" class="tool-btn highlight" title="Explode DOM in 3D layers"
+              data-desc="Explode the page into stacked 3D layers by DOM depth" data-type="toggle">
               <span class="icon">🧊</span> <span class="tool-btn-label">X-Ray</span>
             </button>
-            <button id="tool-heatmap" class="tool-btn highlight" title="Visualize visual weight and focus">
+            <button id="tool-heatmap" class="tool-btn highlight" title="Visualize visual weight and focus"
+              data-desc="Generate an attention heatmap showing visual weight distribution" data-type="toggle">
               <span class="icon">🔥</span> <span class="tool-btn-label">Heatmap</span>
             </button>
-            <button id="tool-contrast" class="tool-btn" title="Highlight low contrast elements">
+            <button id="tool-contrast" class="tool-btn" title="Highlight low contrast elements"
+              data-desc="Flag elements that fail WCAG contrast ratio guidelines" data-type="toggle">
               <span class="icon">🌓</span> <span class="tool-btn-label">Contrast</span>
             </button>
-            <button id="tool-wireframe" class="tool-btn" title="Toggle wireframe mode">
+            <button id="tool-wireframe" class="tool-btn" title="Toggle wireframe mode"
+              data-desc="Strip all styling to reveal the raw layout skeleton" data-type="toggle">
               <span class="icon">🖼️</span> <span class="tool-btn-label">Wire</span>
             </button>
-            <button id="tool-images" class="tool-btn" title="Toggle image visibility">
+            <button id="tool-images" class="tool-btn" title="Toggle image visibility"
+              data-desc="Hide all images to see how the page works without them" data-type="toggle">
               <span class="icon">👁️</span> <span class="tool-btn-label">Images</span>
             </button>
-            <button id="tool-specimen" class="tool-btn" title="Generate Brand Style Guide">
+            <button id="tool-specimen" class="tool-btn" title="Generate Brand Style Guide"
+              data-desc="Extract a complete style specimen: fonts, colors, spacing" data-type="action">
               <span class="icon">📋</span> <span class="tool-btn-label">Specimen</span>
             </button>
-            <button id="tool-gravity" class="tool-btn highlight" title="Make elements fall with physics">
+            <button id="tool-gravity" class="tool-btn highlight" title="Make elements fall with physics"
+              data-desc="Apply gravity physics — watch DOM elements tumble" data-type="toggle">
               <span class="icon">🌌</span> <span class="tool-btn-label">Gravity</span>
             </button>
-            <button id="tool-neural" class="tool-btn highlight" title="Visualize logical connections">
+            <button id="tool-neural" class="tool-btn highlight" title="Visualize logical connections"
+              data-desc="Draw connection lines between related DOM elements" data-type="toggle">
               <span class="icon">🧠</span> <span class="tool-btn-label">Neural</span>
             </button>
-            <button id="tool-ghost" class="tool-btn" title="Visualize recent interactions">
+            <button id="tool-ghost" class="tool-btn" title="Visualize recent interactions"
+              data-desc="Replay ghost trails of recent mouse/touch interactions" data-type="toggle">
               <span class="icon">👻</span> <span class="tool-btn-label">Ghost</span>
             </button>
           </div>
@@ -822,59 +972,147 @@
         <div class="toolbar-group">
           <div class="toolbar-label">Interaction & Modification</div>
           <div class="toolbar-row">
-            <button id="tool-god-mode" class="tool-btn super-highlight" title="Toggle Universal Edit Mode">
+            <button id="tool-god-mode" class="tool-btn super-highlight" title="Toggle Universal Edit Mode"
+              data-desc="Full DOM editing: drag, resize, delete, reorder any element" data-type="toggle">
               <span class="icon">⚡</span> <span class="tool-btn-label">God Mode</span>
             </button>
-            <button id="tool-edit" class="tool-btn" title="Toggle universal edit mode">
+            <button id="tool-edit" class="tool-btn" title="Toggle universal edit mode"
+              data-desc="Make all text on the page directly editable" data-type="toggle">
               <span class="icon">✏️</span> <span class="tool-btn-label">Edit</span>
             </button>
-            <button id="tool-zap" class="tool-btn" title="Remove element from DOM">
+            <button id="tool-zap" class="tool-btn" title="Remove element from DOM"
+              data-desc="Click any element to instantly remove it from the page" data-type="toggle">
               <span class="icon">⚡</span> <span class="tool-btn-label">Zap</span>
             </button>
-            <button id="tool-enable" class="tool-btn" title="Enable disabled inputs">
+            <button id="tool-enable" class="tool-btn" title="Enable disabled inputs"
+              data-desc="Unlock all disabled form inputs and buttons" data-type="action">
               <span class="icon">🔓</span> <span class="tool-btn-label">Inputs</span>
             </button>
-            <button id="tool-unmask" class="tool-btn" title="Show password fields">
+            <button id="tool-unmask" class="tool-btn" title="Show password fields"
+              data-desc="Reveal password fields as plain text" data-type="action">
               <span class="icon">🔑</span> <span class="tool-btn-label">Unmask</span>
             </button>
-            <button id="tool-kill-sticky" class="tool-btn" title="Remove sticky elements">
+            <button id="tool-kill-sticky" class="tool-btn" title="Remove sticky elements"
+              data-desc="Kill all position:sticky and position:fixed overlays" data-type="action">
               <span class="icon">🩹</span> <span class="tool-btn-label">Stickies</span>
             </button>
-            <button id="tool-record" class="tool-btn premium" title="Record user interaction flow">
+            <button id="tool-record" class="tool-btn premium" title="Record user interaction flow"
+              data-desc="Record clicks, scrolls, and inputs as a replayable flow" data-type="toggle">
               <span class="icon">🔴</span> <span class="tool-btn-label">Record</span>
             </button>
           </div>
         </div>
 
-        <!-- Group 3: Data & Utility -->
+      <!-- Group 3: Data & Utility -->
         <div class="toolbar-group">
           <div class="toolbar-label">Data & Utility</div>
           <div class="toolbar-row">
-            <button id="tool-sniffer" class="tool-btn" title="Live event sniffer">
+            <button id="tool-sniffer" class="tool-btn" title="Live event sniffer"
+              data-desc="Attach a real-time listener to all DOM events" data-type="toggle">
               <span class="icon">🐕</span> <span class="tool-btn-label">Sniffer</span>
             </button>
-            <button id="tool-console" class="tool-btn" title="Inject console">
+            <button id="tool-console" class="tool-btn" title="Inject console"
+              data-desc="Inject an in-page JavaScript console overlay" data-type="action">
               <span class="icon">💻</span> <span class="tool-btn-label">Console</span>
             </button>
-            <button id="tool-pii" class="tool-btn" title="Scan for emails">
+            <button id="tool-pii" class="tool-btn" title="Scan for emails"
+              data-desc="Scan the page DOM for email addresses" data-type="action">
               <span class="icon">📧</span> <span class="tool-btn-label">Emails</span>
             </button>
-            <button id="tool-export-links" class="tool-btn" title="Extract links">
+            <button id="tool-export-links" class="tool-btn" title="Extract links"
+              data-desc="Export all hyperlinks on the page as a list" data-type="action">
               <span class="icon">🔗</span> <span class="tool-btn-label">Links</span>
             </button>
-            <button id="tool-export-colors" class="tool-btn" title="Extract colors">
+            <button id="tool-export-colors" class="tool-btn" title="Extract colors"
+              data-desc="Extract every color used on the page" data-type="action">
               <span class="icon">🎨</span> <span class="tool-btn-label">Colors</span>
             </button>
-            <button id="tool-screenshot" class="tool-btn" title="Take screenshot">
+            <button id="tool-screenshot" class="tool-btn" title="Take screenshot"
+              data-desc="Capture a screenshot of the visible viewport" data-type="action">
               <span class="icon">📸</span> <span class="tool-btn-label">Shot</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Group 4: Reality Warp -->
+        <div class="toolbar-group reality-group">
+          <div class="toolbar-label">Reality Warp</div>
+          <div class="toolbar-row">
+            <button id="warp-cyberdeck" class="tool-btn warp-btn" title="Cyberdeck Reality"
+              data-desc="Transform the page into a retro-futuristic terminal" data-type="toggle">
+              <span class="icon">💻</span> <span class="tool-btn-label">Cyberdeck</span>
+            </button>
+            <button id="warp-blueprint" class="tool-btn warp-btn" title="Blueprint Reality"
+              data-desc="View the page as a technical architectural blueprint" data-type="toggle">
+              <span class="icon">📐</span> <span class="tool-btn-label">Blueprint</span>
+            </button>
+            <button id="warp-brutalist" class="tool-btn warp-btn" title="Brutalist Reality"
+              data-desc="Strip out polish, enforce raw system fonts and high contrast" data-type="toggle">
+              <span class="icon">🏗️</span> <span class="tool-btn-label">Brutalist</span>
+            </button>
+            <button id="warp-vaporwave" class="tool-btn warp-btn" title="Vaporwave Reality"
+              data-desc="Apply retro 80s neon aesthetics and grid effects" data-type="toggle">
+              <span class="icon">🌴</span> <span class="tool-btn-label">Vaporwave</span>
+            </button>
+            <button id="warp-glitch" class="tool-btn warp-btn" title="Glitch Reality"
+              data-desc="Induce visual artifacts and cyberpunk distortion" data-type="toggle">
+              <span class="icon">⚡</span> <span class="tool-btn-label">Glitch</span>
+            </button>
+            <button id="warp-reset" class="tool-btn warp-btn" title="Reset Reality"
+              data-desc="Restore original page CSS styling" data-type="action">
+              <span class="icon">🔄</span> <span class="tool-btn-label">Reset</span>
             </button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Status Bar & Toast moved inside container -->
-    <div id="status" class="status"></div>
+    <!-- Toast Container for Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="confirm-overlay confirm-hidden">
+      <div class="confirm-dialog">
+        <div class="confirm-body">
+          <span class="confirm-icon">⚠️</span>
+          <p id="confirm-message">Are you sure?</p>
+        </div>
+        <div class="confirm-actions">
+          <button id="confirm-cancel" class="btn btn-secondary btn-small">Cancel</button>
+          <button id="confirm-ok" class="btn btn-danger btn-small">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Prompt Modal -->
+    <div id="prompt-modal" class="confirm-overlay confirm-hidden">
+      <div class="confirm-dialog" style="min-width: 300px;">
+        <div class="confirm-body" style="flex-direction: column; align-items: flex-start; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="confirm-icon" style="color: var(--accent-color);">✏️</span>
+            <p id="prompt-message" style="margin: 0; font-weight: bold;">Enter value:</p>
+          </div>
+          <input type="text" id="prompt-input" class="vscode-input" style="width: 100%; margin: 0; box-sizing: border-box;" autocomplete="off">
+        </div>
+        <div class="confirm-actions">
+          <button id="prompt-cancel" class="btn btn-secondary btn-small">Cancel</button>
+          <button id="prompt-ok" class="btn btn-primary btn-small">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Command Palette Modal -->
+    <div id="cmd-palette-overlay" class="cmd-overlay cmd-hidden">
+      <div class="cmd-dialog">
+        <div class="cmd-input-wrapper">
+          <span class="cmd-icon">❯</span>
+          <input type="text" id="cmd-input" placeholder="Type a command or search files..." autocomplete="off">
+        </div>
+        <div class="cmd-results" id="cmd-results">
+          <!-- Injected via JS -->
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Context Dialog Modal -->
@@ -906,6 +1144,7 @@
   <script src="lib/project-manager.js"></script>
   <script src="utils.js"></script>
   <script src="lib/hydration.js"></script>
+  <script src="lib/pipeline-engine.js"></script>
   <script src="popup.js"></script>
   <script src="export.js"></script>
 </body>

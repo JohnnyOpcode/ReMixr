@@ -20,11 +20,157 @@
 let projects = [];
 let currentProject = null;
 let currentFile = 'manifest.json';
+let openFiles = [];
 let cmEditor = null;
-let _previewTimeout = null; // Module-scoped to avoid 'this' anti-pattern in arrow fns
+let cmContextEditor = null; // High-fidelity context viewer
+let _previewTimeout = null;
+
+// Ambient Context Manager (Tab-Isolated)
+const REMIX_STATE = {
+  tabData: {}, // Map of tabId -> { context: {}, markdown: '', element: null, viewType: '', dna: null }
+  activeTabId: null,
+
+  getTabRecord(tabId) {
+    if (!tabId) return null;
+    if (!this.tabData[tabId]) {
+      this.tabData[tabId] = { context: {}, markdown: '', element: null, viewType: 'omniscience', dna: {} };
+    }
+    return this.tabData[tabId];
+  },
+
+  mergeDNA(tabId, newDna) {
+    if (!newDna) return;
+    const record = this.getTabRecord(tabId);
+    if (!record) return;
+    if (!record.dna) record.dna = {};
+    // Deep merge metadata
+    if (newDna._meta) {
+      record.dna._meta = { ...(record.dna._meta || {}), ...newDna._meta };
+    }
+    // Merge all other layers
+    Object.keys(newDna).forEach(key => {
+      if (key !== '_meta') record.dna[key] = newDna[key];
+    });
+  },
+
+  async updateActiveTab() {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (tab && tab.id !== this.activeTabId) {
+        this.activeTabId = tab.id;
+        this.refreshUIForActiveTab();
+      }
+    } catch (e) {
+      console.warn('[REMIX_STATE] Tab query failed:', e);
+    }
+  },
+
+  refreshUIForActiveTab() {
+    const record = this.tabData[this.activeTabId];
+    if (cmContextEditor) {
+      cmContextEditor.setValue(record ? (record.markdown || '') : '');
+      setTimeout(() => cmContextEditor.refresh(), 10);
+    } else {
+      const textarea = document.getElementById('context-dialog-textarea');
+      if (textarea) {
+        textarea.value = record ? (record.markdown || '') : '';
+      }
+    }
+  },
+
+  refreshContextDialogUI() {
+    const dialog = document.getElementById('context-dialog');
+    if (dialog && !dialog.classList.contains('context-dialog-hidden')) {
+      this.refreshUIForActiveTab();
+    }
+  },
+
+  clearTab(tabId) {
+    if (this.tabData[tabId]) {
+      delete this.tabData[tabId];
+      if (this.activeTabId === tabId) {
+        this.activeTabId = null;
+        this.refreshUIForActiveTab();
+      }
+    }
+  },
+
+  clearAll() {
+    this.tabData = {};
+    this.refreshUIForActiveTab();
+  }
+};
 
 // Extension Templates
 // TEMPLATES moved to lib/templates.js
+
+let confirmCallback = null;
+function showConfirmDialog(message, onConfirm) {
+  const modal = document.getElementById('confirm-modal');
+  document.getElementById('confirm-message').textContent = message;
+  confirmCallback = onConfirm;
+  modal.classList.remove('confirm-hidden');
+  
+  // Attach one-time events for this invocation
+  const cancelBtn = document.getElementById('confirm-cancel');
+  const okBtn = document.getElementById('confirm-ok');
+  
+  const cleanup = () => {
+    modal.classList.add('confirm-hidden');
+    cancelBtn.removeEventListener('click', handleCancel);
+    okBtn.removeEventListener('click', handleOk);
+  };
+  
+  const handleCancel = () => cleanup();
+  const handleOk = () => {
+    cleanup();
+    if (confirmCallback) confirmCallback();
+  };
+  
+  cancelBtn.addEventListener('click', handleCancel);
+  okBtn.addEventListener('click', handleOk);
+}
+
+let promptCallback = null;
+function showPromptDialog(message, defaultValue, onConfirm) {
+  const modal = document.getElementById('prompt-modal');
+  const input = document.getElementById('prompt-input');
+  document.getElementById('prompt-message').textContent = message;
+  input.value = defaultValue || '';
+  promptCallback = onConfirm;
+  modal.classList.remove('confirm-hidden');
+  
+  // Focus and select input after slightly delaying for structural display
+  setTimeout(() => {
+    input.focus();
+    input.select();
+  }, 50);
+  
+  const cancelBtn = document.getElementById('prompt-cancel');
+  const okBtn = document.getElementById('prompt-ok');
+  
+  const cleanup = () => {
+    modal.classList.add('confirm-hidden');
+    cancelBtn.removeEventListener('click', handleCancel);
+    okBtn.removeEventListener('click', handleOk);
+    input.removeEventListener('keydown', handleKey);
+  };
+  
+  const handleCancel = () => cleanup();
+  const handleOk = () => {
+    cleanup();
+    if (promptCallback) promptCallback(input.value);
+  };
+  
+  const handleKey = (e) => {
+    if (e.key === 'Enter') handleOk();
+    if (e.key === 'Escape') handleCancel();
+  };
+  
+  cancelBtn.addEventListener('click', handleCancel);
+  okBtn.addEventListener('click', handleOk);
+  input.addEventListener('keydown', handleKey);
+}
 
 // ============================================================================
 // VALIDATION & ERROR HANDLING UTILITIES (Phase 2 Feature)
@@ -210,14 +356,28 @@ function auditPermissions(manifest) {
  * @param {KeyboardEvent} e - Keyboard event
  */
 function handleKeyboardShortcuts(e) {
-  // Ignore shortcuts when typing in inputs/textareas (except CodeMirror)
+  // Command Palette: Ctrl+Shift+P or Cmd+Shift+P
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'p') {
+    e.preventDefault();
+    openCommandPalette();
+    return;
+  }
+
+  // Escape: Close Command Palette if open
+  if (cmdIsOpen && e.key === 'Escape') {
+    e.preventDefault();
+    closeCommandPalette();
+    return;
+  }
+
+  // Ignore other shortcuts when typing in inputs/textareas (except CodeMirror)
   const target = e.target;
   if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
     return;
   }
 
   // Ctrl/Cmd + S: Save project
-  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     saveCurrentProject();
     return;
@@ -260,7 +420,7 @@ function handleKeyboardShortcuts(e) {
     return;
   }
 
-  // Escape: Close modals/preview
+  // Escape: Close modals/preview (non-palette context)
   if (e.key === 'Escape') {
     const previewContainer = document.getElementById('preview-container');
     if (previewContainer && previewContainer.style.display !== 'none') {
@@ -285,14 +445,19 @@ function showKeyboardHelp() {
         <tr><td style="padding: 8px;"><kbd>Esc</kbd></td><td>Close Preview/Modal</td></tr>
       </table>
       <p style="margin-top: 15px; color: #888; font-size: 12px;">Use Cmd instead of Ctrl on Mac</p>
-      <button onclick="document.getElementById('analysis-results').style.display='none'" 
-              style="margin-top: 15px; padding: 8px 16px; cursor: pointer;">Close</button>
     </div>
   `;
 
   const resultsDiv = document.getElementById('analysis-results');
   if (resultsDiv) {
     resultsDiv.innerHTML = help;
+    // Attach close handler dynamically instead of inline onclick
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'btn btn-secondary btn-small';
+    closeBtn.style.cssText = 'margin-top: 15px; width: 100%;';
+    closeBtn.textContent = 'Close';
+    closeBtn.addEventListener('click', () => { resultsDiv.style.display = 'none'; });
+    resultsDiv.querySelector('.analysis-item, div')?.appendChild(closeBtn) || resultsDiv.appendChild(closeBtn);
     resultsDiv.style.display = 'block';
   }
 }
@@ -361,10 +526,24 @@ document.addEventListener('DOMContentLoaded', () => {
     cmEditor.on('change', () => {
       if (currentProject && currentFile) {
         currentProject.files[currentFile] = cmEditor.getValue();
+        document.querySelector('.editor-tab')?.classList.add('unsaved');
         // Debounce preview update using module-scoped variable (not 'this')
         if (_previewTimeout) clearTimeout(_previewTimeout);
         _previewTimeout = setTimeout(() => updatePreview(), 500);
       }
+    });
+  }
+
+  // Init CodeMirror for Context Dialog
+  const contextTextarea = document.getElementById('context-dialog-textarea');
+  if (contextTextarea) {
+    cmContextEditor = CodeMirror.fromTextArea(contextTextarea, {
+      lineNumbers: true,
+      mode: 'markdown',
+      theme: 'dracula',
+      lineWrapping: true,
+      readOnly: true,
+      viewportMargin: Infinity
     });
   }
 
@@ -403,26 +582,43 @@ function renderProjectsList() {
   const projectsList = document.getElementById('projects-list');
 
   if (projects.length === 0) {
-    projectsList.innerHTML = '<p class="empty-state">No projects yet. Create your first extension!</p>';
+    projectsList.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">📦</div>
+        <p>No projects yet. Create your first extension!</p>
+        <button id="empty-new-project-btn" class="btn btn-primary empty-state-cta">✨ Start from Template</button>
+      </div>
+    `;
+    // Wire CTA to switch to templates
+    document.getElementById('empty-new-project-btn')?.addEventListener('click', () => switchTab('templates'));
     return;
   }
 
   projectsList.innerHTML = projects.map((project, index) => `
     <div class="project-item" data-index="${index}">
-      <button class="project-delete-btn" onclick="deleteProject(${index})" title="Delete project">×</button>
+      <button class="project-delete-btn" data-delete-index="${index}" title="Delete project">×</button>
       <div class="project-icon">📦</div>
       <div class="project-name">${project.name}</div>
       <div class="project-meta">Modified: ${new Date(project.modified).toLocaleDateString()}</div>
     </div>
   `).join('');
 
-  // Add click handlers
+  // Add click handlers for loading projects
   document.querySelectorAll('.project-item').forEach(item => {
     item.addEventListener('click', (e) => {
-      if (!e.target.classList.contains('btn')) {
+      if (!e.target.classList.contains('project-delete-btn')) {
         const index = parseInt(item.dataset.index);
         loadProject(index);
       }
+    });
+  });
+
+  // Add click handlers for delete buttons (CSP-safe)
+  document.querySelectorAll('.project-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const index = parseInt(btn.dataset.deleteIndex);
+      deleteProject(index);
     });
   });
 }
@@ -447,7 +643,7 @@ document.getElementById('new-project-btn')?.addEventListener('click', () => {
     modified: Date.now()
   };
 
-  switchTab('builder');
+  switchTab('code');
   updateFileTree();
   loadFileIntoEditor('manifest.json');
   document.getElementById('project-name').value = currentProject.name;
@@ -456,13 +652,14 @@ document.getElementById('new-project-btn')?.addEventListener('click', () => {
 
 /**
  * Loads a specific project by index and opens it in the builder.
- * @param {number} index - The index of the project in the projects array
+ * @param {number} index - The index of the project to delete
  */
 function loadProject(index) {
   currentProject = projects[index];
   currentProject.index = index;
-
-  switchTab('builder');
+  openFiles = ['manifest.json'];
+  
+  switchTab('code');
   updateFileTree();
   loadFileIntoEditor('manifest.json');
   document.getElementById('project-name').value = currentProject.name;
@@ -474,12 +671,12 @@ function loadProject(index) {
  * @param {number} index - The index of the project to delete
  */
 function deleteProject(index) {
-  if (confirm('Are you sure you want to delete this project?')) {
+  showConfirmDialog('Are you sure you want to delete this project?', () => {
     projects.splice(index, 1);
     saveProjects();
     renderProjectsList();
     showStatus('Project deleted', 'success');
-  }
+  });
 }
 
 /**
@@ -497,7 +694,114 @@ function updateFileTree() {
     item.className = 'file-item';
     if (filename === currentFile) item.classList.add('active');
     item.dataset.file = filename;
-    item.textContent = filename;
+    
+    // Determine icon based on file extension
+    let icon = '📄';
+    if (filename.endsWith('.js')) icon = '⚡';
+    else if (filename.endsWith('.css')) icon = '🎨';
+    else if (filename.endsWith('.html')) icon = '🏗️';
+    else if (filename.endsWith('.json')) icon = '⚙️';
+    else if (filename.endsWith('.md')) icon = '📝';
+    else if (filename.endsWith('.svg') || filename.endsWith('.png')) icon = '🖼️';
+
+    item.innerHTML = `
+      <span class="file-icon" style="opacity: 0.8; font-size: 13px; margin-right: 6px;">${icon}</span>
+      <span class="file-name" style="font-family: var(--font-mono); font-size: 11px; flex: 1;">${filename}</span>
+      <span class="file-rename-btn" style="opacity: 0; font-size: 10px; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: all 0.2s;" title="Rename File">✏️</span>
+      <span class="file-delete-btn" style="opacity: 0; font-size: 10px; cursor: pointer; padding: 2px 4px; border-radius: 4px; transition: all 0.2s; margin-left: 2px;" title="Delete File">✖</span>
+    `;
+
+    item.addEventListener('mouseenter', () => {
+      const delBtn = item.querySelector('.file-delete-btn');
+      const renBtn = item.querySelector('.file-rename-btn');
+      if (delBtn && filename !== 'manifest.json') delBtn.style.opacity = '0.6';
+      if (renBtn && filename !== 'manifest.json') renBtn.style.opacity = '0.7';
+    });
+
+    item.addEventListener('mouseleave', () => {
+      const delBtn = item.querySelector('.file-delete-btn');
+      const renBtn = item.querySelector('.file-rename-btn');
+      if (delBtn) delBtn.style.opacity = '0';
+      if (renBtn) renBtn.style.opacity = '0';
+    });
+
+    // Make the action buttons light up on hover
+    item.querySelector('.file-rename-btn').addEventListener('mouseenter', (e) => {
+        e.target.style.opacity = '1';
+        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+    });
+    item.querySelector('.file-rename-btn').addEventListener('mouseleave', (e) => {
+        if (item.matches(':hover')) e.target.style.opacity = '0.7';
+        e.target.style.background = 'transparent';
+    });
+    
+    // Rename handler
+    item.querySelector('.file-rename-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (filename === 'manifest.json') {
+          showStatus('Cannot rename manifest.json', 'error');
+          return;
+      }
+      showPromptDialog('Rename file:', filename, (newName) => {
+        if (!newName || newName.trim() === '' || newName === filename) return;
+        const trimName = newName.trim();
+        if (currentProject.files[trimName]) {
+          showStatus('A file with that name already exists.', 'error');
+          return;
+        }
+        
+        // Move contents
+        currentProject.files[trimName] = currentProject.files[filename];
+        delete currentProject.files[filename];
+        
+        if (currentFile === filename) {
+          currentFile = trimName;
+        }
+        
+        saveCurrentProject();
+        updateFileTree();
+        if (currentFile === trimName) {
+           loadFileIntoEditor(trimName);
+        }
+        showStatus(`Renamed to ${trimName}`, 'success');
+      });
+    });
+
+    // Make the delete button light up on hover
+    item.querySelector('.file-delete-btn').addEventListener('mouseenter', (e) => {
+        e.target.style.opacity = '1';
+        e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+        e.target.style.color = 'var(--danger-color)';
+    });
+    
+    item.querySelector('.file-delete-btn').addEventListener('mouseleave', (e) => {
+        if (item.matches(':hover')) e.target.style.opacity = '0.6';
+        e.target.style.background = 'transparent';
+        e.target.style.color = 'inherit';
+    });
+
+    item.querySelector('.file-delete-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (filename === 'manifest.json') {
+          showStatus('Cannot delete manifest.json', 'error');
+          return;
+      }
+      showConfirmDialog(`Delete ${filename}?`, () => {
+          delete currentProject.files[filename];
+          if (currentFile === filename) {
+              const files = Object.keys(currentProject.files);
+              currentFile = files.length > 0 ? files[0] : null;
+              if (currentFile) {
+                  loadFileIntoEditor(currentFile);
+              } else {
+                  cmEditor.setValue('');
+              }
+          }
+          saveCurrentProject();
+          updateFileTree();
+          showStatus(`${filename} deleted.`, 'info');
+      });
+    });
 
     item.addEventListener('click', () => {
       loadFileIntoEditor(filename);
@@ -514,8 +818,34 @@ function updateFileTree() {
  * Handles tab switching, button clicks, and user interactions.
  */
 function setupEventListeners() {
+  // Initialize UI interactive components
+  initSidebarResizers();
+
   // Keyboard shortcuts — single canonical registration (NOT added in DOMContentLoaded)
   document.addEventListener('keydown', handleKeyboardShortcuts);
+
+  // New File Handler
+  document.getElementById('new-file-btn')?.addEventListener('click', () => {
+      if (!currentProject) {
+          showStatus('Start a project first.', 'error');
+          return;
+      }
+      showPromptDialog('Enter new filename (with extension, e.g., utils.js):', '', (newName) => {
+        if (newName && newName.trim()) {
+            const trimName = newName.trim();
+            if (currentProject.files[trimName]) {
+                showStatus('File already exists.', 'error');
+                return;
+            }
+            currentProject.files[trimName] = '// New file\n';
+            currentFile = trimName;
+            saveCurrentProject();
+            updateFileTree();
+            loadFileIntoEditor(trimName);
+            showStatus(`Created ${trimName}`, 'success');
+        }
+      });
+  });
 
   // Tab switching
   document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -597,6 +927,19 @@ function setupEventListeners() {
   // SITE_CONTEXT Extraction (Unified)
   document.getElementById('btn-extract-context')?.addEventListener('click', handleContextExtraction);
 
+  // Context Dialog Actions
+  document.getElementById('close-context-dialog')?.addEventListener('click', () => {
+    document.getElementById('context-dialog').classList.add('context-dialog-hidden');
+  });
+
+  document.getElementById('copy-context-dialog')?.addEventListener('click', () => {
+    const textarea = document.getElementById('context-dialog-textarea');
+    if (textarea && textarea.value) {
+      navigator.clipboard.writeText(textarea.value);
+      showStatus('Context copied to clipboard!', 'success');
+    }
+  });
+
 
   document.getElementById('scan-visualize')?.addEventListener('click', () => runAnalysis('visualize'));
   document.getElementById('scan-sequence')?.addEventListener('click', () => runAnalysis('sequence'));
@@ -622,6 +965,23 @@ function setupEventListeners() {
   document.getElementById('scan-shadow')?.addEventListener('click', () => runAnalysis('shadow'));
   document.getElementById('scan-emotion')?.addEventListener('click', () => runAnalysis('emotion'));
   document.getElementById('run-omniscience-btn')?.addEventListener('click', handleOmniscienceExtraction);
+  document.getElementById('run-remix-pipeline')?.addEventListener('click', handlePipelineRun);
+
+  // Wire up empty state CTA (initial render)
+  document.getElementById('empty-new-project-btn')?.addEventListener('click', () => switchTab('templates'));
+
+  // Tab Isolation Listeners
+  if (typeof chrome !== 'undefined' && chrome.tabs) {
+    chrome.tabs.onActivated.addListener(() => REMIX_STATE.updateActiveTab());
+    chrome.tabs.onUpdated.addListener((tabId, info) => {
+      if (info.status === 'complete') REMIX_STATE.updateActiveTab();
+    });
+    chrome.tabs.onRemoved.addListener((tabId) => {
+      REMIX_STATE.clearTab(tabId);
+    });
+    // Initial sync
+    REMIX_STATE.updateActiveTab();
+  }
 
 
   document.getElementById('clear-results')?.addEventListener('click', () => {
@@ -649,24 +1009,19 @@ function setupEventListeners() {
   document.getElementById('view-extracted-context')?.addEventListener('click', () => {
     const dialog = document.getElementById('context-dialog');
     const textarea = document.getElementById('context-dialog-textarea');
-    if (window.LAST_MARKDOWN_CONTEXT) {
-      textarea.value = window.LAST_MARKDOWN_CONTEXT;
+    const record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+    if (record && record.markdown) {
+      if (cmContextEditor) {
+        cmContextEditor.setValue(record.markdown);
+        setTimeout(() => cmContextEditor.refresh(), 50);
+      } else {
+        textarea.value = record.markdown;
+      }
     }
     dialog.classList.remove('context-dialog-hidden');
   });
 
-  document.getElementById('close-context-dialog')?.addEventListener('click', () => {
-    document.getElementById('context-dialog').classList.add('context-dialog-hidden');
-  });
-
-  document.getElementById('copy-context-dialog')?.addEventListener('click', () => {
-    const text = document.getElementById('context-dialog-textarea').value;
-    if (text) {
-      navigator.clipboard.writeText(text).then(() => showStatus('Context copied to clipboard!', 'success'));
-    } else {
-      showStatus('No context to copy', 'error');
-    }
-  });
+  // (Removed duplicate close-context-dialog and copy-context-dialog listeners — already wired above at lines 691-701)
 
   // MacGyver Tools removed from here as they are wired up below via toggleTool or runMacGyver
   // Helper to toggle button state and send message
@@ -696,14 +1051,20 @@ function setupEventListeners() {
 
           // Handle specific response data
           if (response) {
+            // Payload size telemetry (Gap B)
+            const size = JSON.stringify(response).length;
+            const sizeStr = size > 1024 * 1024 
+              ? ` (${(size / 1024 / 1024).toFixed(1)}MB)` 
+              : size > 1024 ? ` (${(size / 1024).toFixed(1)}KB)` : '';
+
             if (response.active === true || response.status === 'active' || response.status === 'visible') {
-              if (successMsg) showStatus(successMsg, 'success');
+              if (successMsg) showStatus(successMsg + sizeStr, 'success');
               if (!oneShotTools.includes(btnId)) btn.classList.add('active');
             } else if (response.active === false || response.status === 'inactive' || response.status === 'hidden') {
-              if (failMsg) showStatus(failMsg, 'info');
+              if (failMsg) showStatus(failMsg + sizeStr, 'info');
               btn.classList.remove('active');
             } else if (response.count !== undefined) {
-              showStatus(`${successMsg}: ${response.count}`, 'success');
+              showStatus(`${successMsg}: ${response.count}${sizeStr}`, 'success');
               // One-shot tools often don't keep active state
               setTimeout(() => btn.classList.remove('active'), 200);
             }
@@ -739,6 +1100,27 @@ function setupEventListeners() {
   document.getElementById('tool-kill-sticky')?.addEventListener('click', () => toggleTool('tool-kill-sticky', 'killStickies', 'Sticky Elements Removed', null));
   document.getElementById('tool-record')?.addEventListener('click', toggleRecording);
   
+  // --- Tool Info Bar (Toolkit Tab) ---
+  const toolInfoBar = document.getElementById('tool-info-bar');
+  document.querySelectorAll('#tools-tab .tool-btn').forEach(btn => {
+    btn.addEventListener('mouseenter', () => {
+      const icon = btn.querySelector('.icon')?.textContent || '🛠';
+      const label = btn.querySelector('.tool-btn-label')?.textContent || 'Tool';
+      const desc = btn.dataset.desc || btn.title || '';
+      const type = btn.dataset.type || '';
+      
+      document.getElementById('tool-info-icon').textContent = icon;
+      document.getElementById('tool-info-name').textContent = label;
+      document.getElementById('tool-info-desc').textContent = desc;
+      
+      const badge = document.getElementById('tool-info-type');
+      badge.textContent = type === 'toggle' ? 'Toggle' : type === 'action' ? 'One-Shot' : '—';
+      badge.className = 'tool-type-badge ' + (type || '');
+      
+      toolInfoBar?.classList.add('active');
+    });
+  });
+
   let recordingActive = false;
   async function toggleRecording() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -813,33 +1195,45 @@ function setupEventListeners() {
   // --- Unified Extraction Handlers ---
 
   async function handleOmniscienceExtraction() {
+    const omniBtn = document.getElementById('run-omniscience-btn');
+    if (omniBtn) omniBtn.classList.add('loading');
     showStatus('Aggregating Intelligence Blueprint...', 'info');
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
+    if (!tab) { if (omniBtn) omniBtn.classList.remove('loading'); return; }
     try {
       const ready = await ensureContentScriptReady(tab.id);
       if (!ready) throw new Error("Content script injection failed");
       const response = await sendMessageWithTimeout(tab.id, { action: 'analyzeOmniscience' }, 30000);
-      displayOmniscienceResults(response);
-      
-      // Store as DNA for template hydration
-      window.LAST_SITE_DNA = response;
-      
-      // Update Context Dialog specific to this view
-      window.LAST_MARKDOWN_CONTEXT = formatAnalysisForLLM('omniscience', response, tab);
-      const textarea = document.getElementById('context-dialog-textarea');
-      if (textarea && !document.getElementById('context-dialog').classList.contains('context-dialog-hidden')) {
-          textarea.value = window.LAST_MARKDOWN_CONTEXT;
-      }
+      if (response) {
+        if (response.error) throw new Error(response.error);
 
-      showStatus('Omniscient Blueprint ready!', 'success');
+        // Store in isolated tab state
+        const record = REMIX_STATE.getTabRecord(tab.id);
+        if (record) {
+          record.context['omniscience'] = response;
+          record.viewType = 'omniscience';
+          record.dna = response;
+
+          // Update Context Dialog specific to this view
+          record.markdown = formatAnalysisForLLM('omniscience', response, tab);
+          if (cmContextEditor && !document.getElementById('context-dialog').classList.contains('context-dialog-hidden')) {
+            cmContextEditor.setValue(record.markdown);
+            setTimeout(() => cmContextEditor.refresh(), 10);
+          }
+        }
+
+        displayOmniscienceResults(response);
+        showStatus('Omniscient Blueprint ready!', 'success');
+      } else {
+        throw new Error('Empty response');
+      }
     } catch (error) {
       console.error('[ReMixr] Omniscience extraction failed:', error);
       showStatus(`Blueprint failed: ${error.message}`, 'error');
+    } finally {
+      if (omniBtn) omniBtn.classList.remove('loading');
     }
   }
-
-
 
   async function handleContextExtraction() {
     showStatus('Extracting Site DNA...', 'info');
@@ -852,25 +1246,73 @@ function setupEventListeners() {
     try {
       const ready = await ensureContentScriptReady(tab.id);
       if (!ready) throw new Error("Content script injection failed");
-      const response = await sendMessageWithTimeout(tab.id, { action: 'generateLLMContext' }, 30000);
-      if (response && response.markdown) {
-        window.LAST_MARKDOWN_CONTEXT = response.markdown;
-        const textarea = document.getElementById('context-dialog-textarea');
-        if (textarea) textarea.value = response.markdown;
+      
+      const record = REMIX_STATE.getTabRecord(tab.id);
+      if (!record) throw new Error('Tab record lost during extraction');
 
-        displayMetamodel(response.markdown);
-        showStatus('Metamodel ready!', 'success');
-        
-        // Store DNA object for template hydration
-        if (response.dna) {
-           window.LAST_SITE_DNA = response.dna;
+      // RESET DNA for fresh extraction
+      record.dna = {};
+
+      // PHASE 1: CORE STRUCTURE
+      showStatus('Phase 1/3: Reconstructing DOM Skeleton...', 'info');
+      const p1 = await sendMessageWithTimeout(tab.id, { 
+        action: 'generateLLMContext', 
+        layers: ['rawCSS', 'htmlSkeleton', 'sectionedContent'] 
+      }, 15000);
+      
+      if (p1) {
+        REMIX_STATE.mergeDNA(tab.id, p1.dna);
+        record.markdown = p1.markdown;
+        if (cmContextEditor) cmContextEditor.setValue(record.markdown);
+      }
+
+      // PHASE 2: DESIGN & PATTERNS
+      showStatus('Phase 2/3: Decoding Design Language...', 'info');
+      const p2 = await sendMessageWithTimeout(tab.id, { 
+        action: 'generateLLMContext', 
+        layers: ['designSystem', 'layoutBlueprint', 'templatePatterns', 'classVocabulary'] 
+      }, 15000);
+      
+      if (p2) {
+        REMIX_STATE.mergeDNA(tab.id, p2.dna);
+        // Re-render markdown with combined DNA
+        const response = await sendMessageWithTimeout(tab.id, { 
+          action: 'generateLLMContext', 
+          dna: record.dna // Pass accumulated DNA
+        }, 8000);
+        if (response) record.markdown = response.markdown;
+        if (cmContextEditor) cmContextEditor.setValue(record.markdown);
+      }
+
+      // PHASE 3: DEEP INTELLIGENCE
+      showStatus('Phase 3/3: Strategic Finalization...', 'info');
+      const p3 = await sendMessageWithTimeout(tab.id, { 
+        action: 'generateLLMContext', 
+        layers: ['strategy', 'psyche', 'soul', 'archetype', 'rhetoric', 'emotion', 'apiSurface', 'frameworkState'] 
+      }, 25000);
+
+      if (p3) {
+        REMIX_STATE.mergeDNA(tab.id, p3.dna);
+        const finalRes = await sendMessageWithTimeout(tab.id, { 
+          action: 'generateLLMContext', 
+          dna: record.dna 
+        }, 8000);
+        if (finalRes) {
+          record.markdown = finalRes.markdown;
+          record.viewType = 'omniscience';
+          if (cmContextEditor) {
+            cmContextEditor.setValue(record.markdown);
+            setTimeout(() => cmContextEditor.refresh(), 100);
+          }
         }
-      } else { throw new Error(response?.error || 'Empty response'); }
+      }
+
+      showStatus('Site intelligence extracted', 'success');
+      displayMetamodel(record.markdown);
     } catch (error) {
       console.error('[ReMixr] Context extraction failed:', error);
       showStatus(`Extraction error: ${error.message}`, 'error');
     } finally {
-
       btn.innerHTML = originalText;
       btn.classList.remove('loading');
     }
@@ -972,17 +1414,181 @@ function setupEventListeners() {
     });
   });
 
+  // --- Pipeline UI Handlers ---
+  async function handlePipelineRun() {
+    const orchestrator = document.getElementById('pipeline-orchestrator');
+    const runBtn = document.getElementById('run-remix-pipeline');
+    const progressFill = document.getElementById('pipeline-progress-fill');
+    
+    if (!orchestrator) return;
+    
+    if (runBtn) runBtn.classList.add('loading');
+    if (progressFill) progressFill.classList.add('active');
+    
+    try {
+        // Check if DNA exists — if not, auto-extract first
+        let record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+        if (!record || !record.dna || Object.keys(record.dna).length === 0) {
+            showStatus('No site DNA found — auto-extracting...', 'info');
+            // Auto-run omniscience extraction
+            await handleOmniscienceExtraction();
+            // Re-check after extraction
+            record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+            if (!record || !record.dna || Object.keys(record.dna).length === 0) {
+                showStatus('DNA extraction failed. Visit a website and try again.', 'error');
+                return;
+            }
+            showStatus('DNA extracted! Running pipeline...', 'success');
+        }
+
+        orchestrator.innerHTML = '';
+        showStatus('Agentic Pipeline Initialized...', 'info');
+
+        updatePipelineProgressBar('init', 'running');
+        await PipelineEngine.run('remix_generation', { dna: record.dna }, (stepId, status, data) => {
+            updatePipelineStepUI(stepId, status, data);
+        });
+        showStatus('All agents completed!', 'success');
+    } catch (e) {
+        showStatus('Pipeline halted: ' + e.message, 'error');
+    } finally {
+        if (runBtn) runBtn.classList.remove('loading');
+        if (progressFill) progressFill.classList.remove('active');
+    }
+  }
+
+  function getAgentIcon(stepId) {
+      if (stepId.includes('auditor')) return '🛡️';
+      if (stepId.includes('architect')) return '📐';
+      if (stepId.includes('synthesizer')) return '🔮';
+      return '🤖';
+  }
+
+  function updatePipelineProgressBar(stepId, status) {
+      const track = document.getElementById('pipeline-progress-fill');
+      if (!track) return;
+      
+      const steps = ['init', 'strategic_auditor', 'security_auditor', 'remix_architect', 'code_synthesizer'];
+      const idx = steps.indexOf(stepId);
+      if (idx === -1) return;
+      
+      const percentage = (idx / (steps.length - 1)) * 100;
+      track.style.width = `${percentage}%`;
+  }
+
+  function updatePipelineStepUI(stepId, status, data) {
+      const orchestrator = document.getElementById('pipeline-orchestrator');
+      let stepEl = document.getElementById(`step-${stepId}`);
+      
+      if (!stepEl) {
+          stepEl = document.createElement('div');
+          stepEl.id = `step-${stepId}`;
+          stepEl.className = 'pipeline-step-premium';
+          orchestrator.appendChild(stepEl);
+      }
+
+      stepEl.className = `pipeline-step-premium ${status}`;
+      const title = stepId.replace(/_/g, ' ').toUpperCase();
+      const meta = status === 'running' ? 'EXECUTING...' : status.toUpperCase();
+
+      let content = '';
+      if (stepId === 'strategic_auditor' && status === 'success') {
+          content = `
+            <div class="artifact-card">
+              <span class="artifact-label">Strategic SWOT Artifact</span>
+              <div class="artifact-grid">
+                <div class="artifact-item strength"><span class="artifact-label">Strength</span><div class="artifact-value">${data.audit.strengths[0] || 'Modern Stack'}</div></div>
+                <div class="artifact-item weakness"><span class="artifact-label">Weakness</span><div class="artifact-value">${data.audit.weaknesses[0] || 'Friction'}</div></div>
+              </div>
+            </div>
+          `;
+      } else if (stepId === 'security_auditor' && status === 'success') {
+          const res = data.securityAudit;
+          content = `
+            <div class="artifact-card">
+              <span class="artifact-label">Privacy & Trust Report</span>
+              <div class="artifact-item ${res.riskLevel === 'Clean' ? 'strength' : 'weakness'}">
+                <div class="artifact-value">${res.risks[0] || 'SSL Active / Safe Pattern Match'}</div>
+              </div>
+            </div>
+          `;
+      } else if (stepId === 'remix_architect' && status === 'success') {
+          content = `
+            <div class="artifact-card">
+              <span class="artifact-label">Architectural Proposals</span>
+              <div class="artifact-value">${data.suggestedOpportunities.length} Remix Paths Generated</div>
+              <div style="font-size:10px; color:var(--text-dim); margin-top:8px;">Selected: ${data.suggestedOpportunities[0]?.type}</div>
+            </div>
+          `;
+      } else if (stepId === 'code_synthesizer' && status === 'success') {
+          const topRemix = data.synthesizedCode[0];
+          content = `
+            <div class="synth-header">
+                <span class="synth-name">${topRemix.type} Artifact</span>
+                <span class="synth-badge">${topRemix.impact} impact</span>
+            </div>
+            <div class="code-artifact-viewer">
+              <code>${topRemix.code.replace(/\n/g, '<br>').replace(/\s/g, '&nbsp;')}</code>
+            </div>
+            <button class="btn btn-primary" style="width:100%; margin-top:12px;" id="apply-${stepId}">
+              <span>🚀 Deploy Generated Remix</span>
+            </button>
+          `;
+      }
+
+      stepEl.innerHTML = `
+        <div class="step-header-premium">
+          <div class="step-label">
+            <span class="step-icon">${getAgentIcon(stepId)}</span>
+            <span>${title}</span>
+          </div>
+          <div class="step-meta">${meta}</div>
+        </div>
+        <div class="step-content-premium">${content || '<div class="loader-wave">Analyzing target asset...</div>'}</div>
+      `;
+
+      if (stepId === 'code_synthesizer' && status === 'success') {
+          const btn = document.getElementById(`apply-${stepId}`);
+          if (btn) btn.onclick = () => handleBuildRemix(data.synthesizedCode[0]);
+      }
+      
+      updatePipelineProgressBar(stepId, status);
+  }
+
+
   // --- Global Message Listener for Content Script Communication ---
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'elementSelected') {
-      const { selector, tagName, styles, variables } = request.data;
-
-      // Update UI
-      const panel = document.getElementById('inspector-panel');
+      const { selector, tagName, styles, variables, accessibility, context } = request.data;
       const tagEl = document.getElementById('inspector-element-tag');
       const selectorEl = document.getElementById('inspector-element-selector');
       const varList = document.getElementById('inspector-variables-list');
+      const panel = document.getElementById('inspector-panel');
 
+      // Accessibility & Context UI
+      const roleEl = document.getElementById('inspector-a11y-role');
+      const depthEl = document.getElementById('inspector-context-depth');
+      const parentEl = document.getElementById('inspector-context-parent');
+
+      if (roleEl) roleEl.textContent = accessibility?.role || '-';
+      if (depthEl) depthEl.textContent = context?.depth || '0';
+      if (parentEl) parentEl.textContent = context?.parent || '-';
+
+      // Update isolated tab state
+      const record = REMIX_STATE.getTabRecord(sender?.tab?.id || REMIX_STATE.activeTabId);
+      if (record) {
+        record.element = request.data;
+        // Refresh markdown if this view is open
+        const ctxDialog = document.getElementById('context-dialog');
+        if (ctxDialog && !ctxDialog.classList.contains('context-dialog-hidden')) {
+          const type = record.viewType || 'omniscience';
+          record.markdown = formatAnalysisForLLM(type, record.context[type] || {}, { title: document.title, url: window.location.href });
+          const textarea = document.getElementById('context-dialog-textarea');
+          if (textarea) textarea.value = record.markdown;
+        }
+      }
+
+      // Update UI
       if (panel && tagEl && selectorEl) {
         panel.style.display = 'flex';
         tagEl.textContent = tagName.toUpperCase();
@@ -990,9 +1596,9 @@ function setupEventListeners() {
 
         // Populate styles
         panel.querySelectorAll('[data-prop]').forEach(input => {
-          const prop = input.dataset.prop;
-          if (styles[prop]) {
-            let value = styles[prop];
+          const prp = input.dataset.prop;
+          if (styles[prp]) {
+            let value = styles[prp];
             if (input.type === 'color' && value.startsWith('rgb')) {
               value = rgbToHex(value);
             }
@@ -1016,7 +1622,6 @@ function setupEventListeners() {
               `;
               varList.appendChild(row);
 
-              // Add change listener
               row.querySelector('input').addEventListener('change', async (e) => {
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (tab) {
@@ -1031,7 +1636,6 @@ function setupEventListeners() {
             });
           }
         }
-
         showStatus(`Inspecting: ${tagName}`, 'info');
       }
     }
@@ -1107,7 +1711,15 @@ function setupEventListeners() {
  * Switches between different tabs in the ReMixr IDE.
  * @param {string} tabName - Name of the tab to switch to ('projects', 'templates', 'code', 'ui', 'analyzer', 'tools')
  */
+const _tabScrollPositions = {};
+
 function switchTab(tabName) {
+  // Save scroll position of the currently active tab
+  const activeTab = document.querySelector('.tab-content.active');
+  if (activeTab) {
+    _tabScrollPositions[activeTab.id] = activeTab.scrollTop;
+  }
+
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabName);
   });
@@ -1116,8 +1728,31 @@ function switchTab(tabName) {
     content.classList.toggle('active', content.id === `${tabName}-tab`);
   });
 
+  // Restore scroll position of the newly active tab
+  const newTab = document.getElementById(`${tabName}-tab`);
+  if (newTab && _tabScrollPositions[newTab.id] !== undefined) {
+    requestAnimationFrame(() => {
+      newTab.scrollTop = _tabScrollPositions[newTab.id];
+    });
+  }
+
+  // CRITICAL FLOW FIX: Force CodeMirror to refresh its layout after being hidden, 
+  // otherwise the editor canvas will remain broken/blank until clicked.
+  if (tabName === 'code' && typeof cmEditor !== 'undefined') {
+    requestAnimationFrame(() => cmEditor.refresh());
+  }
+
+  if (tabName === 'analyzer' && typeof cmContextEditor !== 'undefined') {
+    requestAnimationFrame(() => cmContextEditor.refresh());
+  }
+
   if (tabName === 'ui') {
     initShinyTab();
+  }
+
+  // Refresh context dialog if it's open and we switch tabs
+  if (tabName === 'analyzer') {
+    REMIX_STATE.updateActiveTab();
   }
 }
 
@@ -1147,16 +1782,19 @@ function loadTemplate(templateName) {
   }
 
   // Hydrate project with Site DNA if available (Ambient Intelligence)
-  if (window.LAST_SITE_DNA && typeof HydrationEngine !== 'undefined') {
-    currentProject = HydrationEngine.hydrate(currentProject, window.LAST_SITE_DNA);
+  const record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+  const dna = record ? record.dna : null;
+  if (dna && typeof HydrationEngine !== 'undefined') {
+    currentProject = HydrationEngine.hydrate(currentProject, dna);
   }
 
   switchTab('code');
   document.getElementById('project-name').value = currentProject.name;
+  openFiles = ['manifest.json'];
   currentFile = 'manifest.json';
   updateFileTree();
   loadFileIntoEditor('manifest.json');
-  showStatus(`Template "${template.name}" loaded${window.LAST_SITE_DNA ? ' (Hydrated with Site DNA)' : ''}`, 'success');
+  showStatus(`Template "${template.name}" loaded${dna ? ' (Hydrated with Site DNA)' : ''}`, 'success');
 }
 
 // Load file into editor
@@ -1167,8 +1805,12 @@ function loadTemplate(templateName) {
 function loadFileIntoEditor(filename) {
   if (!currentProject) return;
 
+  if (!openFiles.includes(filename)) {
+    openFiles.push(filename);
+  }
+
   currentFile = filename;
-  const fileHeader = document.getElementById('current-file');
+  renderEditorTabs();
 
   const content = currentProject.files[filename] || '';
 
@@ -1182,8 +1824,63 @@ function loadFileIntoEditor(filename) {
     cmEditor.setValue(content);
     setTimeout(() => cmEditor.refresh(), 10);
   }
+}
 
-  fileHeader.textContent = filename;
+function renderEditorTabs() {
+  const container = document.getElementById('editor-tabs-container');
+  if (!container) return;
+  
+  container.innerHTML = '';
+  
+  openFiles.forEach(file => {
+    const tab = document.createElement('div');
+    tab.className = 'editor-tab' + (file === currentFile ? ' active' : '');
+    
+    tab.innerHTML = `
+      <span class="tab-filename" style="margin-right: 8px;">${file}</span>
+      <span class="tab-close" style="font-size: 10px; cursor: pointer; opacity: 0.6; padding: 2px;">✖</span>
+    `;
+    
+    tab.querySelector('.tab-close').addEventListener('mouseenter', e => { e.target.style.opacity = '1'; e.target.style.color = 'var(--danger-color)'; });
+    tab.querySelector('.tab-close').addEventListener('mouseleave', e => { e.target.style.opacity = '0.6'; e.target.style.color = ''; });
+    
+    tab.querySelector('.tab-filename').addEventListener('click', () => {
+        if (file !== currentFile) loadFileIntoEditor(file);
+    });
+
+    tab.querySelector('.tab-close').addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeFileTab(file);
+    });
+
+    tab.addEventListener('auxclick', (e) => {
+      if (e.button === 1) { // Middle click closes it
+        e.stopPropagation();
+        closeFileTab(file);
+      }
+    });
+    
+    container.appendChild(tab);
+  });
+}
+
+function closeFileTab(filename) {
+   const idx = openFiles.indexOf(filename);
+   if (idx > -1) {
+      openFiles.splice(idx, 1);
+      if (currentFile === filename) {
+         if (openFiles.length > 0) {
+             const nextFile = openFiles[Math.max(0, idx - 1)];
+             loadFileIntoEditor(nextFile);
+         } else {
+             currentFile = null;
+             if (cmEditor) cmEditor.setValue('// No file open');
+             renderEditorTabs();
+         }
+      } else {
+         renderEditorTabs();
+      }
+   }
 }
 
 // SHINY LOGIC
@@ -1338,7 +2035,7 @@ async function generateVisualUI(prompt) {
             <h1>${extractName(prompt) || 'My App'}</h1>
             <button class="btn">Action</button>
         </header>
-        
+
         <div class="content">
             ${generateContentHtml(prompt)}
         </div>
@@ -1381,7 +2078,7 @@ function generateContentHtml(prompt) {
             <div class="card" style="text-align:center; padding: 3rem 1rem;">
                 <h2>Welcome to ${extractName(prompt) || 'App'}</h2>
                 <p>Start by describing more features you want to add.</p>
-                <div style="display:flex; gap:10px; justify-content:center; margin-top:1.5rem;">
+                <div style="display:flex; gap:10px; justify:center; margin-top:1.5rem;">
                     <button class="btn">Get Started</button>
                     <button class="btn" style="background:#eee; color:#333;">Learn More</button>
                 </div>
@@ -1523,7 +2220,7 @@ function generateExtractor(prompt) {
     popupJs = `document.getElementById('extract-links').textContent = 'Extract ${type}';
 document.getElementById('extract-links').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  
+
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: () => {
@@ -2094,7 +2791,9 @@ function injectFeatures() {
       }
 
       if (selectedFeatures.hotReload && !backgroundJs.includes('hot reload')) {
-        backgroundJs += `\n// Hot reload for development\nconst filesInDirectory = dir => new Promise(resolve => {\n  dir.createReader().readEntries(entries => {\n    Promise.all(entries.filter(e => e.name[0] !== '.').map(e =>\n      e.isDirectory ? filesInDirectory(e) : new Promise(resolve => e.file(resolve))\n    )).then(files => [].concat(...files)).then(resolve);\n  });\n});\n\nconst timestampForFilesInDirectory = dir =>\n  filesInDirectory(dir).then(files =>\n    files.map(f => f.name + f.lastModifiedDate).join());\n\nconst reload = () => {\n  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {\n    if (tabs[0]) chrome.tabs.reload(tabs[0].id);\n    chrome.runtime.reload();\n  });\n};\n\nconst watchChanges = (dir, lastTimestamp) => {\n  timestampForFilesInDirectory(dir).then(timestamp => {\n    if (!lastTimestamp || (lastTimestamp === timestamp)) {\n      setTimeout(() => watchChanges(dir, timestamp), 1000);\n    } else {\n      reload();\n    }\n  });\n};\n\nchrome.management.getSelf(self => {\n  if (self.installType === 'development') {\n    chrome.runtime.getPackageDirectoryEntry(dir => watchChanges(dir));\n  }\n});\n`;
+        backgroundJs += `\n// Hot reload for development\nconst filesInDirectory = dir => new Promise(resolve => {\n  dir.createReader().readEntries(entries => {\n    Promise.all(entries.filter(e => e.name[0] !== '.').map(e =>\n      e.isDirectory ? filesInDirectory(e) : new Promise(resolve => e.file(resolve))\n    )).then(files => [].concat(...files)).then(resolve);\n  });\n});\n\nconst timestampForFilesInDirectory = dir =>
+  filesInDirectory(dir).then(files =>
+    files.map(f => f.name + f.lastModifiedDate).join());\n\nconst reload = () => {\n  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {\n    if (tabs[0]) chrome.tabs.reload(tabs[0].id);\n    chrome.runtime.reload();\n  });\n};\n\nconst watchChanges = (dir, lastTimestamp) => {\n  timestampForFilesInDirectory(dir).then(timestamp => {\n    if (!lastTimestamp || (lastTimestamp === timestamp)) {\n      setTimeout(() => watchChanges(dir, timestamp), 1000);\n    } else {\n      reload();\n    }\n  });\n};\n\nchrome.management.getSelf(self => {\n  if (self.installType === 'development') {\n    chrome.runtime.getPackageDirectoryEntry(dir => watchChanges(dir));\n  }\n});\n`;
       }
 
       currentProject.files['background.js'] = backgroundJs;
@@ -2166,6 +2865,7 @@ function saveCurrentProject() {
   // Update file content from editor if currently editing
   if (cmEditor && currentFile) {
     currentProject.files[currentFile] = cmEditor.getValue();
+    document.querySelector('.editor-tab')?.classList.remove('unsaved');
   }
 
   // Validate manifest.json before saving
@@ -2233,7 +2933,7 @@ function testExtension() {
     <div class="analysis-item">
       <h4>How to Load Your Extension</h4>
       <div style="margin-top:10px; border-left: 2px solid var(--accent-color); padding-left:12px; font-size:12px; line-height:1.6; color:var(--text-secondary);">
-        1. Open <code style="color:var(--text-primary); background:var(--bg-tertiary); padding:2px 4px;">chrome://extensions/</code> in a new tab.<br>
+        1. Open <code style="color:var(--text-primary); background:var(--bg-tertiary); padding:2px 4px; border-radius:4px;">chrome://extensions/</code> in a new tab.<br>
         2. Enable <strong>Developer mode</strong> in the top right.<br>
         3. Click <strong>Load unpacked</strong>.<br>
         4. Select the directory you exported from ReMixr (Extract the ZIP first).
@@ -2241,10 +2941,19 @@ function testExtension() {
     </div>
     <div class="analysis-item">
       <h4>Iterating</h4>
-      <p style="font-size:11px; color:var(--text-dim);">After making changes here, re-export and click the "Reload" icon on the extension card in the Chrome Extensions page.</p>
+      <p style="font-size:11px; color:var(--text-dim); line-height:1.4;">After making changes here, re-export and click the "Reload" icon on the extension card in the Chrome Extensions page.</p>
     </div>
-    <button class="btn btn-secondary btn-small" style="margin-top:20px; width:100%;" onclick="document.getElementById('analysis-results').style.display='none'">Dismiss Guide</button>
   `;
+
+  // Avoid CSP block on inline onclick handlers
+  const dismissBtn = document.createElement('button');
+  dismissBtn.className = 'btn btn-secondary btn-small';
+  dismissBtn.style.cssText = 'margin-top:20px; width:100%;';
+  dismissBtn.textContent = 'Dismiss Guide';
+  dismissBtn.addEventListener('click', () => {
+    container.style.display = 'none';
+  });
+  content.appendChild(dismissBtn);
 }
 
 // Export extension - now handled by export.js
@@ -2300,27 +3009,41 @@ function ensureContentScript(tabId) {
 
 
 
+const CONTEXT_CLUSTERS = {
+  'psyche': ['rhetoric', 'strategy', 'shadow', 'soul', 'archetype'],
+  'rhetoric': ['psyche', 'strategy', 'archetype', 'soul'],
+  'strategy': ['psyche', 'rhetoric', 'omniscience', 'net'],
+  'palette': ['fonts', 'emotion', 'specimen', 'structure'],
+  'fonts': ['palette', 'specimen', 'structure', 'a11y'],
+  'structure': ['a11y', 'seo', 'layoutBlueprint', 'palette'],
+  'a11y': ['structure', 'seo', 'fonts'],
+  'seo': ['structure', 'a11y', 'rhetoric'],
+  'net': ['storage', 'workers', 'stack', 'code'],
+  'code': ['stack', 'perf', 'net', 'storage'],
+  'omniscience': ['psyche', 'structure', 'net', 'strategy', 'palette']
+};
+
 function formatAnalysisForLLM(type, data, tab = null) {
   const prompts = {
-    'structure': 'Use the following DOM architecture and component map to understand the page layout and semantic structure. Look for nesting depth, container patterns, and semantic misuse.',
-    'palette': 'Use the following extracted design tokens, typography, and color schemes to recreate or analyze the visual brand identity. Pay attention to color contrast and consistency.',
-    'psyche': 'Analyze the following cognitive load, dark patterns, and persuasion techniques to evaluate potential user manipulation or UX friction. Identify high-risk psychological triggers.',
-    'archetype': 'Review the following brand personality signals and archetype scores to understand the core brand identity and tone. Align messaging with the primary archetype.',
-    'shadow': 'Review these extracted dark patterns and deceptive design tactics to identify trust violations or hostile UX. Recommend removals for ethical compliance.',
-    'rhetoric': 'Analyze the following rhetorical devices, power words, and linguistic patterns to understand the copy\'s emotional and persuasive appeal. Evaluate readability versus target audience.',
-    'code': 'Review this code execution graph and script analysis to gauge performance, architecture, and external dependencies. Locate heavy scripts or privacy-risky assets.',
-    'net': 'Review the intercepted network requests to analyze the data pipeline, API usage, and resource load characteristics. Look for redundant fetches or slow endpoints.',
-    'omniscience': 'This is the complete Site DNA. Synthesize all layers (psychology, design, structure, strategy) to provide a comprehensive audit or reconstruction plan.',
-    'default': `Here is the extracted ${type.toUpperCase()} context for analysis:`
+    'structure': 'PRIMARY OBJECTIVE: Deep architectural DOM audit. Use the following hierarchy and component signals to map functional zones, layout patterns, and semantic integrity. Identify "Dead Zones" or unoptimized nesting.',
+    'palette': 'PRIMARY OBJECTIVE: Brand DNA extraction. Reconstruct design tokens from the provided color-space and font-variables. Focus on balance, contrast ratios, and "Mood" consistency using the derived specimen data.',
+    'psyche': 'PRIMARY OBJECTIVE: Cognitive friction audit. Evaluate the psychological burden, urge-to-action signals, and presence of Dark Patterns. Map the user intent against the persuasion techniques identified below.',
+    'archetype': 'PRIMARY OBJECTIVE: Narrative alignment. Map the textual and visual signals against Jungian archetypes to define the brand personality. Use these scores to ensure tone-of-voice and UX-copy coherence.',
+    'shadow': 'PRIMARY OBJECTIVE: Ethical risk assessment. Identify deceptive patterns, hidden costs, or manipulative UI elements. Propose remediation for user-first transparency and compliance.',
+    'rhetoric': 'PRIMARY OBJECTIVE: Linguistic pattern analysis. Deconstruct the copy for persuasive devices, emotional anchors, and readability. Identify "Power Words" and analyze their conversion impact.',
+    'code': 'PRIMARY OBJECTIVE: Execution & Payload audit. Analyze the script graph and network characterization to locate performance bottlenecks or tracking density. Map third-party data leakage risks.',
+    'net': 'PRIMARY OBJECTIVE: Communication pipeline analysis. Map API call sequences and data-fetching patterns. Identify redundant resource loading and evaluate server-side response characteristics.',
+    'omniscience': 'PRIMARY OBJECTIVE: Holistic Site Metamodel. Synthesize all provided data clusters (Design, Tech, Psych, Structure) into a unified blueprint for reconstruction or transformation. This is the source-of-truth.',
+    'default': `Here is the structured ${type.toUpperCase()} data for analysis:`
   };
 
   let md = `> **Prompting Hint for LLM:**\n> *${prompts[type] || prompts['default']}*\n\n`;
   md += `# Context Analysis: ${type.toUpperCase()}\n`;
-  
+
   if (tab) {
     md += `**Target:** [${tab.title || 'Page'}](${tab.url})\n`;
   }
-  
+
   md += `_Extracted at ${new Date().toLocaleTimeString()}_\n\n---\n\n`;
 
   const formatData = (obj, indent = 0) => {
@@ -2331,20 +3054,23 @@ function formatAnalysisForLLM(type, data, tab = null) {
 
     if (Array.isArray(obj)) {
       if (obj.length === 0) return 'None\n';
-      
+
       // If it's an array of objects with the same keys, use a TABLE
       if (typeof obj[0] === 'object' && obj[0] !== null) {
         const keys = Object.keys(obj[0]);
-        if (keys.length > 0 && keys.length <= 6) {
-           res += `| ${keys.join(' | ')} |\n`;
-           res += `| ${keys.map(() => '---').join(' | ')} |\n`;
-           obj.forEach(item => {
-             res += `| ${keys.map(k => {
-               const val = item[k];
-               return typeof val === 'object' ? JSON.stringify(val).slice(0, 50) : String(val).replace(/\|/g, '\\|');
-             }).join(' | ')} |\n`;
-           });
-           return res + '\n';
+        if (keys.length > 0 && keys.length <= 10) {
+          // Capitalized headers for well-formed tables
+          const headers = keys.map(k => k.charAt(0).toUpperCase() + k.slice(1));
+          res += `${spaces}| ${headers.join(' | ')} |\n`;
+          res += `${spaces}| ${keys.map(() => '---').join(' | ')} |\n`;
+          obj.forEach(item => {
+            res += `${spaces}| ${keys.map(k => {
+              const val = item[k];
+              if (val === null || val === undefined) return '-';
+              return typeof val === 'object' ? `\`${JSON.stringify(val).slice(0, 150)}\`` : String(val).replace(/\|/g, '\\|');
+            }).join(' | ')} |\n`;
+          });
+          return res + '\n';
         }
       }
 
@@ -2374,15 +3100,15 @@ function formatAnalysisForLLM(type, data, tab = null) {
     for (const [k, v] of Object.entries(obj)) {
       if (typeof v === 'object' && v !== null) {
         if (Array.isArray(v)) {
-           if (v.length === 0) {
-             res += `${spaces}- **${k}:** None\n`;
-           } else if (typeof v[0] !== 'object') {
-             res += `${spaces}- **${k}:** ${v.join(', ')}\n`;
-           } else {
-             res += `${spaces}- **${k}:**\n${formatData(v, indent + 2)}`;
-           }
+          if (v.length === 0) {
+            res += `${spaces}- **${k}:** None\n`;
+          } else if (typeof v[0] !== 'object') {
+            res += `${spaces}- **${k}:** ${v.join(', ')}\n`;
+          } else {
+            res += `${spaces}- **${k}:**\n${formatData(v, indent + 2)}`;
+          }
         } else {
-           res += `${spaces}- **${k}:**\n${formatData(v, indent + 2)}`;
+          res += `${spaces}- **${k}:**\n${formatData(v, indent + 2)}`;
         }
       } else {
         res += `${spaces}- **${k}:** ${v}\n`;
@@ -2392,15 +3118,62 @@ function formatAnalysisForLLM(type, data, tab = null) {
   };
 
   md += formatData(data);
+
+  // SUB-CONTEXT EXPANSION: Pull in related clusters if available from the REMIX_STATE record
+  const record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+  const related = CONTEXT_CLUSTERS[type] || [];
+  related.forEach(relType => {
+    if (record && record.context && record.context[relType]) {
+      md += `\n---\n\n<a id="context-${relType}"></a>\n## 🔍 SECTION: ${relType.toUpperCase()}\n`;
+      md += formatData(record.context[relType], 0);
+    }
+  });
+
+  // INSPECTOR EXPANSION: Include last selected element trace
+  if (record && record.element) {
+    md += `\n---\n\n<a id="inspector-trace"></a>\n## 🛠️ Inspector Trace: Selected Element\n`;
+    md += `- **Selector:** \`${record.element.selector}\`\n`;
+    md += `- **Tag:** \`${record.element.tagName}\`\n`;
+
+    if (record.element.context) {
+      const { parent, siblings, childCount, depth } = record.element.context;
+      md += `- **Tree Context:** Parent: \`${parent}\` | Siblings: ${siblings} | Children: ${childCount} | DOM Depth: ${depth}\n`;
+    }
+
+    if (record.element.accessibility) {
+      const { role, label, hidden, tabIndex } = record.element.accessibility;
+      md += `- **Accessibility:** Role: \`${role}\` | Label: "${label}" | Hidden: ${hidden} | TabIndex: ${tabIndex}\n`;
+    }
+
+    if (record.element.styles) {
+      const s = record.element.styles;
+      const keyStyles = Object.entries(s)
+        .filter(([k, v]) => v && v !== 'initial' && v !== 'none' && v !== 'normal' && v !== '0px')
+        .map(([k, v]) => `\`${k}:${v}\``)
+        .join(', ');
+      md += `- **Key Styles:** ${keyStyles}\n`;
+    }
+  }
+
   md += `\n---\n\n## Actionable Recommendations\n`;
   md += `- [ ] Verify the above data against current site goals.\n`;
   md += `- [ ] Use this context to regenerate or refine component code.\n`;
   md += `- [ ] Identify ${type} inconsistencies and propose immediate fixes.\n`;
-  
+
   return md;
 }
 
 async function runAnalysis(type) {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) return;
+
+  // Add loading state to the triggering button
+  const btnId = `scan-${type}`;
+  const btn = document.getElementById(btnId);
+  if (btn) {
+    btn.classList.add('loading');
+  }
+
   showStatus(`Running ${type} scan...`, 'info');
 
   const actionMap = {
@@ -2424,41 +3197,69 @@ async function runAnalysis(type) {
     'emotion': 'analyzeEmotion',
     'strategy': 'analyzeStrategy',
     'specimen': 'analyzeSpecimen',
-    'omniscience': 'analyzeOmniscience'
+    'omniscience': 'analyzeOmniscience',
+    'net': 'analyzeNet',
+    'code': 'analyzeCode'
   };
 
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     await ensureContentScript(tab.id);
+    const record = REMIX_STATE.getTabRecord(tab.id);
 
+    // PHASE 3: INCREMENTAL HYDRATION FOR OMNISCIENCE
+    if (type === 'omniscience') {
+      const layers = ['structure', 'palette', 'psyche', 'net', 'code', 'strategy'];
+      let completed = 0;
+
+      for (const layer of layers) {
+        completed++;
+        const progress = Math.round((completed / layers.length) * 100);
+        showStatus(`Hydrating DNA: ${layer.toUpperCase()} (${progress}%)`, 'info');
+
+        const layerAction = actionMap[layer] || `analyze${layer.charAt(0).toUpperCase() + layer.slice(1)}`;
+        try {
+          const layerData = await sendMessageWithTimeout(tab.id, { action: layerAction }, 15000);
+          if (layerData && !layerData.error) {
+            record.context[layer] = layerData;
+            // Update the state as we go
+            REMIX_STATE.refreshContextDialogUI();
+          }
+        } catch (e) {
+          console.warn(`Layer extraction failed: ${layer}`, e);
+        }
+      }
+
+      record.viewType = 'omniscience';
+      record.markdown = formatAnalysisForLLM('omniscience', record.context, { title: tab.title, url: tab.url });
+      displayAnalysisResults('omniscience', record.context);
+      showStatus('Site DNA Fully Hydrated', 'success');
+      return;
+    }
+
+    // Standard single-layer extraction
     const action = actionMap[type] || `analyze${type.charAt(0).toUpperCase() + type.slice(1)}`;
     const response = await sendMessageWithTimeout(tab.id, { action }, 20000);
 
     if (response) {
       if (response.error) throw new Error(response.error);
 
-      // Store in global context for aggregation
-      window.SITE_CONTEXT = window.SITE_CONTEXT || {};
-      window.SITE_CONTEXT[type] = response;
-
-      // Update the Context Dialog to be specific to this view
-      window.LAST_MARKDOWN_CONTEXT = formatAnalysisForLLM(type, response, tab);
-      const textarea = document.getElementById('context-dialog-textarea');
-      if (textarea && !document.getElementById('context-dialog').classList.contains('context-dialog-hidden')) {
-          textarea.value = window.LAST_MARKDOWN_CONTEXT;
+      if (record) {
+        record.context[type] = response;
+        record.viewType = type;
+        record.markdown = formatAnalysisForLLM(type, response, { title: tab.title, url: tab.url });
+        displayAnalysisResults(type, response);
       }
-
-      displayAnalysisResults(type, response);
-      showStatus(`${type} scan complete`, 'success');
-    } else {
-      showStatus(`${type} scan returned no data`, 'error');
+      showStatus(`${type.toUpperCase()} Extraction Complete`, 'success');
     }
   } catch (err) {
-    console.error('Analysis error:', err);
-    showStatus(err.message, 'error');
+    showStatus(`Extraction Error: ${err.message}`, 'error');
+    console.error(`[ReMixr] ${type} Error:`, err);
+  } finally {
+    // Remove loading state from triggering button
+    if (btn) btn.classList.remove('loading');
   }
 }
-//SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
+        //SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
 // ============================================
 
 /**
@@ -3165,8 +3966,10 @@ function handleBuildRemix(opportunity) {
     }
 
     // 3. Hydrate with Site DNA if available
-    if (window.LAST_SITE_DNA && typeof HydrationEngine !== 'undefined') {
-        currentProject = HydrationEngine.hydrate(currentProject, window.LAST_SITE_DNA);
+    const record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+    const dna = record ? record.dna : null;
+    if (dna && typeof HydrationEngine !== 'undefined') {
+        currentProject = HydrationEngine.hydrate(currentProject, dna);
     }
 
     // 4. Inject the Remix code into content.js
@@ -5841,5 +6644,226 @@ Modify the files to customize your extension:
 
 Built with ReMixr IDE - A meta-extension development environment.
 `;
+}
+
+// ============================================================================
+// SIDEBAR RESIZING
+// ============================================================================
+function initSidebarResizers() {
+  const resizers = [
+    { handler: document.getElementById('ide-sidebar-resizer'), sidebar: document.querySelector('.vscode-sidebar') },
+    { handler: document.getElementById('shiny-sidebar-resizer'), sidebar: document.querySelector('.shiny-sidebar') }
+  ];
+
+  resizers.forEach(({ handler, sidebar }) => {
+    if (!handler || !sidebar) return;
+
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    handler.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = sidebar.getBoundingClientRect().width;
+      handler.classList.add('resizing');
+      document.body.style.cursor = 'col-resize';
+      e.preventDefault(); // Prevent text selection
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      
+      // Let max-width/min-width handle constraints automatically
+      const newWidth = startWidth + (e.clientX - startX);
+      sidebar.style.width = newWidth + 'px';
+      
+      // Throttle CodeMirror refresh
+      if (typeof cmEditor !== 'undefined' && cmEditor) {
+        requestAnimationFrame(() => cmEditor.refresh());
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        handler.classList.remove('resizing');
+        document.body.style.cursor = '';
+      }
+    });
+  });
+}
+
+// ============================================================================
+// COMMAND PALETTE OVERLAY
+// ============================================================================
+let cmdIsOpen = false;
+let cmdSelectedIndex = 0;
+let cmdFilteredResults = [];
+
+const commandsList = [
+  { id: 'cmd-save', title: 'Save Project', shortcut: 'Ctrl+S', icon: '💾', run: () => saveCurrentProject() },
+  { id: 'cmd-export', title: 'Export Extension (ZIP)', shortcut: 'Ctrl+E', icon: '📦', run: () => document.getElementById('export-extension-btn')?.click() },
+  { id: 'cmd-new', title: 'New Template Project', shortcut: 'Ctrl+N', icon: '✨', run: () => switchTab('templates') },
+  { id: 'cmd-load', title: 'Load Extension', shortcut: '', icon: '🚀', run: () => document.getElementById('test-extension-btn')?.click() },
+  { id: 'cmd-preview', title: 'Open Preview Modal', shortcut: 'Ctrl+P', icon: '👁️', run: () => document.getElementById('preview-btn')?.click() },
+  { id: 'cmd-pipeline', title: 'Start Ambient Remix Pipeline', shortcut: '', icon: '🧠', run: () => { switchTab('analyzer'); setTimeout(() => document.getElementById('run-remix-pipeline')?.click(), 100); } },
+  { id: 'cmd-tab-code', title: 'View: IDE Code Editor', shortcut: '', icon: '💻', run: () => switchTab('code') },
+  { id: 'cmd-tab-analyze', title: 'View: Ambient Pipeline', shortcut: '', icon: '🧠', run: () => switchTab('analyzer') },
+  { id: 'cmd-tab-tools', title: 'View: X-Ray Toolkit', shortcut: '', icon: '🧰', run: () => switchTab('tools') },
+  { id: 'cmd-tab-shiny', title: 'View: UI Designer', shortcut: '', icon: '✨', run: () => switchTab('shiny') },
+  { id: 'cmd-wrap', title: 'Editor: Toggle Line Wrapping', shortcut: '', icon: '🔄', run: () => { if (typeof cmEditor !== 'undefined') cmEditor.setOption('lineWrapping', !cmEditor.getOption('lineWrapping')); } },
+  { id: 'cmd-snip-storage', title: 'Insert: Chrome Storage Get/Set', shortcut: '', icon: '💾', run: () => insertSnippet(`// Save data\nchrome.storage.local.set({ key: 'value' }, () => {});\n\n// Get data\nchrome.storage.local.get(['key'], (result) => {\n  console.log(result.key);\n});\n`) },
+  { id: 'cmd-snip-message', title: 'Insert: Chrome Message Port', shortcut: '', icon: '✉️', run: () => insertSnippet(`chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n  if (request.action === 'hello') {\n    sendResponse({ reply: 'world' });\n  }\n  return true;\n});\n`) },
+  { id: 'cmd-snip-fetch', title: 'Insert: Async Fetch Request', shortcut: '', icon: '🌐', run: () => insertSnippet(`try {\n  const res = await fetch('https://api.example.com/data');\n  const data = await res.json();\n  console.log(data);\n} catch (error) {\n  console.error('Fetch error:', error);\n}\n`) },
+];
+
+function insertSnippet(code) {
+  if (typeof cmEditor === 'undefined' || !cmEditor) return;
+  switchTab('code');
+  const doc = cmEditor.getDoc();
+  const cursor = doc.getCursor();
+  doc.replaceRange(code, cursor);
+  
+  // Format exactly what was inserted using CodeMirror's autoFormatRange if possible, or just focus
+  cmEditor.focus();
+}
+
+function initCommandPalette() {
+  const overlay = document.getElementById('cmd-palette-overlay');
+  const input = document.getElementById('cmd-input');
+  
+  if (!overlay || !input) return;
+
+  function renderResults(query = '') {
+    const list = document.getElementById('cmd-results');
+    const qRaw = query.toLowerCase();
+    
+    // Assemble all files as searchable commands
+    const fileCommands = [];
+    if (typeof currentProject !== 'undefined' && currentProject && currentProject.files) {
+      Object.keys(currentProject.files).forEach(filename => {
+        fileCommands.push({
+          id: `cmd-file-${filename}`,
+          title: `File: ${filename}`,
+          shortcut: '',
+          icon: '📄',
+          run: () => {
+             loadFileIntoEditor(filename);
+             switchTab('code');
+          }
+        });
+      });
+    }
+    
+    const allCommands = [...fileCommands, ...commandsList];
+    cmdFilteredResults = allCommands.filter(c => c.title.toLowerCase().includes(qRaw));
+    
+    list.innerHTML = '';
+    if (cmdFilteredResults.length === 0) {
+      list.innerHTML = '<div class="cmd-empty">No matching commands found</div>';
+      return;
+    }
+    
+    cmdSelectedIndex = 0;
+    cmdFilteredResults.forEach((c, idx) => {
+      const el = document.createElement('div');
+      el.className = 'cmd-item' + (idx === 0 ? ' active' : '');
+      el.innerHTML = `
+        <div class="cmd-item-title">
+          <span class="cmd-item-icon">${c.icon}</span>
+          ${c.title}
+        </div>
+        ${c.shortcut ? `<span class="cmd-item-shortcut">${c.shortcut}</span>` : ''}
+      `;
+      // We must stop propagation so the click isn't caught by the overlay background
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        closeCommandPalette();
+        c.run();
+      });
+      list.appendChild(el);
+    });
+  }
+
+  input.addEventListener('input', (e) => {
+    renderResults(e.target.value);
+  });
+  
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      closeCommandPalette();
+      e.preventDefault();
+      return;
+    }
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (cmdSelectedIndex < cmdFilteredResults.length - 1) {
+        cmdSelectedIndex++;
+        updateSelection();
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (cmdSelectedIndex > 0) {
+        cmdSelectedIndex--;
+        updateSelection();
+      }
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (cmdFilteredResults[cmdSelectedIndex]) {
+        closeCommandPalette();
+        cmdFilteredResults[cmdSelectedIndex].run();
+      }
+    }
+  });
+
+  function updateSelection() {
+    const list = document.getElementById('cmd-results');
+    const items = list.querySelectorAll('.cmd-item');
+    items.forEach((it, idx) => {
+      if (idx === cmdSelectedIndex) {
+        it.classList.add('active');
+        it.scrollIntoView({ block: 'nearest' });
+      } else {
+        it.classList.remove('active');
+      }
+    });
+  }
+
+  // Click outside to close
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeCommandPalette();
+  });
+}
+
+function openCommandPalette() {
+  const overlay = document.getElementById('cmd-palette-overlay');
+  const input = document.getElementById('cmd-input');
+  if (!overlay || !input) return;
+  
+  if (!overlay.dataset.inited) {
+    initCommandPalette();
+    overlay.dataset.inited = 'true';
+  }
+  
+  input.value = '';
+  cmdIsOpen = true;
+  overlay.classList.remove('cmd-hidden');
+  
+  // Fire input event to render defaults
+  input.dispatchEvent(new Event('input'));
+  setTimeout(() => input.focus(), 50);
+}
+
+function closeCommandPalette() {
+  const overlay = document.getElementById('cmd-palette-overlay');
+  if (!overlay) return;
+  
+  cmdIsOpen = false;
+  overlay.classList.add('cmd-hidden');
+  if (typeof cmEditor !== 'undefined' && cmEditor && document.getElementById('code-tab').classList.contains('active')) {
+    cmEditor.focus();
+  }
 }
 

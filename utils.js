@@ -26,21 +26,47 @@
  * @param {string} type - 'info', 'success', or 'error'
  */
 function showStatus(message, type = 'info') {
-    const status = document.getElementById('status');
-    if (!status) return;
+    const container = document.getElementById('toast-container');
+    if (!container) return;
 
-    status.textContent = message;
-    status.className = `status show ${type}`;
+    const TOAST_ICONS = { info: 'ℹ️', success: '✓', error: '✗' };
 
-    // Clear previous timeout if exists
-    if (window._statusTimeout) {
-        clearTimeout(window._statusTimeout);
-    }
+    // Create new toast element
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
 
-    // Auto-hide after 3 seconds
-    window._statusTimeout = setTimeout(() => {
-        status.className = 'status';
-        window._statusTimeout = null;
+    const iconEl = document.createElement('span');
+    iconEl.className = 'toast-icon';
+    iconEl.textContent = TOAST_ICONS[type] || 'ℹ️';
+
+    const textEl = document.createElement('span');
+    textEl.className = 'toast-text';
+    textEl.textContent = message;
+
+    toast.appendChild(iconEl);
+    toast.appendChild(textEl);
+
+    // Append to container
+    container.appendChild(toast);
+
+    // Trigger animation frame for CSS transition
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+            toast.classList.add('show');
+        });
+    });
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        toast.classList.add('removing');
+
+        // Wait for removal animation to complete before destroying DOM node
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+        }, 300); // matches CSS transition duration
     }, 3000);
 }
 

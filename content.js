@@ -46,33 +46,72 @@
     var physicsElements = window.physicsElements || [];
     var mouseTrace = window.mouseTrace || [];
     var godModeStyle = window.godModeStyle || null;
-    var flowRecording = window.flowRecording || false;
     var sessionEvents = window.sessionEvents || [];
+
+    const sanitizeForTransport = (obj, seen = new WeakSet()) => {
+        if (obj === null || typeof obj !== 'object') return obj;
+        if (typeof obj === 'function') return '[Function]';
+        try { if (seen.has(obj)) return '[Circular Reference]'; } catch(e) { return '[Unserializable]'; }
+        
+        // Skip DOM nodes - very common cause of serialization errors
+        if (typeof Node !== 'undefined' && obj instanceof Node) {
+            return `[DOM Node: ${obj.nodeName}${obj.id ? '#' + obj.id : ''}${obj.className ? '.' + obj.className.split(' ')[0] : ''}]`;
+        }
+        
+        // Handle Arrays
+        if (Array.isArray(obj)) {
+            seen.add(obj);
+            return obj.map(item => sanitizeForTransport(item, seen));
+        }
+        
+        // Handle Objects
+        seen.add(obj);
+        const result = {};
+        for (const [key, value] of Object.entries(obj)) {
+            // Skip large/private internal properties if needed
+            if (key.startsWith('_')) continue;
+            result[key] = sanitizeForTransport(value, seen);
+        }
+        return result;
+    };
     const MAX_TRACE = 100;
 
-    // Initialize Overlay
+    // Initialize Overlay (Diagnostic HUD)
     function createOverlay() {
         if (overlay) return;
         overlay = document.createElement('div');
         overlay.id = 'remixr-inspector-overlay';
-        overlay.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: rgba(15, 23, 42, 0.95);
-    color: white;
-    padding: 15px;
-    border-radius: 8px;
-    font-family: monospace;
-    font-size: 12px;
-    z-index: 999999;
-    pointer-events: none;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-    border: 1px solid rgba(255,255,255,0.2);
-    min-width: 250px;
-    display: none;
-    backdrop-filter: blur(10px);
-  `;
+        
+        // Base styles (Programmatic for CSP safety)
+        Object.assign(overlay.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: 'rgba(15, 23, 42, 0.98)',
+            color: 'white',
+            padding: '18px',
+            borderRadius: '12px',
+            fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+            fontSize: '11px',
+            zIndex: '999999',
+            pointerEvents: 'none',
+            boxShadow: '0 15px 40px rgba(0,0,0,0.4)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            width: '300px',
+            display: 'none',
+            backdropFilter: 'blur(20px)',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            transform: 'translateY(-20px)',
+            opacity: '0'
+        });
+
+        const idle = document.createElement('div');
+        idle.id = 'remixr-hud-idle';
+        idle.style.textAlign = 'center';
+        idle.style.padding = '20px 0';
+        idle.innerHTML = `<div style="font-size:24px; margin-bottom:10px;">🔮</div><div>READY TO SCAN</div><div style="font-size:9px; opacity:0.6; margin-top:8px;">Hover over any element...</div>`;
+        overlay.appendChild(idle);
+
         document.body.appendChild(overlay);
     }
 
@@ -129,29 +168,64 @@
         }
 
         // Apply new highlight
-        target.style.outline = '2px solid #667eea';
+        target.style.outline = '2px dashed #6366f1';
+        target.style.outlineOffset = '2px';
         target.style.cursor = 'crosshair';
         lastHighlighted = target;
 
-        // Update Overlay
+        // Update HUD
         const rect = target.getBoundingClientRect();
         const selector = getSelector(target);
-        const color = window.getComputedStyle(target).color;
-        const bg = window.getComputedStyle(target).backgroundColor;
-        const font = window.getComputedStyle(target).fontFamily;
-
+        const style = window.getComputedStyle(target);
+        const hexColor = (c) => CoreUtils.rgbToHex ? CoreUtils.rgbToHex(c) : c;
+        
         overlay.style.display = 'block';
-        overlay.innerHTML = `
-    <div style="color: #a5b4fc; font-weight: bold; margin-bottom: 5px;">${target.tagName.toLowerCase()}</div>
-    <div style="margin-bottom: 5px; word-break: break-all;">${selector}</div>
-    <div style="border-top: 1px solid rgba(255,255,255,0.1); margin: 5px 0; padding-top: 5px;">
-      Size: ${Math.round(rect.width)} x ${Math.round(rect.height)} px<br>
-      Color: <span style="display:inline-block;width:10px;height:10px;background:${color};"></span> ${color}<br>
-      Bg: <span style="display:inline-block;width:10px;height:10px;background:${bg};border:1px solid #fff;"></span> ${bg}<br>
-      Font: ${font.split(',')[0]}
+        overlay.style.opacity = '1';
+        overlay.style.transform = 'translateY(0)';
+
+        // Clear and rebuild for maximum stability (prevents broken innerHTML states)
+        overlay.innerHTML = '';
+        
+        const content = document.createElement('div');
+        content.innerHTML = `
+    <div style="background:linear-gradient(135deg, #6366f1 0%, #a855f7 100%); padding:6px 12px; border-radius:8px 8px 0 0; margin:-18px -18px 15px -18px; font-size:10px; font-weight:bold; letter-spacing:1.5px; color:#fff; display:flex; justify-content:space-between; align-items:center;">
+      <span>REMIX: ON-SITE DIAGNOSTICS</span>
+      <span style="background:rgba(0,0,0,0.2); padding:2px 6px; border-radius:4px;">${target.tagName.toUpperCase()}</span>
     </div>
-    <div style="color: #fbbf24; font-size: 10px;">Click to copy selector</div>
-  `;
+    
+    <div style="margin-bottom: 12px;">
+      <div style="font-size:9px; color:#94a3b8; text-transform:uppercase; margin-bottom:4px; font-weight:700;">Selector Path</div>
+      <div style="font-family:monospace; font-size:10px; color:#60a5fa; word-break:break-all; background:rgba(0,0,0,0.3); padding:6px; border-radius:4px; border:1px solid rgba(255,255,255,0.05);">${selector}</div>
+    </div>
+
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; border-top:1px solid rgba(255,255,255,0.05); padding-top:12px;">
+      <div>
+        <div style="font-size:8px; color:#94a3b8; text-transform:uppercase;">Geometry content</div>
+        <div style="color:#fff; font-size:11px; font-weight:bold;">${Math.round(rect.width)} px</div>
+      </div>
+      <div>
+        <div style="font-size:8px; color:#94a3b8; text-transform:uppercase;">Height</div>
+        <div style="color:#fff; font-size:11px; font-weight:bold;">${Math.round(rect.height)} px</div>
+      </div>
+      <div>
+        <div style="font-size:8px; color:#94a3b8; text-transform:uppercase;">Text</div>
+        <div style="color:#fff; font-size:10px; display:flex; align-items:center; gap:4px;">
+           <span style="width:7px; height:7px; background:${style.color}; border-radius:50%;"></span> ${hexColor(style.color)}
+        </div>
+      </div>
+      <div>
+        <div style="font-size:8px; color:#94a3b8; text-transform:uppercase;">Fill</div>
+        <div style="color:#fff; font-size:10px; display:flex; align-items:center; gap:4px;">
+           <span style="width:7px; height:7px; background:${style.backgroundColor}; border-radius:50%;"></span> ${hexColor(style.backgroundColor)}
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:9px; color:#a855f7; border-top: 1px solid rgba(255,255,255,0.05); margin-top:12px; padding-top:10px; font-weight:bold; letter-spacing:0.5px; text-align:center;">
+        🖱️ CLICK TO CAPTURE
+    </div>
+        `;
+        overlay.appendChild(content);
     }
 
     // Click to copy
@@ -169,26 +243,42 @@
             selector: selector,
             tagName: target.tagName.toLowerCase(),
             attributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value })),
+            accessibility: {
+                role: target.getAttribute('role') || target.tagName.toLowerCase(),
+                label: target.getAttribute('aria-label') || target.innerText.slice(0, 30),
+                hidden: target.getAttribute('aria-hidden') === 'true',
+                tabIndex: target.tabIndex
+            },
+            context: {
+                parent: target.parentElement?.tagName.toLowerCase() || 'none',
+                siblings: target.parentElement?.children.length || 0,
+                childCount: target.children.length,
+                depth: (function getDepth(el) { return el.parentElement ? 1 + getDepth(el.parentElement) : 0; })(target)
+            },
             styles: {
                 color: styles.color,
                 backgroundColor: styles.backgroundColor,
                 fontSize: styles.fontSize,
+                fontWeight: styles.fontWeight,
+                fontFamily: styles.fontFamily,
                 padding: styles.padding,
                 margin: styles.margin,
                 border: styles.border,
                 borderRadius: styles.borderRadius,
                 display: styles.display,
-                flexDirection: styles.flexDirection,
-                justifyContent: styles.justifyContent,
-                alignItems: styles.alignItems,
-                gap: styles.gap,
+                position: styles.position,
+                zIndex: styles.zIndex,
+                top: styles.top,
+                left: styles.left,
                 width: styles.width,
                 height: styles.height,
                 opacity: styles.opacity,
                 boxShadow: styles.boxShadow,
-                fontFamily: styles.fontFamily,
-                fontWeight: styles.fontWeight,
-                visibility: styles.visibility
+                visibility: styles.visibility,
+                cursor: styles.cursor,
+                flexDirection: styles.flexDirection,
+                justifyContent: styles.justifyContent,
+                alignItems: styles.alignItems
             }
         };
 
@@ -331,8 +421,8 @@
         'extractFrameworkState': extractFrameworkState,
         'extractAPISurface': extractAPISurface,
         'extractSiteDNA': generateSiteDNA,
-        'generateLLMContext': () => {
-            const dna = generateSiteDNA();
+        'generateLLMContext': (req) => {
+            const dna = generateSiteDNA(req.layers);
             const markdown = generateLLMSiteContext(dna);
             return { markdown, dna, wordCount: markdown.split(/\s+/).length };
         },
@@ -429,15 +519,24 @@
         const handler = window.messageHandlers[request.action];
         if (handler) {
             try {
-                const result = handler(request);
-                if (result instanceof Promise) {
-                    result.then(sendResponse).catch(err => {
+                const rawResult = handler(request);
+                const finalizeResult = (res) => {
+                    const sanitized = sanitizeForTransport(res);
+                    const size = JSON.stringify(sanitized).length;
+                    if (size > 500000) {
+                        console.warn(`[ReMixr] Large payload detected for [${request.action}]: ${(size / 1024 / 1024).toFixed(2)}MB`);
+                    }
+                    sendResponse(sanitized);
+                };
+
+                if (rawResult instanceof Promise) {
+                    rawResult.then(finalizeResult).catch(err => {
                         console.error(`[ReMixr] Handler Async Error [${request.action}]:`, err);
                         sendResponse({ error: err.message });
                     });
                     return true;
                 }
-                sendResponse(result);
+                finalizeResult(rawResult);
             } catch (err) {
                 console.error(`[ReMixr] Handler Sync Error [${request.action}]:`, err);
                 sendResponse({ error: err.message });
@@ -2445,11 +2544,12 @@
     // MASTER DNA GENERATOR (RECONSTRUCTABLE)
     // ============================================
 
-    function generateSiteDNA() {
+    function generateSiteDNA(requestedLayers = null) {
         const dna = {};
         const errors = [];
 
         const gather = (name, fn) => {
+            if (requestedLayers && !requestedLayers.includes(name)) return;
             try { dna[name] = fn(); }
             catch (e) { errors.push({ layer: name, error: e.message }); dna[name] = null; }
         };
@@ -3416,7 +3516,13 @@
 
         const overlay = document.createElement('div');
         overlay.id = 'remixr-strategy-overlay';
-        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999998;';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:999998;background:rgba(0,0,0,0.05);';
+
+        // Add Header to the strategy overlay (top center)
+        const header = document.createElement('div');
+        header.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:rgba(244,63,94,0.9); color:white; padding:8px 20px; border-radius:20px; font-family:sans-serif; font-size:11px; font-weight:bold; letter-spacing:1px; z-index:999999; box-shadow:0 5px 15px rgba(0,0,0,0.2); pointer-events:auto;';
+        header.innerHTML = '🛡️ STRATEGIC ARCHITECTURE ACTIVE | <span style="cursor:pointer; opacity:0.8; text-decoration:underline;" onclick="this.parentElement.parentElement.remove()">Dismiss</span>';
+        overlay.appendChild(header);
 
         // Highlight CTAs
         document.querySelectorAll('button, [role="button"], [class*="cta"], a[class*="btn"]').forEach(el => {
