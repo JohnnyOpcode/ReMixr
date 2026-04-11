@@ -229,6 +229,7 @@
     }
 
     // Click to copy
+    // Unified Element Selection Handler
     function handleClick(e) {
         if (!inspectorActive) return;
         e.preventDefault();
@@ -237,12 +238,13 @@
         const target = e.target;
         const selector = getSelector(target);
         const styles = window.getComputedStyle(target);
+        const cssVars = typeof getCssVariables === 'function' ? getCssVariables(target) : {};
 
-        // Collect specific styles for editing
         const styleData = {
             selector: selector,
             tagName: target.tagName.toLowerCase(),
             attributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value })),
+            variables: cssVars,
             accessibility: {
                 role: target.getAttribute('role') || target.tagName.toLowerCase(),
                 label: target.getAttribute('aria-label') || target.innerText.slice(0, 30),
@@ -253,7 +255,7 @@
                 parent: target.parentElement?.tagName.toLowerCase() || 'none',
                 siblings: target.parentElement?.children.length || 0,
                 childCount: target.children.length,
-                depth: (function getDepth(el) { return el.parentElement ? 1 + getDepth(el.parentElement) : 0; })(target)
+                depth: getDepth(target)
             },
             styles: {
                 color: styles.color,
@@ -278,7 +280,8 @@
                 cursor: styles.cursor,
                 flexDirection: styles.flexDirection,
                 justifyContent: styles.justifyContent,
-                alignItems: styles.alignItems
+                alignItems: styles.alignItems,
+                gap: styles.gap
             }
         };
 
@@ -287,14 +290,16 @@
             data: styleData
         });
 
-        // Still copy to clipboard for convenience
+        // Provide visual feedback and copy selector
         navigator.clipboard.writeText(selector).then(() => {
-            // Visual feedback
-            const originalText = overlay.innerHTML;
-            overlay.innerHTML = `<div style="color:#4ade80; text-align:center; padding: 10px;">Inspector Tracking Element...</div>`;
-            setTimeout(() => {
-                overlay.innerHTML = originalText;
-            }, 1000);
+            const hud = document.getElementById('remixr-inspector-overlay');
+            if (hud) {
+                const originalContent = hud.innerHTML;
+                hud.innerHTML = `<div style="color:#4ade80; text-align:center; padding: 10px; font-weight:bold;">✨ ELEMENT TRACE CAPTURED</div>`;
+                setTimeout(() => {
+                    hud.innerHTML = originalContent;
+                }, 1000);
+            }
         });
     }
 
@@ -736,61 +741,7 @@
         return vars;
     }
 
-    // Redefine handleClick to include variables
-    const originalHandleClick = handleClick;
-    function handleClick(e) {
-        if (!inspectorActive) return;
-        e.preventDefault();
-        e.stopPropagation();
 
-        const target = e.target;
-        const selector = getSelector(target);
-        const styles = window.getComputedStyle(target);
-        const cssVars = getCssVariables(target);
-
-        const styleData = {
-            selector: selector,
-            tagName: target.tagName.toLowerCase(),
-            attributes: Array.from(target.attributes).map(attr => ({ name: attr.name, value: attr.value })),
-            variables: cssVars,
-            styles: {
-                color: styles.color,
-                backgroundColor: styles.backgroundColor,
-                fontSize: styles.fontSize,
-                padding: styles.padding,
-                margin: styles.margin,
-                border: styles.border,
-                borderRadius: styles.borderRadius,
-                display: styles.display,
-                flexDirection: styles.flexDirection,
-                justifyContent: styles.justifyContent,
-                alignItems: styles.alignItems,
-                gap: styles.gap,
-                width: styles.width,
-                height: styles.height,
-                opacity: styles.opacity,
-                boxShadow: styles.boxShadow,
-                fontFamily: styles.fontFamily,
-                fontWeight: styles.fontWeight,
-                visibility: styles.visibility
-            }
-        };
-
-        chrome.runtime.sendMessage({
-            action: 'elementSelected',
-            data: styleData
-        });
-
-        // Provide visual feedback
-        const overlay = document.getElementById('remixr-inspector-overlay');
-        if (overlay) {
-            const originalText = overlay.innerHTML;
-            overlay.innerHTML = `<div style="color:#4ade80; text-align:center; padding: 10px;">Deep Trace Complete...</div>`;
-            setTimeout(() => {
-                overlay.innerHTML = originalText;
-            }, 1000);
-        }
-    }
 
     // ============================================
     // VISUAL WEALTH: GRAVITY MODE (DOM PHYSICS)

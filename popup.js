@@ -110,23 +110,23 @@ function showConfirmDialog(message, onConfirm) {
   document.getElementById('confirm-message').textContent = message;
   confirmCallback = onConfirm;
   modal.classList.remove('confirm-hidden');
-  
+
   // Attach one-time events for this invocation
   const cancelBtn = document.getElementById('confirm-cancel');
   const okBtn = document.getElementById('confirm-ok');
-  
+
   const cleanup = () => {
     modal.classList.add('confirm-hidden');
     cancelBtn.removeEventListener('click', handleCancel);
     okBtn.removeEventListener('click', handleOk);
   };
-  
+
   const handleCancel = () => cleanup();
   const handleOk = () => {
     cleanup();
     if (confirmCallback) confirmCallback();
   };
-  
+
   cancelBtn.addEventListener('click', handleCancel);
   okBtn.addEventListener('click', handleOk);
 }
@@ -139,34 +139,34 @@ function showPromptDialog(message, defaultValue, onConfirm) {
   input.value = defaultValue || '';
   promptCallback = onConfirm;
   modal.classList.remove('confirm-hidden');
-  
+
   // Focus and select input after slightly delaying for structural display
   setTimeout(() => {
     input.focus();
     input.select();
   }, 50);
-  
+
   const cancelBtn = document.getElementById('prompt-cancel');
   const okBtn = document.getElementById('prompt-ok');
-  
+
   const cleanup = () => {
     modal.classList.add('confirm-hidden');
     cancelBtn.removeEventListener('click', handleCancel);
     okBtn.removeEventListener('click', handleOk);
     input.removeEventListener('keydown', handleKey);
   };
-  
+
   const handleCancel = () => cleanup();
   const handleOk = () => {
     cleanup();
     if (promptCallback) promptCallback(input.value);
   };
-  
+
   const handleKey = (e) => {
     if (e.key === 'Enter') handleOk();
     if (e.key === 'Escape') handleCancel();
   };
-  
+
   cancelBtn.addEventListener('click', handleCancel);
   okBtn.addEventListener('click', handleOk);
   input.addEventListener('keydown', handleKey);
@@ -658,7 +658,7 @@ function loadProject(index) {
   currentProject = projects[index];
   currentProject.index = index;
   openFiles = ['manifest.json'];
-  
+
   switchTab('code');
   updateFileTree();
   loadFileIntoEditor('manifest.json');
@@ -694,7 +694,7 @@ function updateFileTree() {
     item.className = 'file-item';
     if (filename === currentFile) item.classList.add('active');
     item.dataset.file = filename;
-    
+
     // Determine icon based on file extension
     let icon = '📄';
     if (filename.endsWith('.js')) icon = '⚡';
@@ -727,20 +727,20 @@ function updateFileTree() {
 
     // Make the action buttons light up on hover
     item.querySelector('.file-rename-btn').addEventListener('mouseenter', (e) => {
-        e.target.style.opacity = '1';
-        e.target.style.background = 'rgba(255, 255, 255, 0.1)';
+      e.target.style.opacity = '1';
+      e.target.style.background = 'rgba(255, 255, 255, 0.1)';
     });
     item.querySelector('.file-rename-btn').addEventListener('mouseleave', (e) => {
-        if (item.matches(':hover')) e.target.style.opacity = '0.7';
-        e.target.style.background = 'transparent';
+      if (item.matches(':hover')) e.target.style.opacity = '0.7';
+      e.target.style.background = 'transparent';
     });
-    
+
     // Rename handler
     item.querySelector('.file-rename-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       if (filename === 'manifest.json') {
-          showStatus('Cannot rename manifest.json', 'error');
-          return;
+        showStatus('Cannot rename manifest.json', 'error');
+        return;
       }
       showPromptDialog('Rename file:', filename, (newName) => {
         if (!newName || newName.trim() === '' || newName === filename) return;
@@ -749,19 +749,19 @@ function updateFileTree() {
           showStatus('A file with that name already exists.', 'error');
           return;
         }
-        
+
         // Move contents
         currentProject.files[trimName] = currentProject.files[filename];
         delete currentProject.files[filename];
-        
+
         if (currentFile === filename) {
           currentFile = trimName;
         }
-        
+
         saveCurrentProject();
         updateFileTree();
         if (currentFile === trimName) {
-           loadFileIntoEditor(trimName);
+          loadFileIntoEditor(trimName);
         }
         showStatus(`Renamed to ${trimName}`, 'success');
       });
@@ -769,37 +769,37 @@ function updateFileTree() {
 
     // Make the delete button light up on hover
     item.querySelector('.file-delete-btn').addEventListener('mouseenter', (e) => {
-        e.target.style.opacity = '1';
-        e.target.style.background = 'rgba(239, 68, 68, 0.2)';
-        e.target.style.color = 'var(--danger-color)';
+      e.target.style.opacity = '1';
+      e.target.style.background = 'rgba(239, 68, 68, 0.2)';
+      e.target.style.color = 'var(--danger-color)';
     });
-    
+
     item.querySelector('.file-delete-btn').addEventListener('mouseleave', (e) => {
-        if (item.matches(':hover')) e.target.style.opacity = '0.6';
-        e.target.style.background = 'transparent';
-        e.target.style.color = 'inherit';
+      if (item.matches(':hover')) e.target.style.opacity = '0.6';
+      e.target.style.background = 'transparent';
+      e.target.style.color = 'inherit';
     });
 
     item.querySelector('.file-delete-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       if (filename === 'manifest.json') {
-          showStatus('Cannot delete manifest.json', 'error');
-          return;
+        showStatus('Cannot delete manifest.json', 'error');
+        return;
       }
       showConfirmDialog(`Delete ${filename}?`, () => {
-          delete currentProject.files[filename];
-          if (currentFile === filename) {
-              const files = Object.keys(currentProject.files);
-              currentFile = files.length > 0 ? files[0] : null;
-              if (currentFile) {
-                  loadFileIntoEditor(currentFile);
-              } else {
-                  cmEditor.setValue('');
-              }
+        delete currentProject.files[filename];
+        if (currentFile === filename) {
+          const files = Object.keys(currentProject.files);
+          currentFile = files.length > 0 ? files[0] : null;
+          if (currentFile) {
+            loadFileIntoEditor(currentFile);
+          } else {
+            cmEditor.setValue('');
           }
-          saveCurrentProject();
-          updateFileTree();
-          showStatus(`${filename} deleted.`, 'info');
+        }
+        saveCurrentProject();
+        updateFileTree();
+        showStatus(`${filename} deleted.`, 'info');
       });
     });
 
@@ -826,25 +826,25 @@ function setupEventListeners() {
 
   // New File Handler
   document.getElementById('new-file-btn')?.addEventListener('click', () => {
-      if (!currentProject) {
-          showStatus('Start a project first.', 'error');
+    if (!currentProject) {
+      showStatus('Start a project first.', 'error');
+      return;
+    }
+    showPromptDialog('Enter new filename (with extension, e.g., utils.js):', '', (newName) => {
+      if (newName && newName.trim()) {
+        const trimName = newName.trim();
+        if (currentProject.files[trimName]) {
+          showStatus('File already exists.', 'error');
           return;
-      }
-      showPromptDialog('Enter new filename (with extension, e.g., utils.js):', '', (newName) => {
-        if (newName && newName.trim()) {
-            const trimName = newName.trim();
-            if (currentProject.files[trimName]) {
-                showStatus('File already exists.', 'error');
-                return;
-            }
-            currentProject.files[trimName] = '// New file\n';
-            currentFile = trimName;
-            saveCurrentProject();
-            updateFileTree();
-            loadFileIntoEditor(trimName);
-            showStatus(`Created ${trimName}`, 'success');
         }
-      });
+        currentProject.files[trimName] = '// New file\n';
+        currentFile = trimName;
+        saveCurrentProject();
+        updateFileTree();
+        loadFileIntoEditor(trimName);
+        showStatus(`Created ${trimName}`, 'success');
+      }
+    });
   });
 
   // Tab switching
@@ -1053,8 +1053,8 @@ function setupEventListeners() {
           if (response) {
             // Payload size telemetry (Gap B)
             const size = JSON.stringify(response).length;
-            const sizeStr = size > 1024 * 1024 
-              ? ` (${(size / 1024 / 1024).toFixed(1)}MB)` 
+            const sizeStr = size > 1024 * 1024
+              ? ` (${(size / 1024 / 1024).toFixed(1)}MB)`
               : size > 1024 ? ` (${(size / 1024).toFixed(1)}KB)` : '';
 
             if (response.active === true || response.status === 'active' || response.status === 'visible') {
@@ -1099,7 +1099,7 @@ function setupEventListeners() {
   document.getElementById('tool-unmask')?.addEventListener('click', () => toggleTool('tool-unmask', 'showPasswords', 'Passwords Unmasked', null));
   document.getElementById('tool-kill-sticky')?.addEventListener('click', () => toggleTool('tool-kill-sticky', 'killStickies', 'Sticky Elements Removed', null));
   document.getElementById('tool-record')?.addEventListener('click', toggleRecording);
-  
+
   // --- Tool Info Bar (Toolkit Tab) ---
   const toolInfoBar = document.getElementById('tool-info-bar');
   document.querySelectorAll('#tools-tab .tool-btn').forEach(btn => {
@@ -1108,15 +1108,15 @@ function setupEventListeners() {
       const label = btn.querySelector('.tool-btn-label')?.textContent || 'Tool';
       const desc = btn.dataset.desc || btn.title || '';
       const type = btn.dataset.type || '';
-      
+
       document.getElementById('tool-info-icon').textContent = icon;
       document.getElementById('tool-info-name').textContent = label;
       document.getElementById('tool-info-desc').textContent = desc;
-      
+
       const badge = document.getElementById('tool-info-type');
       badge.textContent = type === 'toggle' ? 'Toggle' : type === 'action' ? 'One-Shot' : '—';
       badge.className = 'tool-type-badge ' + (type || '');
-      
+
       toolInfoBar?.classList.add('active');
     });
   });
@@ -1125,7 +1125,7 @@ function setupEventListeners() {
   async function toggleRecording() {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab) return;
-    
+
     const btn = document.getElementById('tool-record');
     if (!recordingActive) {
       await sendMessageWithTimeout(tab.id, { action: 'startSessionRecording' });
@@ -1138,7 +1138,7 @@ function setupEventListeners() {
       recordingActive = false;
       btn.classList.remove('active');
       btn.innerHTML = '<span class="icon">🔴</span> <span class="tool-btn-label">Record Flow</span>';
-      
+
       if (response && response.events) {
         handleRecordedFlow(response.events);
       }
@@ -1150,9 +1150,9 @@ function setupEventListeners() {
       showStatus('No interactions recorded.', 'warning');
       return;
     }
-    
+
     showStatus(`Captured ${events.length} interactions. Generating Automation...`, 'success');
-    
+
     // Generate Automation Code
     let automationCode = '// --- AUTO-GENERATED FLOW AUTOMATION ---\n';
     automationCode += 'async function runRecordedFlow() {\n';
@@ -1172,18 +1172,18 @@ function setupEventListeners() {
     // Create Project
     const template = TEMPLATES['content-modifier'];
     currentProject = {
-        name: `Flow: ${new Date().toLocaleTimeString()}`,
-        files: {},
-        created: Date.now(),
-        modified: Date.now()
+      name: `Flow: ${new Date().toLocaleTimeString()}`,
+      files: {},
+      created: Date.now(),
+      modified: Date.now()
     };
 
     for (const [filename, content] of Object.entries(template.files)) {
-        currentProject.files[filename] = typeof content === 'object' ? JSON.stringify(content, null, 2) : content;
+      currentProject.files[filename] = typeof content === 'object' ? JSON.stringify(content, null, 2) : content;
     }
-    
+
     currentProject.files['content.js'] = automationCode;
-    
+
     switchTab('code');
     document.getElementById('project-name').value = currentProject.name;
     currentFile = 'content.js';
@@ -1246,7 +1246,7 @@ function setupEventListeners() {
     try {
       const ready = await ensureContentScriptReady(tab.id);
       if (!ready) throw new Error("Content script injection failed");
-      
+
       const record = REMIX_STATE.getTabRecord(tab.id);
       if (!record) throw new Error('Tab record lost during extraction');
 
@@ -1255,11 +1255,11 @@ function setupEventListeners() {
 
       // PHASE 1: CORE STRUCTURE
       showStatus('Phase 1/3: Reconstructing DOM Skeleton...', 'info');
-      const p1 = await sendMessageWithTimeout(tab.id, { 
-        action: 'generateLLMContext', 
-        layers: ['rawCSS', 'htmlSkeleton', 'sectionedContent'] 
+      const p1 = await sendMessageWithTimeout(tab.id, {
+        action: 'generateLLMContext',
+        layers: ['rawCSS', 'htmlSkeleton', 'sectionedContent']
       }, 15000);
-      
+
       if (p1) {
         REMIX_STATE.mergeDNA(tab.id, p1.dna);
         record.markdown = p1.markdown;
@@ -1268,16 +1268,16 @@ function setupEventListeners() {
 
       // PHASE 2: DESIGN & PATTERNS
       showStatus('Phase 2/3: Decoding Design Language...', 'info');
-      const p2 = await sendMessageWithTimeout(tab.id, { 
-        action: 'generateLLMContext', 
-        layers: ['designSystem', 'layoutBlueprint', 'templatePatterns', 'classVocabulary'] 
+      const p2 = await sendMessageWithTimeout(tab.id, {
+        action: 'generateLLMContext',
+        layers: ['designSystem', 'layoutBlueprint', 'templatePatterns', 'classVocabulary']
       }, 15000);
-      
+
       if (p2) {
         REMIX_STATE.mergeDNA(tab.id, p2.dna);
         // Re-render markdown with combined DNA
-        const response = await sendMessageWithTimeout(tab.id, { 
-          action: 'generateLLMContext', 
+        const response = await sendMessageWithTimeout(tab.id, {
+          action: 'generateLLMContext',
           dna: record.dna // Pass accumulated DNA
         }, 8000);
         if (response) record.markdown = response.markdown;
@@ -1286,16 +1286,16 @@ function setupEventListeners() {
 
       // PHASE 3: DEEP INTELLIGENCE
       showStatus('Phase 3/3: Strategic Finalization...', 'info');
-      const p3 = await sendMessageWithTimeout(tab.id, { 
-        action: 'generateLLMContext', 
-        layers: ['strategy', 'psyche', 'soul', 'archetype', 'rhetoric', 'emotion', 'apiSurface', 'frameworkState'] 
+      const p3 = await sendMessageWithTimeout(tab.id, {
+        action: 'generateLLMContext',
+        layers: ['strategy', 'psyche', 'soul', 'archetype', 'rhetoric', 'emotion', 'apiSurface', 'frameworkState']
       }, 25000);
 
       if (p3) {
         REMIX_STATE.mergeDNA(tab.id, p3.dna);
-        const finalRes = await sendMessageWithTimeout(tab.id, { 
-          action: 'generateLLMContext', 
-          dna: record.dna 
+        const finalRes = await sendMessageWithTimeout(tab.id, {
+          action: 'generateLLMContext',
+          dna: record.dna
         }, 8000);
         if (finalRes) {
           record.markdown = finalRes.markdown;
@@ -1419,81 +1419,81 @@ function setupEventListeners() {
     const orchestrator = document.getElementById('pipeline-orchestrator');
     const runBtn = document.getElementById('run-remix-pipeline');
     const progressFill = document.getElementById('pipeline-progress-fill');
-    
+
     if (!orchestrator) return;
-    
+
     if (runBtn) runBtn.classList.add('loading');
     if (progressFill) progressFill.classList.add('active');
-    
+
     try {
-        // Check if DNA exists — if not, auto-extract first
-        let record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+      // Check if DNA exists — if not, auto-extract first
+      let record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+      if (!record || !record.dna || Object.keys(record.dna).length === 0) {
+        showStatus('No site DNA found — auto-extracting...', 'info');
+        // Auto-run omniscience extraction
+        await handleOmniscienceExtraction();
+        // Re-check after extraction
+        record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
         if (!record || !record.dna || Object.keys(record.dna).length === 0) {
-            showStatus('No site DNA found — auto-extracting...', 'info');
-            // Auto-run omniscience extraction
-            await handleOmniscienceExtraction();
-            // Re-check after extraction
-            record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
-            if (!record || !record.dna || Object.keys(record.dna).length === 0) {
-                showStatus('DNA extraction failed. Visit a website and try again.', 'error');
-                return;
-            }
-            showStatus('DNA extracted! Running pipeline...', 'success');
+          showStatus('DNA extraction failed. Visit a website and try again.', 'error');
+          return;
         }
+        showStatus('Metrics extracted! Starting workflow...', 'success');
+      }
 
-        orchestrator.innerHTML = '';
-        showStatus('Agentic Pipeline Initialized...', 'info');
+      orchestrator.innerHTML = '';
+      showStatus('Automation Workflow Initialized...', 'info');
 
-        updatePipelineProgressBar('init', 'running');
-        await PipelineEngine.run('remix_generation', { dna: record.dna }, (stepId, status, data) => {
-            updatePipelineStepUI(stepId, status, data);
-        });
-        showStatus('All agents completed!', 'success');
+      updatePipelineProgressBar('init', 'running');
+      await PipelineEngine.run('remix_generation', { dna: record.dna }, (stepId, status, data) => {
+        updatePipelineStepUI(stepId, status, data);
+      });
+      showStatus('All agents completed!', 'success');
     } catch (e) {
-        showStatus('Pipeline halted: ' + e.message, 'error');
+      showStatus('Workflow halted: ' + e.message, 'error');
     } finally {
-        if (runBtn) runBtn.classList.remove('loading');
-        if (progressFill) progressFill.classList.remove('active');
+      if (runBtn) runBtn.classList.remove('loading');
+      if (progressFill) progressFill.classList.remove('active');
     }
   }
 
   function getAgentIcon(stepId) {
-      if (stepId.includes('auditor')) return '🛡️';
-      if (stepId.includes('architect')) return '📐';
-      if (stepId.includes('synthesizer')) return '🔮';
-      return '🤖';
+    if (stepId.includes('auditor')) return '🛡️';
+    if (stepId.includes('architect')) return '📐';
+    if (stepId.includes('synthesizer')) return '🔮';
+    return '🤖';
   }
 
   function updatePipelineProgressBar(stepId, status) {
-      const track = document.getElementById('pipeline-progress-fill');
-      if (!track) return;
-      
-      const steps = ['init', 'strategic_auditor', 'security_auditor', 'remix_architect', 'code_synthesizer'];
-      const idx = steps.indexOf(stepId);
-      if (idx === -1) return;
-      
-      const percentage = (idx / (steps.length - 1)) * 100;
-      track.style.width = `${percentage}%`;
+    const track = document.getElementById('pipeline-progress-fill');
+    if (!track) return;
+
+    const steps = ['init', 'strategic_auditor', 'security_auditor', 'remix_architect', 'code_synthesizer'];
+    const idx = steps.indexOf(stepId);
+    if (idx === -1) return;
+
+    const percentage = (idx / (steps.length - 1)) * 100;
+    track.style.width = `${percentage}%`;
   }
 
   function updatePipelineStepUI(stepId, status, data) {
-      const orchestrator = document.getElementById('pipeline-orchestrator');
-      let stepEl = document.getElementById(`step-${stepId}`);
-      
-      if (!stepEl) {
-          stepEl = document.createElement('div');
-          stepEl.id = `step-${stepId}`;
-          stepEl.className = 'pipeline-step-premium';
-          orchestrator.appendChild(stepEl);
-      }
+    const orchestrator = document.getElementById('pipeline-orchestrator');
+    let stepEl = document.getElementById(`step-${stepId}`);
 
-      stepEl.className = `pipeline-step-premium ${status}`;
-      const title = stepId.replace(/_/g, ' ').toUpperCase();
-      const meta = status === 'running' ? 'EXECUTING...' : status.toUpperCase();
+    if (!stepEl) {
+      stepEl = document.createElement('div');
+      stepEl.id = `step-${stepId}`;
+      stepEl.className = 'pipeline-step-premium';
+      orchestrator.appendChild(stepEl);
+    }
 
-      let content = '';
-      if (stepId === 'strategic_auditor' && status === 'success') {
-          content = `
+    stepEl.className = `pipeline-step-premium ${status}`;
+    const title = stepId.replace(/_/g, ' ').toUpperCase();
+    const meta = status === 'running' ? 'EXECUTING...' : status.toUpperCase();
+
+    let content = '';
+    if (stepId === 'strategic_auditor' && status === 'success') {
+      content = `
             <div class="artifact-card">
               <span class="artifact-label">Strategic SWOT Artifact</span>
               <div class="artifact-grid">
@@ -1502,9 +1502,9 @@ function setupEventListeners() {
               </div>
             </div>
           `;
-      } else if (stepId === 'security_auditor' && status === 'success') {
-          const res = data.securityAudit;
-          content = `
+    } else if (stepId === 'security_auditor' && status === 'success') {
+      const res = data.securityAudit;
+      content = `
             <div class="artifact-card">
               <span class="artifact-label">Privacy & Trust Report</span>
               <div class="artifact-item ${res.riskLevel === 'Clean' ? 'strength' : 'weakness'}">
@@ -1512,17 +1512,17 @@ function setupEventListeners() {
               </div>
             </div>
           `;
-      } else if (stepId === 'remix_architect' && status === 'success') {
-          content = `
+    } else if (stepId === 'remix_architect' && status === 'success') {
+      content = `
             <div class="artifact-card">
               <span class="artifact-label">Architectural Proposals</span>
               <div class="artifact-value">${data.suggestedOpportunities.length} Remix Paths Generated</div>
               <div style="font-size:10px; color:var(--text-dim); margin-top:8px;">Selected: ${data.suggestedOpportunities[0]?.type}</div>
             </div>
           `;
-      } else if (stepId === 'code_synthesizer' && status === 'success') {
-          const topRemix = data.synthesizedCode[0];
-          content = `
+    } else if (stepId === 'code_synthesizer' && status === 'success') {
+      const topRemix = data.synthesizedCode[0];
+      content = `
             <div class="synth-header">
                 <span class="synth-name">${topRemix.type} Artifact</span>
                 <span class="synth-badge">${topRemix.impact} impact</span>
@@ -1534,9 +1534,9 @@ function setupEventListeners() {
               <span>🚀 Deploy Generated Remix</span>
             </button>
           `;
-      }
+    }
 
-      stepEl.innerHTML = `
+    stepEl.innerHTML = `
         <div class="step-header-premium">
           <div class="step-label">
             <span class="step-icon">${getAgentIcon(stepId)}</span>
@@ -1547,12 +1547,12 @@ function setupEventListeners() {
         <div class="step-content-premium">${content || '<div class="loader-wave">Analyzing target asset...</div>'}</div>
       `;
 
-      if (stepId === 'code_synthesizer' && status === 'success') {
-          const btn = document.getElementById(`apply-${stepId}`);
-          if (btn) btn.onclick = () => handleBuildRemix(data.synthesizedCode[0]);
-      }
-      
-      updatePipelineProgressBar(stepId, status);
+    if (stepId === 'code_synthesizer' && status === 'success') {
+      const btn = document.getElementById(`apply-${stepId}`);
+      if (btn) btn.onclick = () => handleBuildRemix(data.synthesizedCode[0]);
+    }
+
+    updatePipelineProgressBar(stepId, status);
   }
 
 
@@ -1829,28 +1829,28 @@ function loadFileIntoEditor(filename) {
 function renderEditorTabs() {
   const container = document.getElementById('editor-tabs-container');
   if (!container) return;
-  
+
   container.innerHTML = '';
-  
+
   openFiles.forEach(file => {
     const tab = document.createElement('div');
     tab.className = 'editor-tab' + (file === currentFile ? ' active' : '');
-    
+
     tab.innerHTML = `
       <span class="tab-filename" style="margin-right: 8px;">${file}</span>
       <span class="tab-close" style="font-size: 10px; cursor: pointer; opacity: 0.6; padding: 2px;">✖</span>
     `;
-    
+
     tab.querySelector('.tab-close').addEventListener('mouseenter', e => { e.target.style.opacity = '1'; e.target.style.color = 'var(--danger-color)'; });
     tab.querySelector('.tab-close').addEventListener('mouseleave', e => { e.target.style.opacity = '0.6'; e.target.style.color = ''; });
-    
+
     tab.querySelector('.tab-filename').addEventListener('click', () => {
-        if (file !== currentFile) loadFileIntoEditor(file);
+      if (file !== currentFile) loadFileIntoEditor(file);
     });
 
     tab.querySelector('.tab-close').addEventListener('click', (e) => {
-        e.stopPropagation();
-        closeFileTab(file);
+      e.stopPropagation();
+      closeFileTab(file);
     });
 
     tab.addEventListener('auxclick', (e) => {
@@ -1859,28 +1859,28 @@ function renderEditorTabs() {
         closeFileTab(file);
       }
     });
-    
+
     container.appendChild(tab);
   });
 }
 
 function closeFileTab(filename) {
-   const idx = openFiles.indexOf(filename);
-   if (idx > -1) {
-      openFiles.splice(idx, 1);
-      if (currentFile === filename) {
-         if (openFiles.length > 0) {
-             const nextFile = openFiles[Math.max(0, idx - 1)];
-             loadFileIntoEditor(nextFile);
-         } else {
-             currentFile = null;
-             if (cmEditor) cmEditor.setValue('// No file open');
-             renderEditorTabs();
-         }
+  const idx = openFiles.indexOf(filename);
+  if (idx > -1) {
+    openFiles.splice(idx, 1);
+    if (currentFile === filename) {
+      if (openFiles.length > 0) {
+        const nextFile = openFiles[Math.max(0, idx - 1)];
+        loadFileIntoEditor(nextFile);
       } else {
-         renderEditorTabs();
+        currentFile = null;
+        if (cmEditor) cmEditor.setValue('// No file open');
+        renderEditorTabs();
       }
-   }
+    } else {
+      renderEditorTabs();
+    }
+  }
 }
 
 // SHINY LOGIC
@@ -1890,7 +1890,7 @@ function initShinyTab() {
   if (!shinyProject) {
     // Initial state
     shinyProject = {
-      name: 'shiny_project_1',
+      name: 'Untitled UI',
       html: `<!DOCTYPE html>
 <html>
 <head>
@@ -1903,7 +1903,7 @@ function initShinyTab() {
 </head>
 <body>
   <div class="card">
-    <h1>Hello Shiny!</h1>
+    <h1>Hello User!</h1>
     <p>Describe your ideas to start designing.</p>
   </div>
 </body>
@@ -2041,7 +2041,7 @@ async function generateVisualUI(prompt) {
         </div>
 
         <div class="footer">
-            Built with ReMixr Shiny
+            Built with ReMixr UI Builder Assistant
         </div>
     </div>
 </body>
@@ -2099,7 +2099,7 @@ function publishShinyProject() {
         action: { default_popup: 'popup.html' }
       }, null, 2),
       'popup.html': shinyProject.html,
-      'popup.js': '// Generated by Shiny Designer\nconsole.log("Ready.");',
+      'popup.js': '// Generated by UI Builder Assistant\nconsole.log("Ready.");',
       'styles.css': '/* Embedded in HTML */'
     },
     created: Date.now(),
@@ -2326,237 +2326,6 @@ function extractName(prompt) {
 }
 
 // ============================================
-// MANIFEST GENERATION HELPERS
-// ============================================
-
-/**
- * Generates a manifest file object for a Chrome extension.
- * Note: The full generateExtensionFromWizard function is in the Extension Wizard section below.
- */
-function generateManifestTemplate(name, description, permissions) {
-  return {
-    manifest_version: 3,
-    name: name,
-    version: '1.0.0',
-    description: description,
-    permissions: permissions || []
-  };
-}
-
-// Helper: Generate HTML
-function generateHTML(name, framework, behaviors) {
-  const themeSupport = behaviors.theme ? `
-  <script>
-    // Theme support
-    const theme = localStorage.getItem('theme') || 'light';
-    document.documentElement.setAttribute('data-theme', theme);
-  </script>` : '';
-
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${name}</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="container">
-    <h1>${name}</h1>
-    <p>Your extension is ready to customize!</p>
-    <button id="action-btn">Click Me</button>
-    <div id="output"></div>
-  </div>
-  ${themeSupport}
-  <script src="${framework === 'vanilla' ? 'popup.js' : 'sidepanel.js'}"></script>
-</body>
-</html>`;
-}
-
-// Helper: Generate JavaScript
-function generateJS(features, behaviors, framework) {
-  let code = `// ${framework === 'vanilla' ? 'Vanilla JavaScript' : framework.charAt(0).toUpperCase() + framework.slice(1)} Extension\n\n`;
-
-  code += `document.addEventListener('DOMContentLoaded', () => {\n`;
-  code += `  const actionBtn = document.getElementById('action-btn');\n`;
-  code += `  const output = document.getElementById('output');\n\n`;
-
-  code += `  actionBtn.addEventListener('click', async () => {\n`;
-  code += `    output.textContent = 'Button clicked!';\n`;
-
-  if (features.storage || behaviors.persistState) {
-    code += `\n    // Save to storage\n`;
-    code += `    await chrome.storage.${behaviors.sync ? 'sync' : 'local'}.set({ lastClick: Date.now() });\n`;
-  }
-
-  if (features.tabs) {
-    code += `\n    // Get current tab\n`;
-    code += `    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });\n`;
-    code += `    console.log('Current tab:', tab);\n`;
-  }
-
-  if (features.notifications) {
-    code += `\n    // Show notification\n`;
-    code += `    chrome.notifications.create({\n`;
-    code += `      type: 'basic',\n`;
-    code += `      iconUrl: 'icon48.png',\n`;
-    code += `      title: 'Extension Action',\n`;
-    code += `      message: 'Action completed!'\n`;
-    code += `    });\n`;
-  }
-
-  code += `  });\n`;
-
-  if (behaviors.theme) {
-    code += `\n  // Theme toggle\n`;
-    code += `  const themeToggle = document.createElement('button');\n`;
-    code += `  themeToggle.textContent = '🌓 Toggle Theme';\n`;
-    code += `  themeToggle.addEventListener('click', () => {\n`;
-    code += `    const current = document.documentElement.getAttribute('data-theme');\n`;
-    code += `    const newTheme = current === 'dark' ? 'light' : 'dark';\n`;
-    code += `    document.documentElement.setAttribute('data-theme', newTheme);\n`;
-    code += `    localStorage.setItem('theme', newTheme);\n`;
-    code += `  });\n`;
-    code += `  document.querySelector('.container').appendChild(themeToggle);\n`;
-  }
-
-  if (behaviors.errorTracking) {
-    code += `\n  // Error tracking\n`;
-    code += `  window.addEventListener('error', (e) => {\n`;
-    code += `    console.error('Extension error:', e.message);\n`;
-    code += `  });\n`;
-  }
-
-  code += `});\n`;
-
-  return code;
-}
-
-// Helper: Generate CSS
-function generateCSS(behaviors) {
-  let css = `/* Extension Styles */\n\n`;
-
-  css += `body {\n`;
-  css += `  width: 400px;\n`;
-  css += `  min-height: 300px;\n`;
-  css += `  margin: 0;\n`;
-  css += `  padding: 0;\n`;
-  css += `  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;\n`;
-  css += `  background: #ffffff;\n`;
-  css += `  color: #333333;\n`;
-  css += `}\n\n`;
-
-  css += `.container {\n`;
-  css += `  padding: 20px;\n`;
-  css += `}\n\n`;
-
-  css += `h1 {\n`;
-  css += `  font-size: 20px;\n`;
-  css += `  margin: 0 0 15px 0;\n`;
-  css += `  color: #1a73e8;\n`;
-  css += `}\n\n`;
-
-  css += `button {\n`;
-  css += `  padding: 10px 20px;\n`;
-  css += `  background: #1a73e8;\n`;
-  css += `  color: white;\n`;
-  css += `  border: none;\n`;
-  css += `  border-radius: 4px;\n`;
-  css += `  cursor: pointer;\n`;
-  css += `  font-size: 14px;\n`;
-  css += `  margin: 5px 0;\n`;
-  css += `}\n\n`;
-
-  css += `button:hover {\n`;
-  css += `  background: #1557b0;\n`;
-  css += `}\n\n`;
-
-  css += `#output {\n`;
-  css += `  margin-top: 15px;\n`;
-  css += `  padding: 10px;\n`;
-  css += `  background: #f5f5f5;\n`;
-  css += `  border-radius: 4px;\n`;
-  css += `  min-height: 20px;\n`;
-  css += `}\n`;
-
-  if (behaviors.theme) {
-    css += `\n/* Theme Support */\n`;
-    css += `[data-theme="dark"] body {\n`;
-    css += `  background: #1a1a1a;\n`;
-    css += `  color: #e0e0e0;\n`;
-    css += `}\n\n`;
-    css += `[data-theme="dark"] #output {\n`;
-    css += `  background: #2a2a2a;\n`;
-    css += `}\n`;
-  }
-
-  return css;
-}
-
-// Helper: Generate Content Script
-function generateContentScript(behaviors) {
-  let code = `// Content Script\n`;
-  code += `console.log('Content script loaded');\n\n`;
-
-  if (behaviors.matchSite) {
-    code += `// Match site styles\n`;
-    code += `const bodyStyles = window.getComputedStyle(document.body);\n`;
-    code += `console.log('Site background:', bodyStyles.backgroundColor);\n`;
-    code += `console.log('Site font:', bodyStyles.fontFamily);\n\n`;
-  }
-
-  code += `// Your content script logic here\n`;
-  code += `document.addEventListener('DOMContentLoaded', () => {\n`;
-  code += `  console.log('Page loaded, extension active');\n`;
-  code += `});\n`;
-
-  return code;
-}
-
-// Helper: Generate Background Script
-function generateBackgroundScript(features, behaviors) {
-  let code = `// Background Service Worker\n\n`;
-
-  code += `chrome.runtime.onInstalled.addListener(() => {\n`;
-  code += `  console.log('Extension installed');\n`;
-
-  if (features.contextMenu) {
-    code += `\n  // Create context menu\n`;
-    code += `  chrome.contextMenus.create({\n`;
-    code += `    id: 'extension-action',\n`;
-    code += `    title: 'Extension Action',\n`;
-    code += `    contexts: ['selection']\n`;
-    code += `  });\n`;
-  }
-
-  code += `});\n\n`;
-
-  if (features.contextMenu) {
-    code += `chrome.contextMenus.onClicked.addListener((info, tab) => {\n`;
-    code += `  if (info.menuItemId === 'extension-action') {\n`;
-    code += `    console.log('Context menu clicked:', info.selectionText);\n`;
-    code += `  }\n`;
-    code += `});\n\n`;
-  }
-
-  if (behaviors.badge) {
-    code += `// Update badge\n`;
-    code += `chrome.action.setBadgeText({ text: '1' });\n`;
-    code += `chrome.action.setBadgeBackgroundColor({ color: '#4CAF50' });\n\n`;
-  }
-
-  if (behaviors.autoOpen) {
-    code += `// Auto-open side panel\n`;
-    code += `chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {\n`;
-    code += `  if (changeInfo.status === 'complete') {\n`;
-    code += `    chrome.sidePanel.open({ tabId });\n`;
-    code += `  }\n`;
-    code += `});\n`;
-  }
-
-  return code;
-}
-
 // Feature Injector - Inject features into current project
 function injectFeatures() {
   if (!currentProject) {
@@ -3259,7 +3028,7 @@ async function runAnalysis(type) {
     if (btn) btn.classList.remove('loading');
   }
 }
-        //SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
+//SITE_CONTEXT AGGREGATION SYSTEM (Phase 2B)
 // ============================================
 
 /**
@@ -3942,53 +3711,53 @@ function displayOmniscienceResults(data) {
  * Injects the remix code into the target template.
  */
 function handleBuildRemix(opportunity) {
-    if (!opportunity || !opportunity.code) {
-        showStatus('Invalid remix opportunity', 'error');
-        return;
-    }
+  if (!opportunity || !opportunity.code) {
+    showStatus('Invalid remix opportunity', 'error');
+    return;
+  }
 
-    showStatus(`Building ${opportunity.type} Remix...`, 'info');
-    
-    // 1. Start with a Content Modifier template (most common for remixes)
-    const template = TEMPLATES['content-modifier'];
-    if (!template) return;
+  showStatus(`Building ${opportunity.type} Remix...`, 'info');
 
-    currentProject = {
-        name: `Remix: ${opportunity.type}`,
-        files: {},
-        created: Date.now(),
-        modified: Date.now()
-    };
+  // 1. Start with a Content Modifier template (most common for remixes)
+  const template = TEMPLATES['content-modifier'];
+  if (!template) return;
 
-    // 2. Clone template files
-    for (const [filename, content] of Object.entries(template.files)) {
-        currentProject.files[filename] = typeof content === 'object' ? JSON.stringify(content, null, 2) : content;
-    }
+  currentProject = {
+    name: `Remix: ${opportunity.type}`,
+    files: {},
+    created: Date.now(),
+    modified: Date.now()
+  };
 
-    // 3. Hydrate with Site DNA if available
-    const record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
-    const dna = record ? record.dna : null;
-    if (dna && typeof HydrationEngine !== 'undefined') {
-        currentProject = HydrationEngine.hydrate(currentProject, dna);
-    }
+  // 2. Clone template files
+  for (const [filename, content] of Object.entries(template.files)) {
+    currentProject.files[filename] = typeof content === 'object' ? JSON.stringify(content, null, 2) : content;
+  }
 
-    // 4. Inject the Remix code into content.js
-    let contentJs = currentProject.files['content.js'] || '';
-    const remixInjection = `
+  // 3. Hydrate with Site DNA if available
+  const record = REMIX_STATE.getTabRecord(REMIX_STATE.activeTabId);
+  const dna = record ? record.dna : null;
+  if (dna && typeof HydrationEngine !== 'undefined') {
+    currentProject = HydrationEngine.hydrate(currentProject, dna);
+  }
+
+  // 4. Inject the Remix code into content.js
+  let contentJs = currentProject.files['content.js'] || '';
+  const remixInjection = `
 // --- AUTOMATED REMIX ENGINE: ${opportunity.type} ---
 ${opportunity.code}
 // --------------------------------------------------
 `;
-    currentProject.files['content.js'] = remixInjection + contentJs;
+  currentProject.files['content.js'] = remixInjection + contentJs;
 
-    // 5. Switch to builder and load project
-    switchTab('code');
-    document.getElementById('project-name').value = currentProject.name;
-    currentFile = 'content.js';
-    updateFileTree();
-    loadFileIntoEditor('content.js');
-    saveCurrentProject();
-    showStatus(`Remix Complete! Project "${currentProject.name}" saved and ready.`, 'success');
+  // 5. Switch to builder and load project
+  switchTab('code');
+  document.getElementById('project-name').value = currentProject.name;
+  currentFile = 'content.js';
+  updateFileTree();
+  loadFileIntoEditor('content.js');
+  saveCurrentProject();
+  showStatus(`Remix Complete! Project "${currentProject.name}" saved and ready.`, 'success');
 }
 
 
@@ -4902,7 +4671,7 @@ function displayAnalysisResults(type, data) {
       </div>
       <div class="dive-section">
         <div class="dive-section-header">
-          <h5>Spacing Psychology</h5>
+          <h5>Spacing Feedback</h5>
         </div>
         <div class="stats-grid">
           <div class="stat-card">
@@ -4921,7 +4690,7 @@ function displayAnalysisResults(type, data) {
       </div>
       <div class="dive-section">
         <div class="dive-section-header">
-          <h5>Color Psychology</h5>
+          <h5>Color Feedback</h5>
         </div>
         ${Object.entries(data?.colorPsychology || {}).map(([color, emotion]) => `
           <div class="data-row">
@@ -5348,11 +5117,11 @@ function renderD3Graph(rootData) {
       if (!node) return;
       const i = nodes.length;
       const value = typeof node.value === 'number' && !isNaN(node.value) ? node.value : (node.size || 5);
-      nodes.push({ 
-        id: i, 
-        name: node.name || 'node', 
-        class: node.class || '', 
-        r: Math.max(2, Math.min(value * 2 + 5, 25)) 
+      nodes.push({
+        id: i,
+        name: node.name || 'node',
+        class: node.class || '',
+        r: Math.max(2, Math.min(value * 2 + 5, 25))
       });
       if (parentIndex !== null) links.push({ source: parentIndex, target: i });
       if (node.children && Array.isArray(node.children)) {
@@ -6673,11 +6442,11 @@ function initSidebarResizers() {
 
     document.addEventListener('mousemove', (e) => {
       if (!isResizing) return;
-      
+
       // Let max-width/min-width handle constraints automatically
       const newWidth = startWidth + (e.clientX - startX);
       sidebar.style.width = newWidth + 'px';
-      
+
       // Throttle CodeMirror refresh
       if (typeof cmEditor !== 'undefined' && cmEditor) {
         requestAnimationFrame(() => cmEditor.refresh());
@@ -6707,11 +6476,12 @@ const commandsList = [
   { id: 'cmd-new', title: 'New Template Project', shortcut: 'Ctrl+N', icon: '✨', run: () => switchTab('templates') },
   { id: 'cmd-load', title: 'Load Extension', shortcut: '', icon: '🚀', run: () => document.getElementById('test-extension-btn')?.click() },
   { id: 'cmd-preview', title: 'Open Preview Modal', shortcut: 'Ctrl+P', icon: '👁️', run: () => document.getElementById('preview-btn')?.click() },
-  { id: 'cmd-pipeline', title: 'Start Ambient Remix Pipeline', shortcut: '', icon: '🧠', run: () => { switchTab('analyzer'); setTimeout(() => document.getElementById('run-remix-pipeline')?.click(), 100); } },
+  { id: 'cmd-pipeline', title: 'Start Automation Workflow', shortcut: '', icon: '🤖', run: () => { switchTab('pipeline'); setTimeout(() => document.getElementById('run-remix-pipeline')?.click(), 100); } },
+  { id: 'cmd-tab-pipeline', title: 'View: Workflows', shortcut: '', icon: '🔌', run: () => switchTab('pipeline') },
   { id: 'cmd-tab-code', title: 'View: IDE Code Editor', shortcut: '', icon: '💻', run: () => switchTab('code') },
-  { id: 'cmd-tab-analyze', title: 'View: Ambient Pipeline', shortcut: '', icon: '🧠', run: () => switchTab('analyzer') },
+  { id: 'cmd-tab-analyze', title: 'View: Inspector', shortcut: '', icon: '🔎', run: () => switchTab('analyzer') },
   { id: 'cmd-tab-tools', title: 'View: X-Ray Toolkit', shortcut: '', icon: '🧰', run: () => switchTab('tools') },
-  { id: 'cmd-tab-shiny', title: 'View: UI Designer', shortcut: '', icon: '✨', run: () => switchTab('shiny') },
+  { id: 'cmd-tab-shiny', title: 'View: UI Builder', shortcut: '', icon: '✨', run: () => switchTab('ui') },
   { id: 'cmd-wrap', title: 'Editor: Toggle Line Wrapping', shortcut: '', icon: '🔄', run: () => { if (typeof cmEditor !== 'undefined') cmEditor.setOption('lineWrapping', !cmEditor.getOption('lineWrapping')); } },
   { id: 'cmd-snip-storage', title: 'Insert: Chrome Storage Get/Set', shortcut: '', icon: '💾', run: () => insertSnippet(`// Save data\nchrome.storage.local.set({ key: 'value' }, () => {});\n\n// Get data\nchrome.storage.local.get(['key'], (result) => {\n  console.log(result.key);\n});\n`) },
   { id: 'cmd-snip-message', title: 'Insert: Chrome Message Port', shortcut: '', icon: '✉️', run: () => insertSnippet(`chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {\n  if (request.action === 'hello') {\n    sendResponse({ reply: 'world' });\n  }\n  return true;\n});\n`) },
@@ -6724,7 +6494,7 @@ function insertSnippet(code) {
   const doc = cmEditor.getDoc();
   const cursor = doc.getCursor();
   doc.replaceRange(code, cursor);
-  
+
   // Format exactly what was inserted using CodeMirror's autoFormatRange if possible, or just focus
   cmEditor.focus();
 }
@@ -6732,13 +6502,13 @@ function insertSnippet(code) {
 function initCommandPalette() {
   const overlay = document.getElementById('cmd-palette-overlay');
   const input = document.getElementById('cmd-input');
-  
+
   if (!overlay || !input) return;
 
   function renderResults(query = '') {
     const list = document.getElementById('cmd-results');
     const qRaw = query.toLowerCase();
-    
+
     // Assemble all files as searchable commands
     const fileCommands = [];
     if (typeof currentProject !== 'undefined' && currentProject && currentProject.files) {
@@ -6749,22 +6519,22 @@ function initCommandPalette() {
           shortcut: '',
           icon: '📄',
           run: () => {
-             loadFileIntoEditor(filename);
-             switchTab('code');
+            loadFileIntoEditor(filename);
+            switchTab('code');
           }
         });
       });
     }
-    
+
     const allCommands = [...fileCommands, ...commandsList];
     cmdFilteredResults = allCommands.filter(c => c.title.toLowerCase().includes(qRaw));
-    
+
     list.innerHTML = '';
     if (cmdFilteredResults.length === 0) {
       list.innerHTML = '<div class="cmd-empty">No matching commands found</div>';
       return;
     }
-    
+
     cmdSelectedIndex = 0;
     cmdFilteredResults.forEach((c, idx) => {
       const el = document.createElement('div');
@@ -6789,14 +6559,14 @@ function initCommandPalette() {
   input.addEventListener('input', (e) => {
     renderResults(e.target.value);
   });
-  
+
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeCommandPalette();
       e.preventDefault();
       return;
     }
-    
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (cmdSelectedIndex < cmdFilteredResults.length - 1) {
@@ -6841,16 +6611,16 @@ function openCommandPalette() {
   const overlay = document.getElementById('cmd-palette-overlay');
   const input = document.getElementById('cmd-input');
   if (!overlay || !input) return;
-  
+
   if (!overlay.dataset.inited) {
     initCommandPalette();
     overlay.dataset.inited = 'true';
   }
-  
+
   input.value = '';
   cmdIsOpen = true;
   overlay.classList.remove('cmd-hidden');
-  
+
   // Fire input event to render defaults
   input.dispatchEvent(new Event('input'));
   setTimeout(() => input.focus(), 50);
@@ -6859,7 +6629,7 @@ function openCommandPalette() {
 function closeCommandPalette() {
   const overlay = document.getElementById('cmd-palette-overlay');
   if (!overlay) return;
-  
+
   cmdIsOpen = false;
   overlay.classList.add('cmd-hidden');
   if (typeof cmEditor !== 'undefined' && cmEditor && document.getElementById('code-tab').classList.contains('active')) {

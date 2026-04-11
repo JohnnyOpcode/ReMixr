@@ -43,11 +43,11 @@
       <button class="tab-btn active" data-tab="projects">Projects</button>
       <button class="tab-btn" data-tab="templates">Templates</button>
       <button class="tab-btn" data-tab="code">Code</button>
-      <button class="tab-btn" data-tab="ui">Designer</button>
+      <button class="tab-btn" data-tab="ui">UI Builder</button>
       <span class="tab-divider"></span>
-      <button class="tab-btn" data-tab="analyzer">Analyze</button>
-      <button class="tab-btn" data-tab="tools">Toolkit</button>
-      <button class="tab-btn" data-tab="pipeline">Pipeline</button>
+      <button class="tab-btn" data-tab="analyzer">Inspector</button>
+      <button class="tab-btn" data-tab="tools">Utilities</button>
+      <button class="tab-btn" data-tab="pipeline">Workflows</button>
     </nav>
 
     <!-- CONTENT AREAS -->
@@ -72,10 +72,9 @@
     <div id="pipeline-tab" class="tab-content">
       <div class="section">
         <div class="suite-header">
-          <h2>Agentic Pipeline</h2>
-          <span class="suite-tag">BETA</span>
+          <h2>Automation Workflows</h2>
         </div>
-        <p class="analyzer-subtitle">Run multi-agent synthesis chains to audit and remix this site.</p>
+        <p class="analyzer-subtitle">Run automated tasks to audit and analyze this site.</p>
         
         <div class="spacer-16"></div>
 
@@ -83,15 +82,15 @@
           <div class="guide-item">
             <div class="guide-icon">🔍</div>
             <div class="guide-content">
-              <strong>One-Click Pipeline</strong>
-              <span>Click the button below — we'll automatically extract site DNA and run the full agent chain for you.</span>
+              <strong>One-Click Workflow</strong>
+              <span>Click the button below — we'll automatically scan the site and run the workflow for you.</span>
             </div>
           </div>
           <div class="guide-item">
             <div class="guide-icon">🤖</div>
             <div class="guide-content">
               <strong>What Happens</strong>
-              <span>Audits architecture, detects weaknesses, and synthesizes remedies — all automated.</span>
+              <span>Audits architecture, detects vulnerabilities, and synthesizes reports — all automated.</span>
             </div>
           </div>
         </div>
@@ -106,7 +105,7 @@
 
         <div class="pipeline-controls">
           <button id="run-remix-pipeline" class="btn btn-primary">
-            <span>🚀 Start Remix Pipeline</span>
+            <span>🚀 Start Workflow Task</span>
           </button>
         </div>
 
@@ -116,7 +115,7 @@
           <!-- Pipeline steps injected here -->
           <div class="empty-state">
             <div class="empty-state-icon">🤖</div>
-            <p>No active agent sequence. Click <b>Start Remix Pipeline</b> above to begin.</p>
+            <p>No active tasks. Click <b>Start Workflow Task</b> above to begin.</p>
           </div>
         </div>
       </div>
@@ -560,7 +559,7 @@
         <!-- Sidebar - Chat & Context -->
         <div class="shiny-sidebar">
           <div class="shiny-sidebar-header">
-            <h3>Visual Designer</h3>
+            <h3>UI Builder Assistant</h3>
             <div class="ai-status">
               <span class="status-dot"></span> Online
             </div>
@@ -569,16 +568,15 @@
             <div class="chat-message ai">
               <div class="chat-icon">✨</div>
               <div class="chat-bubble">
-                Hello! I'm your Visual Design Assistant. Describe the UI you want to build, and I'll generate it in the
-                canvas.
+                Hello! I'm your AI UI Assistant. Describe the interface you want to build, and I'll generate it on the canvas.
                 <br><br>
-                Try: <em>"A sleek dark-mode dashboard with a sidebar and a task list."</em>
+                Try: <em>"A sleek dashboard with a sidebar and a task list."</em>
               </div>
             </div>
           </div>
           <div class="shiny-input-area">
             <div class="input-wrapper">
-              <textarea id="shiny-prompt" placeholder="Message Visual AI..."></textarea>
+              <textarea id="shiny-prompt" placeholder="Message UI Assistant..."></textarea>
               <button id="shiny-generate-btn" title="Generate UI">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="white">
                   <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
@@ -600,7 +598,7 @@
               </div>
             </div>
             <div class="toolbar-center">
-              <span id="shiny-project-title">shiny_project_1</span>
+              <span id="shiny-project-title">Untitled UI</span>
             </div>
             <div class="toolbar-right">
               <button id="shiny-code-toggle" class="btn btn-small btn-secondary">Code</button>
@@ -619,7 +617,7 @@
                 <div id="canvas-overlay" class="canvas-overlay">
                   <div class="loader-container canvas-loader-hidden">
                     <div class="shiny-loader"></div>
-                    <p>Brewing your UI...</p>
+                    <p>Generating Interface...</p>
                   </div>
                 </div>
               </div>
@@ -645,7 +643,7 @@
             </div>
             <div class="control-divider"></div>
             <div class="control-group">
-              <button id="shiny-magic-polish" class="btn btn-small btn-secondary">🪄 Polish</button>
+              <button id="shiny-magic-polish" class="btn btn-small btn-secondary">✨ Optimize</button>
               <button id="shiny-undo" class="btn btn-small btn-secondary" title="Undo">↩️</button>
             </div>
           </div>
@@ -666,7 +664,7 @@
             <button class="switcher-btn" data-cluster="tech">🛠 Tech</button>
             <button class="switcher-btn" data-cluster="data">💾 Data</button>
             <button class="switcher-btn" data-cluster="quality">✓ Quality</button>
-            <button class="switcher-btn" data-cluster="psychology">🧠 Psych</button>
+            <button class="switcher-btn" data-cluster="heuristics">🧠 UX Heuristics</button>
           </div>
           <div class="toolbar-tray">
             <!-- Actions Cluster -->
@@ -750,25 +748,25 @@
               </button>
             </div>
 
-            <!-- Psychology Cluster -->
-            <div class="toolbar-cluster" id="cluster-psychology">
+            <!-- Heuristics Cluster -->
+            <div class="toolbar-cluster" id="cluster-heuristics">
               <button id="scan-strategy" class="labeled-icon-btn premium" title="Conversion Strategy">
                 <span class="li-icon">📈</span><span class="li-label">Convert</span>
               </button>
-              <button id="scan-psyche" class="labeled-icon-btn premium" title="Psychological Profiling">
-                <span class="li-icon">🧠</span><span class="li-label">Psyche</span>
+              <button id="scan-psyche" class="labeled-icon-btn premium" title="User Persona Analysis">
+                <span class="li-icon">👤</span><span class="li-label">Persona</span>
               </button>
-              <button id="scan-rhetoric" class="labeled-icon-btn premium" title="Rhetorical Copy Analysis">
-                <span class="li-icon">📝</span><span class="li-label">Rhetoric</span>
+              <button id="scan-rhetoric" class="labeled-icon-btn premium" title="Copywriting Analysis">
+                <span class="li-icon">📝</span><span class="li-label">Copy</span>
               </button>
-              <button id="scan-archetype" class="labeled-icon-btn premium" title="Brand Archetype">
-                <span class="li-icon">🎭</span><span class="li-label">Archetype</span>
+              <button id="scan-archetype" class="labeled-icon-btn premium" title="Brand Identity">
+                <span class="li-icon">🛡️</span><span class="li-label">Brand</span>
               </button>
-              <button id="scan-soul" class="labeled-icon-btn premium" title="Trust & Authority">
-                <span class="li-icon">🛡️</span><span class="li-label">Trust</span>
+              <button id="scan-soul" class="labeled-icon-btn premium" title="Trust Signals">
+                <span class="li-icon">🤝</span><span class="li-label">Trust</span>
               </button>
               <button id="scan-shadow" class="labeled-icon-btn premium" title="Dark Pattern Detection">
-                <span class="li-icon">🌑</span><span class="li-label">Dark UX</span>
+                <span class="li-icon">⚠️</span><span class="li-label">Dark UX</span>
               </button>
             </div>
           </div>
